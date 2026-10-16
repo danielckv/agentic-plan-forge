@@ -1,10 +1,12 @@
 max_retries = 3
 accept = ["200..=299", "429"]
 include_mail = false
-# Self-repository URLs 404 until the repository is pushed to GitHub.
-# Remove this exclusion after the first push so badge, advisory, and template
-# links are checked again.
+# The repository is now public: badge, advisory and template links resolve,
+# so only the pre-push 404s remain excluded (latest-release install links,
+# compare URLs for tags that do not exist yet).
 exclude = [
-  '^https://github.com/danielckv/agentic-plan-forge(/.*)?$',
+  '^https://github.com/danielckv/agentic-plan-forge/releases/latest/download/',
+  '^https://github.com/danielckv/agentic-plan-forge/security/advisories/new$',
+  '^https://github.com/danielckv/agentic-plan-forge/issues/new/choose$',
 ]
 exclude_path = ['^\.agents/']
