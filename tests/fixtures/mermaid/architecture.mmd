@@ -1,0 +1,6 @@
+graph TD
+    n0["Web client"]
+    n1["Billing API"]
+    n2["Invoice store"]
+    n0 -->|"export request"| n1
+    n1 -->|"query invoices"| n2

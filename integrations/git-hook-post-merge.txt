@@ -1,0 +1,3 @@
+# >>> plan-forge (managed) >>>
+PF="{{PLAN_FORGE_BIN}}"; if [ -x "$PF" ]; then "$PF" hook check-state --repo "$(git rev-parse --show-toplevel)" --format text || true; fi
+# <<< plan-forge <<<

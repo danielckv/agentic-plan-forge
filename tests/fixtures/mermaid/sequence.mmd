@@ -1,0 +1,7 @@
+sequenceDiagram
+    participant n0 as "Analyst"
+    participant n1 as "Web client"
+    participant n2 as "Billing API"
+    n0->>n1: "choose range"
+    n1->>n2: "ExportInvoices"
+    n2-->>n1: "csv stream"

@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web dependencies
+        run: npm --prefix web ci
+      - name: Typecheck web
+        run: npm --prefix web run typecheck
+      - name: Build web
+        run: npm --prefix web run build
+      - name: Upload web-dist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-dist
+          path: web/dist
+
+  client:
+    needs: web
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { runner: macos-15, os: darwin, arch: arm64, exe: "" }
+          - { runner: macos-15-intel, os: darwin, arch: amd64, exe: "" }
+          - { runner: ubuntu-24.04, os: linux, arch: amd64, exe: "" }
+          - { runner: ubuntu-24.04-arm, os: linux, arch: arm64, exe: "" }
+          - { runner: windows-2022, os: windows, arch: amd64, exe: ".exe" }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Assert C toolchain (CGO required)
+        if: matrix.os != 'windows'
+        run: gcc --version
+      - name: Assert C toolchain (CGO required)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: gcc --version
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.2"
+          cache: true
+      - name: Download web-dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web-dist
+          path: web/dist
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "VERSION=$GITHUB_REF_NAME" >>"$GITHUB_ENV"
+          else
+            echo "VERSION=0.0.0-main.${GITHUB_SHA::7}" >>"$GITHUB_ENV"
+          fi
+      - name: Build client
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          go build -tags client -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA}" \
+            -o "out/plan-forge-${{ matrix.os }}-${{ matrix.arch }}/plan-forge${{ matrix.exe }}" \
+            ./cmd/client
+      - name: Smoke test
+        shell: bash
+        run: "out/plan-forge-${{ matrix.os }}-${{ matrix.arch }}/plan-forge${{ matrix.exe }} version"
+      - name: Assert fakehost excluded
+        if: matrix.os != 'windows'
+        shell: bash
+        run: '! go list -deps -tags client ./cmd/client | grep -q internal/host/fakehost'
+      - name: Assert fakehost excluded
+        if: matrix.os == 'windows'
+        shell: bash
+        run: 'if go list -deps -tags client ./cmd/client | grep -q internal/host/fakehost; then exit 1; fi'
+      - name: Upload client
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: client-${{ matrix.os }}-${{ matrix.arch }}
+          path: out/
+
+  relay:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.2"
+          cache: true
+      - name: Build relay
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p out/plan-forge-relay-linux-${{ matrix.arch }}
+          go build -tags server -trimpath -o out/plan-forge-relay-linux-${{ matrix.arch }}/plan-forge-relay ./cmd/relay
+      - name: Assert dependency closure
+        run: '! go list -deps -tags server ./cmd/relay | grep -Eq "internal/(ast|ingestion|host|avatars|storage|synthesizer|window|app|planstate)|/web$|tree-sitter|ledongthuc/pdf"'
+      - name: Upload relay
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: relay-linux-${{ matrix.arch }}
+          path: out/
+
+  package:
+    needs: [client, relay]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download all client artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: client-*
+          path: out
+          merge-multiple: true
+      - name: Download all relay artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: relay-*
+          path: out
+          merge-multiple: true
+      - name: Package archives
+        run: ./scripts/package-release.sh
+      - name: Verify archives
+        run: |
+          for archive in dist/plan-forge-*.tar.gz dist/plan-forge-*.zip; do
+            ./scripts/verify-archive.sh "$archive"
+          done
+      - name: Upload dist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+
+  relay-image:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push relay image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile.relay
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: |
+            ghcr.io/danielckv/plan-forge-relay:${{ github.ref_name }}
+            ghcr.io/danielckv/plan-forge-relay:latest

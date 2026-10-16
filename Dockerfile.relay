@@ -1,0 +1,17 @@
+# Plan-Forge relay image. Multi-stage: build with CGO disabled (the relay
+# depends on no tree-sitter/host code), then ship the static binary on a
+# distroless non-root base.
+FROM golang:1.27.2 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -tags server -trimpath \
+    -ldflags "-s -w -X main.version=${VERSION}" \
+    -o /out/plan-forge-relay ./cmd/relay
+
+FROM gcr.io/distroless/static-debian12
+COPY --from=build /out/plan-forge-relay /plan-forge-relay
+USER nonroot:nonroot
+ENTRYPOINT ["/plan-forge-relay"]
