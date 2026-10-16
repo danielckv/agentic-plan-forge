@@ -47,3 +47,8 @@ build/
 /.gemini/
 /.agy/
 graphify-out/
+
+# Built binaries
+/plan-forge
+/plan-forge-relay
+/relay
