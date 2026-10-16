@@ -6,9 +6,7 @@ Desktop.ini
 
 # Editors
 .idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
+.vscode/
 *.swp
 *.swo
 *~
@@ -42,6 +40,10 @@ venv/
 build/
 *.egg-info/
 
-# Agent tooling (generated; .agents/ itself is tracked)
-.agents/index/
+# Agent tooling (machine-local state; shipped templates live in integrations/)
+/.agents/
+/.omp/
+/.claude/
+/.gemini/
+/.agy/
 graphify-out/
