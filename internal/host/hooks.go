@@ -153,7 +153,9 @@ func splitManagedHook(raw []byte) (map[string]any, bool, error) {
 }
 
 // manualHookSnippet is printed whenever a settings merge is refused, so the
-// user can add the hook by hand instead.
+// user can add the hook by hand instead. The JSON inside uses two-space
+// indentation because that is what the user pastes into their settings file.
+// editorconfig-checker-disable
 const manualHookSnippet = `{
   "hooks": {
     "SessionStart": [
@@ -167,7 +169,7 @@ const manualHookSnippet = `{
       }
     ]
   }
-}`
+}` // editorconfig-checker-enable
 
 // gitHookManagedHead and gitHookManagedTail bound the managed block appended
 // to a repository's post-merge hook.

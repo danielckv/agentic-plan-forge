@@ -3,7 +3,16 @@
     "LICENSE",
     "^\\.agents/",
     "docs/plans/",
-    "internal/ast/queries/",
-    "internal/ingestion/testdata/"
+    "internal/ast/queries/"
+  ],
+  "Blocks": [
+    {
+      "path": "internal/ingestion/testdata/",
+      "reason": "fixtures may be deliberately non-UTF-8"
+    },
+    {
+      "path": "internal/host/hooks.go:158-169",
+      "reason": "JSON snippet inside a Go raw string; users see 2-space JSON"
+    }
   ]
 }
