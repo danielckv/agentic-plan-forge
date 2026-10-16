@@ -1,0 +1,47 @@
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+*.tmp
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+*.egg-info/
+
+# Agent tooling (generated; .agents/ itself is tracked)
+.agents/index/
+graphify-out/
