@@ -37,6 +37,8 @@ import (
 
 // --- harness ---------------------------------------------------------------------
 
+// testRelayToken is a fixture constant, not a credential: it matches a value
+// the test relay itself accepts.
 const testRelayToken = "test-relay-token-0123456789"
 
 type fakeClock struct {
@@ -1004,7 +1006,7 @@ func TestHubLeaseRaceAndFencing(t *testing.T) {
 	if fenced["A1"] {
 		winner, loser = a2, a1
 	}
-	var gens = map[string]*stubGenerator{"A1": {}, "A2": {}, "B": {}}
+	gens := map[string]*stubGenerator{"A1": {}, "A2": {}, "B": {}}
 	gens[winner.name].Generate() // only the holder runs a provider call
 
 	// An editor can neither claim the lease nor emit executor events.
@@ -1672,10 +1674,13 @@ func TestMirroredNamesAndPhasesAgree(t *testing.T) {
 		{string(RoleOwner), string(session.RoleOwner)},
 		{string(RoleEditor), string(session.RoleEditor)},
 		{string(RoleViewer), string(session.RoleViewer)},
-		{StagePM, session.StagePM}, {StageArchitect, session.StageArchitect},
-		{StageCritic, session.StageCritic}, {StageSynthesizer, session.StageSynthesizer},
+		{StagePM, session.StagePM},
+		{StageArchitect, session.StageArchitect},
+		{StageCritic, session.StageCritic},
+		{StageSynthesizer, session.StageSynthesizer},
 		{StageSpecialistPrefix, session.StageSpecialistPrefix},
-		{IngestSourceUpload, session.IngestSourceUpload}, {IngestSourceComposer, session.IngestSourceComposer},
+		{IngestSourceUpload, session.IngestSourceUpload},
+		{IngestSourceComposer, session.IngestSourceComposer},
 	}
 	for _, p := range pairs {
 		if p[0] != p[1] {
