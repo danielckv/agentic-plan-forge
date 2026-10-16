@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "synthesis.v1.json",
+  "title": "Compiled plan draft shared before approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_markdown", "manifest_json"],
+  "properties": {
+    "spec_markdown": { "type": "string", "maxLength": 1000000 },
+    "manifest_json": { "type": "string", "maxLength": 1000000 }
+  }
+}

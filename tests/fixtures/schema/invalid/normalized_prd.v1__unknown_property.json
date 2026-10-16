@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "product": {
+    "goals": [],
+    "actors": [],
+    "flows": [],
+    "requirements": [],
+    "acceptance_criteria": [],
+    "constraints": [],
+    "open_questions": [],
+    "unexpected_field": "the schema rejects unknown properties"
+  },
+  "ambiguities": []
+}

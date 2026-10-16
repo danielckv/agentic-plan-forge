@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "product": {
+    "title": "Billing export",
+    "problem": "Finance cannot reconcile invoices without a manual export.",
+    "goals": ["Export invoices as CSV"],
+    "actors": ["Finance analyst"],
+    "flows": ["Open the export screen and choose a date range"],
+    "requirements": ["The system shall export invoices for a date range"],
+    "acceptance_criteria": ["An export of one month returns every invoice in that month"],
+    "constraints": ["Exports must not include other tenants"],
+    "open_questions": []
+  },
+  "technical_appendix": "Uses the existing invoices table and the reporting queue.",
+  "ambiguities": [
+    {
+      "id": "amb-1",
+      "text": "The reporting queue retries failed exports",
+      "question": "Is the retry policy a product requirement or an implementation detail?",
+      "guess": "technical"
+    }
+  ],
+  "warnings": []
+}

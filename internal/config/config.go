@@ -1,0 +1,383 @@
+// Package config owns Plan Forge's on-disk settings and the resolution of its
+// state roots. Nothing else in the tree calls os.UserConfigDir or
+// os.UserCacheDir, so every path a user can inspect is defined in one place.
+package config
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// SchemaVersion is the config schema this build understands.
+const SchemaVersion = 1
+
+// Defaults for the tunable settings.
+const (
+	DefaultWorkdayHours = 9
+	DefaultMaxCycles    = 3
+	DefaultMaxParallel  = 4
+	DefaultOCRLanguage  = "eng"
+)
+
+// Config is the persisted settings file. Unknown keys survive a load/save round
+// trip so a newer build can add settings without an older build erasing them.
+type Config struct {
+	SchemaVersion     int      `json:"schema_version"`
+	RelayServerURL    string   `json:"relay_server_url,omitempty"`
+	DefaultMainModel  string   `json:"default_main_model,omitempty"`
+	DefaultJudgeModel string   `json:"default_judge_model,omitempty"`
+	MainHost          string   `json:"main_host,omitempty"`
+	JudgeHost         string   `json:"judge_host,omitempty"`
+	HumanWorkdayHours float64  `json:"human_workday_hours"`
+	MaxCycles         int      `json:"max_cycles"`
+	MaxParallel       int      `json:"max_parallel"`
+	BrowserPath       string   `json:"browser_path,omitempty"`
+	OCRLanguage       string   `json:"ocr_language,omitempty"`
+	HostEnvAllow      []string `json:"host_env_allow,omitempty"`
+
+	// unknown preserves keys written by another build.
+	unknown map[string]json.RawMessage
+}
+
+// Valid host identifiers. An empty value means "not configured yet".
+var validHosts = map[string]bool{"": true, "claude": true, "omp": true, "agy": true}
+
+// IsValidHost reports whether h names a supported host adapter.
+func IsValidHost(h string) bool { return validHosts[h] }
+
+// Default returns the configuration used when no file exists.
+func Default() Config {
+	return Config{
+		SchemaVersion:     SchemaVersion,
+		HumanWorkdayHours: DefaultWorkdayHours,
+		MaxCycles:         DefaultMaxCycles,
+		MaxParallel:       DefaultMaxParallel,
+		OCRLanguage:       DefaultOCRLanguage,
+	}
+}
+
+// DefaultPath returns the config file path inside the Plan Forge home.
+func DefaultPath() (string, error) {
+	dir, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.json"), nil
+}
+
+// Load reads the configuration at path. A missing file yields defaults; a
+// malformed file is reported with its path and never overwritten.
+func Load(path string) (Config, error) {
+	if path == "" {
+		p, err := DefaultPath()
+		if err != nil {
+			return Config{}, err
+		}
+		path = p
+	}
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		cfg := Default()
+		cfg.unknown = map[string]json.RawMessage{}
+		return cfg, nil
+	}
+	if err != nil {
+		return Config{}, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	cfg := Default()
+	cfg.unknown = map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		var offset int64 = -1
+		var syntaxErr *json.SyntaxError
+		if errors.As(err, &syntaxErr) {
+			offset = syntaxErr.Offset
+		}
+		return Config{}, fmt.Errorf("%s: malformed JSON at offset %d: %w", path, offset, err)
+	}
+
+	// Collect keys this build does not know so Save can preserve them.
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &all); err != nil {
+		return Config{}, fmt.Errorf("%s: %w", path, err)
+	}
+	for k, v := range all {
+		if !knownKeys[k] {
+			cfg.unknown[k] = v
+		}
+	}
+
+	if cfg.SchemaVersion != 0 && cfg.SchemaVersion != SchemaVersion {
+		return Config{}, fmt.Errorf("%s: unsupported config schema_version %d (this build understands %d)", path, cfg.SchemaVersion, SchemaVersion)
+	}
+	cfg.SchemaVersion = SchemaVersion
+	return cfg, nil
+}
+
+var knownKeys = map[string]bool{
+	"schema_version": true, "relay_server_url": true, "default_main_model": true,
+	"default_judge_model": true, "main_host": true, "judge_host": true,
+	"human_workday_hours": true, "max_cycles": true, "max_parallel": true,
+	"browser_path": true, "ocr_language": true, "host_env_allow": true,
+}
+
+// Save writes the configuration atomically: same-directory temporary file,
+// fsync, then rename, so an interrupted write cannot truncate the settings.
+func Save(path string, cfg Config) error {
+	if path == "" {
+		p, err := DefaultPath()
+		if err != nil {
+			return err
+		}
+		path = p
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	cfg.SchemaVersion = SchemaVersion
+
+	merged := make(map[string]json.RawMessage, len(cfg.unknown)+len(knownKeys))
+	for k, v := range cfg.unknown {
+		merged[k] = v
+	}
+	body, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	var encoded map[string]json.RawMessage
+	if err := json.Unmarshal(body, &encoded); err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	for k, v := range encoded {
+		merged[k] = v
+	}
+	final, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	final = append(final, '\n')
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.json")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if tmpName != "" {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(final); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	tmpName = ""
+	return nil
+}
+
+// Validate reports the first configuration problem. It never mutates cfg.
+func Validate(cfg Config) error {
+	if cfg.HumanWorkdayHours <= 0 || cfg.HumanWorkdayHours > 24 {
+		return fmt.Errorf("human_workday_hours must be > 0 and <= 24, got %g", cfg.HumanWorkdayHours)
+	}
+	if cfg.MaxCycles < 1 || cfg.MaxCycles > 3 {
+		return fmt.Errorf("max_cycles must be between 1 and 3, got %d", cfg.MaxCycles)
+	}
+	if cfg.MaxParallel < 1 || cfg.MaxParallel > 4 {
+		return fmt.Errorf("max_parallel must be between 1 and 4, got %d", cfg.MaxParallel)
+	}
+	if !IsValidHost(cfg.MainHost) {
+		return fmt.Errorf("main_host %q is not one of claude, omp, agy", cfg.MainHost)
+	}
+	if !IsValidHost(cfg.JudgeHost) {
+		return fmt.Errorf("judge_host %q is not one of claude, omp, agy", cfg.JudgeHost)
+	}
+	if cfg.RelayServerURL != "" {
+		if err := ValidateRelayURL(cfg.RelayServerURL); err != nil {
+			return err
+		}
+	}
+	for _, name := range cfg.HostEnvAllow {
+		if name == "" || strings.ContainsAny(name, "= \t\n") {
+			return fmt.Errorf("host_env_allow entry %q is not a bare environment variable name", name)
+		}
+	}
+	return nil
+}
+
+// ValidateRelayURL rejects relay endpoints that would leak or mislead. Query
+// strings and fragments can carry secrets into logs, and userinfo is never
+// needed; plaintext is allowed only on loopback for local development.
+func ValidateRelayURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("relay_server_url is not a URL: %w", err)
+	}
+	switch u.Scheme {
+	case "https", "wss":
+	case "http", "ws":
+		if !isLoopback(u.Hostname()) {
+			return fmt.Errorf("relay_server_url %q uses plaintext outside loopback; use https or wss", raw)
+		}
+	default:
+		return fmt.Errorf("relay_server_url %q must use https or wss", raw)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("relay_server_url %q has no host", raw)
+	}
+	if u.User != nil {
+		return fmt.Errorf("relay_server_url %q must not contain userinfo", raw)
+	}
+	if u.RawQuery != "" {
+		return fmt.Errorf("relay_server_url %q must not contain a query string", raw)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("relay_server_url %q must not contain a fragment", raw)
+	}
+	return nil
+}
+
+func isLoopback(host string) bool {
+	switch host {
+	case "127.0.0.1", "::1", "localhost":
+		return true
+	}
+	return strings.HasPrefix(host, "127.")
+}
+
+// SameOrigin reports whether two relay URLs share scheme, host and port. The
+// relay token is bound to one origin: pointing the client at a different origin
+// must be a deliberate, confirmed act, never a side effect of a config write.
+func SameOrigin(a, b string) bool {
+	ua, errA := url.Parse(a)
+	ub, errB := url.Parse(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return strings.EqualFold(ua.Scheme, ub.Scheme) && strings.EqualFold(ua.Host, ub.Host)
+}
+
+// --- relay token ----------------------------------------------------------
+
+// RelayToken is the stored credential for one relay origin.
+type RelayToken struct {
+	Origin string `json:"origin"`
+	Token  string `json:"token"`
+}
+
+// RelayTokenPath returns the credential file path inside the Plan Forge home.
+func RelayTokenPath() (string, error) {
+	dir, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "relay-token.json"), nil
+}
+
+// LoadRelayToken reads the stored relay credential. The environment variable
+// PLAN_FORGE_RELAY_TOKEN takes precedence and is bound to the configured origin.
+func LoadRelayToken(relayURL string) (RelayToken, error) {
+	if env := os.Getenv("PLAN_FORGE_RELAY_TOKEN"); env != "" {
+		return RelayToken{Origin: originOf(relayURL), Token: env}, nil
+	}
+	path, err := RelayTokenPath()
+	if err != nil {
+		return RelayToken{}, err
+	}
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return RelayToken{}, os.ErrNotExist
+	}
+	if err != nil {
+		return RelayToken{}, err
+	}
+	var tok RelayToken
+	if err := json.Unmarshal(raw, &tok); err != nil {
+		return RelayToken{}, fmt.Errorf("%s: malformed relay token file: %w", path, err)
+	}
+	if tok.Origin != "" && !SameOrigin(tok.Origin, relayURL) {
+		return RelayToken{}, fmt.Errorf("stored relay token belongs to %s, not %s", tok.Origin, relayURL)
+	}
+	return tok, nil
+}
+
+// SaveRelayToken stores the credential with owner-only permissions.
+func SaveRelayToken(tok RelayToken) error {
+	dir, err := EnsureHome()
+	if err != nil {
+		return err
+	}
+	body, err := json.MarshalIndent(tok, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "relay-token.json"), append(body, '\n'), 0o600)
+}
+
+// DeleteRelayToken removes the stored credential, ignoring a missing file.
+func DeleteRelayToken() error {
+	path, err := RelayTokenPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func originOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	u.Path, u.RawQuery, u.Fragment, u.User = "", "", "", nil
+	return strings.TrimSuffix(u.String(), "/")
+}
+
+// Redacted renders the configuration for display. It never contains relay
+// credentials: those live in a separate file that is never printed.
+func (c Config) Redacted() map[string]any {
+	out := map[string]any{
+		"schema_version":      c.SchemaVersion,
+		"relay_server_url":    c.RelayServerURL,
+		"default_main_model":  c.DefaultMainModel,
+		"default_judge_model": c.DefaultJudgeModel,
+		"main_host":           c.MainHost,
+		"judge_host":          c.JudgeHost,
+		"human_workday_hours": c.HumanWorkdayHours,
+		"max_cycles":          c.MaxCycles,
+		"max_parallel":        c.MaxParallel,
+		"browser_path":        c.BrowserPath,
+		"ocr_language":        c.OCRLanguage,
+		"host_env_allow":      c.HostEnvAllow,
+	}
+	return out
+}
+
+// WriteJSON renders v as indented JSON with a trailing newline.
+func WriteJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
+}

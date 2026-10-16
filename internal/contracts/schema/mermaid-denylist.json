@@ -1,0 +1,4 @@
+{
+  "description": "Statement keywords that must never appear in compiler-generated or rendered Mermaid. Read by Go (internal/synthesizer) and imported by the frontend (web/src/components/MermaidSvg.tsx) so the compiler and the renderer cannot disagree.",
+  "tokens": ["click", "style", "classDef", "linkStyle", "link", "links", "call", "href"]
+}
