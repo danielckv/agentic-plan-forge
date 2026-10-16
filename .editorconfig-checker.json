@@ -1,3 +1,9 @@
 {
-  "Exclude": ["LICENSE", "^\\.agents/", "docs/plans/", "internal/ast/queries/"]
+  "Exclude": [
+    "LICENSE",
+    "^\\.agents/",
+    "docs/plans/",
+    "internal/ast/queries/",
+    "internal/ingestion/testdata/"
+  ]
 }
