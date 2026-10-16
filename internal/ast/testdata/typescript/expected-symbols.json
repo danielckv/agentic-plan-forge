@@ -1,0 +1,13 @@
+{
+  "file": "sample.ts",
+  "symbols": [
+    {"qualified_name": "Options", "kind": "interface", "visibility": "public", "start_line": 3, "end_line": 5, "signature": "interface Options"},
+    {"qualified_name": "Handler", "kind": "type", "visibility": "public", "start_line": 7, "end_line": 7, "signature": "type Handler = (req: Request) => void"},
+    {"qualified_name": "Mode", "kind": "enum", "visibility": "public", "start_line": 9, "end_line": 12, "signature": "enum Mode"},
+    {"qualified_name": "connect", "kind": "function", "visibility": "public", "start_line": 14, "end_line": 16, "signature": "function connect(url: string, options?: Options): Promise<void>"},
+    {"qualified_name": "Client", "kind": "class", "visibility": "public", "start_line": 18, "end_line": 22, "signature": "class Client"},
+    {"qualified_name": "Client.send", "kind": "method", "visibility": "public", "start_line": 19, "end_line": 21, "signature": "send(data: string): void"}
+  ],
+  "routes": [],
+  "imports": ["express"]
+}

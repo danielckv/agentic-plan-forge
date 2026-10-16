@@ -1,0 +1,17 @@
+{
+  "file": "sample.rs",
+  "symbols": [
+    {"qualified_name": "Config", "kind": "struct", "visibility": "public", "start_line": 3, "end_line": 5, "signature": "pub struct Config"},
+    {"qualified_name": "Mode", "kind": "enum", "visibility": "public", "start_line": 7, "end_line": 10, "signature": "pub enum Mode"},
+    {"qualified_name": "Describe", "kind": "trait", "visibility": "public", "start_line": 12, "end_line": 14, "signature": "pub trait Describe"},
+    {"qualified_name": "Describe.describe", "kind": "method", "visibility": "public", "start_line": 13, "end_line": 13, "signature": "fn describe(&self) -> String"},
+    {"qualified_name": "parse", "kind": "function", "visibility": "public", "start_line": 16, "end_line": 18, "signature": "pub fn parse(input: &str) -> Result<i32, String>"},
+    {"qualified_name": "helper", "kind": "function", "visibility": "private", "start_line": 20, "end_line": 22, "signature": "fn helper() -> i32"},
+    {"qualified_name": "impl Config", "kind": "impl", "visibility": "", "start_line": 24, "end_line": 28, "signature": "impl Config"},
+    {"qualified_name": "Config.new", "kind": "method", "visibility": "public", "start_line": 25, "end_line": 27, "signature": "pub fn new(name: String) -> Self"},
+    {"qualified_name": "impl Describe for Config", "kind": "impl", "visibility": "", "start_line": 30, "end_line": 34, "signature": "impl Describe for Config"},
+    {"qualified_name": "Config.describe", "kind": "method", "visibility": "public", "start_line": 31, "end_line": 33, "signature": "fn describe(&self) -> String"}
+  ],
+  "routes": [],
+  "imports": ["std::collections::HashMap"]
+}

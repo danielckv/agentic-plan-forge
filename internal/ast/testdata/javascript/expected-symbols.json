@@ -1,0 +1,14 @@
+{
+  "file": "sample.js",
+  "symbols": [
+    {"qualified_name": "add", "kind": "function", "visibility": "public", "start_line": 4, "end_line": 6, "signature": "function add(a, b)"},
+    {"qualified_name": "internal", "kind": "function", "visibility": "private", "start_line": 8, "end_line": 10, "signature": "function internal(x)"},
+    {"qualified_name": "Counter", "kind": "class", "visibility": "public", "start_line": 12, "end_line": 16, "signature": "class Counter"},
+    {"qualified_name": "Counter.increment", "kind": "method", "visibility": "public", "start_line": 13, "end_line": 15, "signature": "increment(by)"},
+    {"qualified_name": "double", "kind": "function", "visibility": "public", "start_line": 18, "end_line": 18}
+  ],
+  "routes": [
+    {"method": "GET", "path": "/users", "line": 21}
+  ],
+  "imports": ["express", "./helper.js"]
+}

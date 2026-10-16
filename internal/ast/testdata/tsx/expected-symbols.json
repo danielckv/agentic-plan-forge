@@ -1,0 +1,11 @@
+{
+  "file": "sample.tsx",
+  "symbols": [
+    {"qualified_name": "Props", "kind": "interface", "visibility": "private", "start_line": 3, "end_line": 5, "signature": "interface Props"},
+    {"qualified_name": "App", "kind": "function", "visibility": "public", "start_line": 7, "end_line": 9, "signature": "function App(props: Props): JSX.Element"},
+    {"qualified_name": "Button", "kind": "function", "visibility": "public", "start_line": 11, "end_line": 11},
+    {"qualified_name": "Private", "kind": "function", "visibility": "private", "start_line": 13, "end_line": 15, "signature": "function Private()"}
+  ],
+  "routes": [],
+  "imports": ["react"]
+}

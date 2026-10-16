@@ -1,0 +1,16 @@
+{
+  "file": "sample.go",
+  "symbols": [
+    {"qualified_name": "MaxRetries", "kind": "constant", "visibility": "public", "start_line": 9, "end_line": 9, "signature": "const MaxRetries"},
+    {"qualified_name": "defaultName", "kind": "variable", "visibility": "private", "start_line": 11, "end_line": 11, "signature": "var defaultName"},
+    {"qualified_name": "Greeter", "kind": "interface", "visibility": "public", "start_line": 14, "end_line": 16, "signature": "type Greeter interface"},
+    {"qualified_name": "Server", "kind": "struct", "visibility": "public", "start_line": 19, "end_line": 21, "signature": "type Server struct"},
+    {"qualified_name": "Foo", "kind": "function", "visibility": "public", "start_line": 24, "end_line": 26, "signature": "func Foo(a, b int) int"},
+    {"qualified_name": "helper", "kind": "function", "visibility": "private", "start_line": 28, "end_line": 30, "signature": "func helper(x string) string"},
+    {"qualified_name": "Server.Start", "kind": "method", "visibility": "public", "start_line": 33, "end_line": 38, "signature": "func (s *Server) Start(port int) error"}
+  ],
+  "routes": [
+    {"method": "", "path": "/health", "line": 34}
+  ],
+  "imports": ["fmt", "net/http"]
+}
