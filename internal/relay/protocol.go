@@ -96,13 +96,13 @@ type Phase string
 
 // Session phases.
 const (
-	PhaseIngestion       Phase = "INGESTION"
-	PhaseDeliberation    Phase = "DELIBERATION"
-	PhaseSynthesis       Phase = "SYNTHESIS"
-	PhaseApproving       Phase = "APPROVING"
+	PhaseIngestion        Phase = "INGESTION"
+	PhaseDeliberation     Phase = "DELIBERATION"
+	PhaseSynthesis        Phase = "SYNTHESIS"
+	PhaseApproving        Phase = "APPROVING"
 	PhaseApprovingUnknown Phase = "APPROVING_UNKNOWN"
-	PhaseApproved        Phase = "APPROVED"
-	PhaseCancelled       Phase = "CANCELLED"
+	PhaseApproved         Phase = "APPROVED"
+	PhaseCancelled        Phase = "CANCELLED"
 )
 
 // Role is a session role. Capabilities are derived from it.
@@ -326,36 +326,36 @@ type PlanApprovedPayload struct {
 
 // HelloPayload opens a connection.
 type HelloPayload struct {
-	Proto        uint16 `json:"proto"`
-	LastSeq      uint64 `json:"last_seq,string"`
-	DocVersion   uint64 `json:"doc_version,string"`
-	CanExecute   bool   `json:"can_execute"`
+	Proto      uint16 `json:"proto"`
+	LastSeq    uint64 `json:"last_seq,string"`
+	DocVersion uint64 `json:"doc_version,string"`
+	CanExecute bool   `json:"can_execute"`
 }
 
 // StateSnapshotPayload resynchronizes a client without embedding document text
 // or draft bodies: clients fetch those separately.
 type StateSnapshotPayload struct {
-	MemberID       string  `json:"member_id"`
-	Role           Role    `json:"role"`
-	HeadSeq        uint64  `json:"head_seq,string"`
-	HeadDocVersion uint64  `json:"head_doc_version,string"`
-	Phase          Phase   `json:"phase"`
-	BaselineRev    uint64  `json:"baseline_rev,string"`
-	BaselineHash   string  `json:"baseline_hash,omitempty"`
-	RunID          string  `json:"run_id,omitempty"`
-	InputRevision  uint64  `json:"input_revision,string"`
-	SynthesisRev   uint64  `json:"synthesis_rev,string"`
-	LeaseEpoch     uint64  `json:"lease_epoch,string"`
-	LeaseHolder    string  `json:"lease_holder,omitempty"`
-	PendingDecisions []string `json:"pending_decisions,omitempty"`
-	DraftHashes    map[string]string `json:"draft_hashes,omitempty"`
+	MemberID         string            `json:"member_id"`
+	Role             Role              `json:"role"`
+	HeadSeq          uint64            `json:"head_seq,string"`
+	HeadDocVersion   uint64            `json:"head_doc_version,string"`
+	Phase            Phase             `json:"phase"`
+	BaselineRev      uint64            `json:"baseline_rev,string"`
+	BaselineHash     string            `json:"baseline_hash,omitempty"`
+	RunID            string            `json:"run_id,omitempty"`
+	InputRevision    uint64            `json:"input_revision,string"`
+	SynthesisRev     uint64            `json:"synthesis_rev,string"`
+	LeaseEpoch       uint64            `json:"lease_epoch,string"`
+	LeaseHolder      string            `json:"lease_holder,omitempty"`
+	PendingDecisions []string          `json:"pending_decisions,omitempty"`
+	DraftHashes      map[string]string `json:"draft_hashes,omitempty"`
 }
 
 // LeaseGrantedPayload reports a granted executor lease.
 type LeaseGrantedPayload struct {
-	Epoch   uint64 `json:"epoch,string"`
-	TTLMS   int64  `json:"ttl_ms"`
-	Holder  string `json:"holder"`
+	Epoch  uint64 `json:"epoch,string"`
+	TTLMS  int64  `json:"ttl_ms"`
+	Holder string `json:"holder"`
 }
 
 // FencedPayload tells a stale executor that its epoch is obsolete.
@@ -373,10 +373,10 @@ type ErrorPayload struct {
 
 // ArtifactSavedPayload reports the outcome of an artifact commit.
 type ArtifactSavedPayload struct {
-	OK             bool                `json:"ok"`
-	SpecSHA256     string              `json:"spec_sha256,omitempty"`
-	ManifestSHA256 string              `json:"manifest_sha256,omitempty"`
-	Error          *ArtifactError      `json:"error,omitempty"`
+	OK             bool           `json:"ok"`
+	SpecSHA256     string         `json:"spec_sha256,omitempty"`
+	ManifestSHA256 string         `json:"manifest_sha256,omitempty"`
+	Error          *ArtifactError `json:"error,omitempty"`
 }
 
 // ArtifactError describes a failed artifact write without leaking local paths.
@@ -425,9 +425,9 @@ const (
 
 // RunAssignedPayload announces the authority-assigned run identity.
 type RunAssignedPayload struct {
-	RunID        string `json:"run_id"`
-	BaselineRev  uint64 `json:"baseline_rev,string"`
-	LeaseEpoch   uint64 `json:"lease_epoch,string"`
+	RunID       string `json:"run_id"`
+	BaselineRev uint64 `json:"baseline_rev,string"`
+	LeaseEpoch  uint64 `json:"lease_epoch,string"`
 }
 
 // RetryStagePayload re-runs one stage.
@@ -438,9 +438,9 @@ type RetryStagePayload struct {
 
 // Stage identifiers used by RetryStage and stage bookkeeping.
 const (
-	StagePM         = "pm"
-	StageArchitect  = "architect"
-	StageCritic     = "critic"
+	StagePM          = "pm"
+	StageArchitect   = "architect"
+	StageCritic      = "critic"
 	StageSynthesizer = "synthesizer"
 )
 

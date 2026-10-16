@@ -33,7 +33,7 @@ func findToolEvent(value any, depth int) string {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
-			if (strings.EqualFold(key, "type") || strings.EqualFold(key, "subtype")) {
+			if strings.EqualFold(key, "type") || strings.EqualFold(key, "subtype") {
 				if text, ok := child.(string); ok {
 					normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(text))
 					if toolEventPattern.MatchString(normalized) {

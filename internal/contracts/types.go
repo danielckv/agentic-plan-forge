@@ -24,10 +24,10 @@ type SourceRef struct {
 
 // DocumentBlock is one parsed unit of an input document.
 type DocumentBlock struct {
-	ID    string `json:"id"`
-	Kind  string `json:"kind"`
-	Text  string `json:"text,omitempty"`
-	Level int    `json:"level,omitempty"`
+	ID    string     `json:"id"`
+	Kind  string     `json:"kind"`
+	Text  string     `json:"text,omitempty"`
+	Level int        `json:"level,omitempty"`
 	Rows  [][]string `json:"rows,omitempty"`
 	// Source locates the block in the original document.
 	Source SourceRef `json:"source"`
@@ -93,13 +93,13 @@ const (
 // NormalizedPRD is the interpreted requirements document: the product view, the
 // technical appendix, provenance and the open ambiguities.
 type NormalizedPRD struct {
-	SchemaVersion     int             `json:"schema_version"`
-	Revision          uint64          `json:"revision"`
-	Product           ProductPRD      `json:"product"`
-	TechnicalAppendix string          `json:"technical_appendix,omitempty"`
-	SourceRefs        []SourceRef     `json:"source_refs"`
-	Ambiguities       []Ambiguity     `json:"ambiguities"`
-	Warnings          []string        `json:"warnings,omitempty"`
+	SchemaVersion     int         `json:"schema_version"`
+	Revision          uint64      `json:"revision"`
+	Product           ProductPRD  `json:"product"`
+	TechnicalAppendix string      `json:"technical_appendix,omitempty"`
+	SourceRefs        []SourceRef `json:"source_refs"`
+	Ambiguities       []Ambiguity `json:"ambiguities"`
+	Warnings          []string    `json:"warnings,omitempty"`
 }
 
 // Symbol is one extracted declaration. Paths are repository-relative.
@@ -168,17 +168,17 @@ type Coverage struct {
 // technical avatars. RootPath stays local: transmitted graphs use relative
 // paths and hashes.
 type RepoContextGraph struct {
-	SchemaVersion   int                         `json:"schema_version"`
-	RootPath        string                      `json:"root_path"`
-	GitCommitHash   string                      `json:"git_commit_hash,omitempty"`
-	GitBranch       string                      `json:"git_branch,omitempty"`
-	WorktreeHash    string                      `json:"worktree_hash"`
-	DetectedStack   []string                    `json:"detected_stack"`
-	Modules         []ModuleBoundary            `json:"modules"`
-	Symbols         map[string][]Symbol         `json:"symbols"`
-	Routes          []RouteEvidence             `json:"routes,omitempty"`
-	DocDriftReports []DocDriftItem              `json:"doc_drift_reports"`
-	Coverage        Coverage                    `json:"coverage"`
+	SchemaVersion   int                 `json:"schema_version"`
+	RootPath        string              `json:"root_path"`
+	GitCommitHash   string              `json:"git_commit_hash,omitempty"`
+	GitBranch       string              `json:"git_branch,omitempty"`
+	WorktreeHash    string              `json:"worktree_hash"`
+	DetectedStack   []string            `json:"detected_stack"`
+	Modules         []ModuleBoundary    `json:"modules"`
+	Symbols         map[string][]Symbol `json:"symbols"`
+	Routes          []RouteEvidence     `json:"routes,omitempty"`
+	DocDriftReports []DocDriftItem      `json:"doc_drift_reports"`
+	Coverage        Coverage            `json:"coverage"`
 }
 
 // DocDriftItem is one documentation claim that no longer matches the code.
@@ -198,10 +198,10 @@ type DocDriftItem struct {
 
 // Documentation drift types.
 const (
-	DriftStaleSignature  = "STALE_SIGNATURE"
-	DriftMissingDoc      = "MISSING_DOC"
-	DriftDeprecatedFlow  = "DEPRECATED_FLOW"
-	DriftUnverifiable    = "UNVERIFIABLE"
+	DriftStaleSignature = "STALE_SIGNATURE"
+	DriftMissingDoc     = "MISSING_DOC"
+	DriftDeprecatedFlow = "DEPRECATED_FLOW"
+	DriftUnverifiable   = "UNVERIFIABLE"
 )
 
 // Epic groups stories for the synthesised plan.
@@ -304,14 +304,14 @@ type TechnicalTask struct {
 
 // Critique is a severity-ranked objection from the red-team avatar.
 type Critique struct {
-	ID            string   `json:"id"`
-	Severity      string   `json:"severity"`
-	TargetIDs     []string `json:"target_ids,omitempty"`
-	Evidence      string   `json:"evidence"`
-	Impact        string   `json:"impact,omitempty"`
-	RequiredChange string  `json:"required_change"`
-	Status        string   `json:"status"`
-	ResolutionRef string   `json:"resolution_ref,omitempty"`
+	ID             string   `json:"id"`
+	Severity       string   `json:"severity"`
+	TargetIDs      []string `json:"target_ids,omitempty"`
+	Evidence       string   `json:"evidence"`
+	Impact         string   `json:"impact,omitempty"`
+	RequiredChange string   `json:"required_change"`
+	Status         string   `json:"status"`
+	ResolutionRef  string   `json:"resolution_ref,omitempty"`
 }
 
 // Critique severities and statuses.
@@ -326,10 +326,10 @@ const (
 
 // DecisionOption is one choice on a human decision card.
 type DecisionOption struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Tradeoff  string `json:"tradeoff"`
-	Impact    string `json:"impact,omitempty"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Tradeoff string `json:"tradeoff"`
+	Impact   string `json:"impact,omitempty"`
 }
 
 // Decision is a trade-off that requires human judgement.
@@ -353,32 +353,32 @@ type ApprovalMeta struct {
 
 // SynthesisInput is the validated material the synthesizer compiles.
 type SynthesisInput struct {
-	PRD           NormalizedPRD       `json:"prd"`
-	PM            json.RawMessage     `json:"pm"`
-	Architecture  json.RawMessage     `json:"architecture"`
-	Specialists   []json.RawMessage   `json:"specialists,omitempty"`
-	Critiques     []Critique          `json:"critiques,omitempty"`
-	Decisions     []Decision          `json:"decisions,omitempty"`
-	Graph         RepoContextGraph    `json:"graph"`
-	DocDrift      []DocDriftItem      `json:"doc_drift,omitempty"`
+	PRD          NormalizedPRD     `json:"prd"`
+	PM           json.RawMessage   `json:"pm"`
+	Architecture json.RawMessage   `json:"architecture"`
+	Specialists  []json.RawMessage `json:"specialists,omitempty"`
+	Critiques    []Critique        `json:"critiques,omitempty"`
+	Decisions    []Decision        `json:"decisions,omitempty"`
+	Graph        RepoContextGraph  `json:"graph"`
+	DocDrift     []DocDriftItem    `json:"doc_drift,omitempty"`
 }
 
 // PlanManifest is the machine-readable half of an approved plan. It never
 // contains absolute machine paths, credentials or raw model transcripts.
 type PlanManifest struct {
-	SchemaVersion         int                   `json:"schema_version"`
-	ApprovalID            string                `json:"approval_id"`
-	Title                 string                `json:"title"`
-	CreatedAt             time.Time             `json:"created_at"`
-	GitBase               string                `json:"git_base,omitempty"`
-	WorktreeHash          string                `json:"worktree_hash"`
-	PRDSHA256             string                `json:"prd_sha256"`
-	GraphSHA256           string                `json:"graph_sha256"`
-	SpecSHA256            string                `json:"spec_sha256"`
-	TaskDAG               []TechnicalTask       `json:"task_dag"`
-	Targets               []Target              `json:"targets"`
-	VerificationCommands  []VerificationCommand `json:"verification_commands"`
-	Decisions             []Decision            `json:"decisions,omitempty"`
-	Coverage              Coverage              `json:"coverage"`
-	EstimateAssumptions   []string              `json:"estimate_assumptions"`
+	SchemaVersion        int                   `json:"schema_version"`
+	ApprovalID           string                `json:"approval_id"`
+	Title                string                `json:"title"`
+	CreatedAt            time.Time             `json:"created_at"`
+	GitBase              string                `json:"git_base,omitempty"`
+	WorktreeHash         string                `json:"worktree_hash"`
+	PRDSHA256            string                `json:"prd_sha256"`
+	GraphSHA256          string                `json:"graph_sha256"`
+	SpecSHA256           string                `json:"spec_sha256"`
+	TaskDAG              []TechnicalTask       `json:"task_dag"`
+	Targets              []Target              `json:"targets"`
+	VerificationCommands []VerificationCommand `json:"verification_commands"`
+	Decisions            []Decision            `json:"decisions,omitempty"`
+	Coverage             Coverage              `json:"coverage"`
+	EstimateAssumptions  []string              `json:"estimate_assumptions"`
 }

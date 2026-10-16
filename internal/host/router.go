@@ -62,11 +62,11 @@ type Router struct {
 	invokedHost Kind
 	adapters    map[Kind]Adapter
 
-	mu       sync.Mutex
-	ready    map[Kind]resolvedAdapter
-	main     *resolvedAdapter
-	judge    *resolvedAdapter
-	reasons  []SkipReason
+	mu      sync.Mutex
+	ready   map[Kind]resolvedAdapter
+	main    *resolvedAdapter
+	judge   *resolvedAdapter
+	reasons []SkipReason
 }
 
 var _ contracts.Generator = (*Router)(nil)

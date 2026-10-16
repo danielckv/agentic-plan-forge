@@ -19,10 +19,10 @@ func TestEmbeddedSchemasLoad(t *testing.T) {
 		t.Fatal("no embedded schemas found")
 	}
 	want := map[string]bool{
-		"envelope.v1":         true,
-		"normalized_prd.v1":   true,
-		"synthesis.v1":        true,
-		"mermaid-denylist":    true,
+		"envelope.v1":       true,
+		"normalized_prd.v1": true,
+		"synthesis.v1":      true,
+		"mermaid-denylist":  true,
 	}
 	for name := range want {
 		found := false

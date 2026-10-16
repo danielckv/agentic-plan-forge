@@ -39,15 +39,15 @@ const MaxStageOutputBytes = 2 << 20
 
 // GenerateRequest is one tool-free provider invocation.
 type GenerateRequest struct {
-	Role        RoleID          `json:"role"`
-	ModelSlot   ModelSlot       `json:"model_slot"`
-	Model       string          `json:"model,omitempty"`
-	SystemPrompt string         `json:"system_prompt"`
-	UserPayload json.RawMessage `json:"user_payload"`
-	SchemaID    string          `json:"schema_id"`
-	RunID       string          `json:"run_id,omitempty"`
-	Timeout     time.Duration   `json:"timeout"`
-	MaxOutput   int             `json:"max_output_bytes"`
+	Role         RoleID          `json:"role"`
+	ModelSlot    ModelSlot       `json:"model_slot"`
+	Model        string          `json:"model,omitempty"`
+	SystemPrompt string          `json:"system_prompt"`
+	UserPayload  json.RawMessage `json:"user_payload"`
+	SchemaID     string          `json:"schema_id"`
+	RunID        string          `json:"run_id,omitempty"`
+	Timeout      time.Duration   `json:"timeout"`
+	MaxOutput    int             `json:"max_output_bytes"`
 }
 
 // ClampTimeout returns the request timeout bounded by MaxGenerateTimeout, and
@@ -77,12 +77,12 @@ type GenerationEventKind string
 
 // Generation event kinds.
 const (
-	EventStatus       GenerationEventKind = "status"
-	EventTextDelta    GenerationEventKind = "text_delta"
+	EventStatus        GenerationEventKind = "status"
+	EventTextDelta     GenerationEventKind = "text_delta"
 	EventPublicSummary GenerationEventKind = "public_summary"
-	EventUsage        GenerationEventKind = "usage"
-	EventFinal        GenerationEventKind = "final"
-	EventError        GenerationEventKind = "error"
+	EventUsage         GenerationEventKind = "usage"
+	EventFinal         GenerationEventKind = "final"
+	EventError         GenerationEventKind = "error"
 )
 
 // GenerationEvent is one streamed item from a provider invocation.

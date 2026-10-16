@@ -122,7 +122,7 @@ func TestRouterSelectionOrderAndJudgeDefault(t *testing.T) {
 		adapters: map[Kind]Adapter{
 			KindClaude: configured,
 			"fake":     invoked,
-			KindOMP:     fallback,
+			KindOMP:    fallback,
 		},
 		ready: make(map[Kind]resolvedAdapter),
 	}
