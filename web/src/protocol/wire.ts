@@ -101,7 +101,7 @@ export function findDuplicateKeys(text: string): string[] {
       i++;
       const seen = new Set<string>();
       stack.push(seen);
-      expect("}");
+      while (i < len && /\s/.test(s[i]!)) i++;
       if (s[i] === "}") {
         i++;
         stack.pop();
@@ -130,7 +130,7 @@ export function findDuplicateKeys(text: string): string[] {
     } else if (c === "[") {
       i++;
       stack.push(new Set<string>());
-      expect("]");
+      while (i < len && /\s/.test(s[i]!)) i++;
       if (s[i] === "]") {
         i++;
         stack.pop();
@@ -171,6 +171,9 @@ export interface FrameResult {
  * types are protocol violations; the caller closes the socket with 1008.
  */
 export function decodeFrame(text: string): FrameResult {
+  if (text.length > 4 * 1024 * 1024) {
+    return { ok: false, error: "frame exceeds the 4 MiB decode cap" };
+  }
   let dupes: string[];
   try {
     dupes = findDuplicateKeys(text);

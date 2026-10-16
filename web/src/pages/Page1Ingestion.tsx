@@ -3,6 +3,16 @@ import { EditorView } from "@codemirror/view";
 import { EditorState, type Extension } from "@codemirror/state";
 import { editorBase } from "../codemirror/keymap";
 import { markdown } from "@codemirror/lang-markdown";
+import {
+  ArrowRight,
+  CloudUpload,
+  FileText,
+  GitBranch,
+  LoaderCircle,
+  ScanText,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
 
 import { useSync, submitEdit, freezeRequest, exportRecovery } from "../store/syncStore";
 import type { RecoveryItem, SyncState } from "../store/syncStore";
@@ -146,154 +156,233 @@ export function Page1Ingestion(): React.ReactElement {
   }, [secrets.length, dismissedSecrets.length]);
 
   return (
-    <div className="grid h-full grid-cols-2 gap-4 overflow-auto p-4">
-      {/* Left pane: input + local context */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Ingestion</h2>
-        <div
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => void onDrop(e)}
-          className="flex min-h-24 flex-col items-center justify-center rounded border-2 border-dashed p-4"
-          style={{ borderColor: "var(--pf-border)" }}
-        >
-          {sync.role !== "owner" ? (
-            <p className="text-sm" style={{ color: "var(--pf-muted)" }}>
-              only the session owner can upload
-            </p>
-          ) : upload.inFlight ? (
-            <p className="text-sm">parsing {upload.fileName}…</p>
-          ) : (
-            <>
-              <p className="text-sm">Drop .docx / .pdf / .md here</p>
-              <p className="text-xs" style={{ color: "var(--pf-muted)" }}>
-                max 25 MiB each, 5 files
+    <div className="pf-page">
+      <div className="pf-page-body">
+        <div className="pf-container grid grid-cols-1 gap-6 py-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          {/* Left column: sources + local context */}
+          <section className="flex flex-col gap-5">
+            <div>
+              <h1 className="pf-title">Ingestion &amp; normalization</h1>
+              <p className="pf-caption mt-1">
+                Add source documents or raw notes. Plan-Forge separates product
+                requirements from technical context before any avatar sees them.
               </p>
-            </>
-          )}
-        </div>
-        {upload.error !== null && (
-          <p className="text-sm" style={{ color: "var(--pf-danger)" }} role="alert">
-            {upload.error}
-          </p>
-        )}
-        {upload.warnings.map((w) => (
-          <p key={w} className="text-sm" style={{ color: "var(--pf-warn)" }}>
-            {w}
-          </p>
-        ))}
-        <textarea
-          value={composerText}
-          onChange={(e) => setComposerText(e.target.value)}
-          placeholder="Raw text: epics, ideas, requirements…"
-          className="min-h-24 rounded border p-2"
-          style={{ borderColor: "var(--pf-border)" }}
-        />
-        <button
-          type="button"
-          className="self-start rounded px-3 py-1.5 text-sm"
-          style={{ background: "var(--pf-accent)", color: "var(--pf-accent-ink)" }}
-          onClick={addToInterpretation}
-        >
-          Add to interpretation
-        </button>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <Pill kind="ast" pills={pills} />
-          <Pill kind="docHealth" pills={pills} />
-          <Pill kind="ocr" pills={pills} />
-        </div>
-        {pills.ocr === "missing" && (
-          <p className="text-xs" style={{ color: "var(--pf-muted)" }}>
-            OCR tools missing: {OCR_INSTALL_GUIDANCE[detectOS()] ?? OCR_INSTALL_GUIDANCE.Linux}
-          </p>
-        )}
-        <RecoveryPanel recovery={sync.recovery} />
-      </section>
+            </div>
 
-      {/* Right pane: live interpretation */}
-      <section className="flex min-h-0 flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold">Interpretation</h2>
-          <div className="ml-auto flex gap-1">
-            <TabButton label="Product PRD" active={tab === "product"} onClick={() => setTab("product")} />
-            <TabButton label="Technical appendix" active={tab === "appendix"} onClick={() => setTab("appendix")} />
-          </div>
+            <div className="pf-card pf-card-pad">
+              <p className="pf-label mb-3">Source documents</p>
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => void onDrop(e)}
+                className="pf-dropzone"
+              >
+                {sync.role !== "owner" ? (
+                  <>
+                    <span className="pf-dropzone-icon">
+                      <ShieldAlert size={19} />
+                    </span>
+                    <p className="pf-body">Only the session owner can upload files</p>
+                  </>
+                ) : upload.inFlight ? (
+                  <>
+                    <span className="pf-dropzone-icon">
+                      <LoaderCircle size={19} className="animate-spin" />
+                    </span>
+                    <p className="pf-body">Parsing {upload.fileName}…</p>
+                    <p className="pf-caption">Extracting text and structure</p>
+                  </>
+                ) : (
+                  <>
+                    <span className="pf-dropzone-icon">
+                      <CloudUpload size={19} />
+                    </span>
+                    <p className="pf-body font-medium" style={{ color: "var(--pf-ink)" }}>
+                      Drop .docx, .pdf or .md files here
+                    </p>
+                    <p className="pf-caption">Up to 5 files · 25 MiB each</p>
+                  </>
+                )}
+              </div>
+              {upload.error !== null && (
+                <div className="pf-notice pf-notice--danger mt-3" role="alert">
+                  <TriangleAlert size={15} className="mt-0.5 shrink-0" style={{ color: "var(--pf-danger)" }} />
+                  <span>{upload.error}</span>
+                </div>
+              )}
+              {upload.warnings.map((w) => (
+                <div key={w} className="pf-notice pf-notice--warn mt-3">
+                  <TriangleAlert size={15} className="mt-0.5 shrink-0" style={{ color: "var(--pf-warn)" }} />
+                  <span>{w}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pf-card pf-card-pad">
+              <p className="pf-label mb-3">Raw notes</p>
+              <textarea
+                value={composerText}
+                onChange={(e) => setComposerText(e.target.value)}
+                placeholder="Epics, ideas, requirements — pasted meeting notes or a rough brief work well."
+                className="pf-textarea min-h-28"
+              />
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="pf-caption">Notes are appended to the interpretation on the right.</p>
+                <button
+                  type="button"
+                  className="pf-btn pf-btn-secondary pf-btn-sm"
+                  onClick={addToInterpretation}
+                  disabled={composerText.trim().length === 0}
+                >
+                  <FileText size={13} />
+                  Add to interpretation
+                </button>
+              </div>
+            </div>
+
+            <div className="pf-card pf-card-pad">
+              <p className="pf-label mb-3">Repository grounding</p>
+              <div className="flex flex-wrap gap-2">
+                <Pill kind="ast" pills={pills} />
+                <Pill kind="docHealth" pills={pills} />
+                <Pill kind="ocr" pills={pills} />
+              </div>
+              {pills.ocr === "missing" && (
+                <p className="pf-caption mt-3">
+                  OCR tools missing:{" "}
+                  <code className="pf-mono">{OCR_INSTALL_GUIDANCE[detectOS()] ?? OCR_INSTALL_GUIDANCE.Linux}</code>
+                </p>
+              )}
+            </div>
+
+            <RecoveryPanel recovery={sync.recovery} />
+          </section>
+
+          {/* Right column: live interpretation */}
+          <section className="flex min-h-0 flex-col gap-4">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="pf-section-title">Interpretation</h2>
+                <p className="pf-caption mt-0.5">
+                  Editable shared PRD — changes sync to every collaborator.
+                </p>
+              </div>
+              <div className="pf-tabs">
+                <TabButton label="Product PRD" active={tab === "product"} onClick={() => setTab("product")} />
+                <TabButton label="Technical appendix" active={tab === "appendix"} onClick={() => setTab("appendix")} />
+              </div>
+            </div>
+
+            <div className="pf-editor-wrap" style={{ minHeight: 320, flex: 1 }}>
+              <div className="pf-editor-toolbar">
+                <FileText size={13} style={{ color: "var(--pf-muted)" }} />
+                <span className="pf-caption" style={{ color: "var(--pf-ink-2)", fontWeight: 600 }}>
+                  {tab === "product" ? "prd.md — Product PRD" : "prd.md — Technical appendix"}
+                </span>
+                <span className="pf-caption ml-auto">doc v{sync.docVersion}</span>
+              </div>
+              <PrdEditor sync={sync} />
+            </div>
+
+            {ambiguities.length > 0 && (
+              <div className="pf-notice pf-notice--warn flex-col items-stretch">
+                <div className="flex items-center gap-2">
+                  <TriangleAlert size={15} style={{ color: "var(--pf-warn)" }} />
+                  <span className="font-semibold" style={{ color: "var(--pf-warn)" }}>
+                    Resolve {ambiguities.length} {ambiguities.length === 1 ? "ambiguity" : "ambiguities"} before confirming
+                  </span>
+                </div>
+                <ul className="mt-1 flex list-none flex-col gap-1.5 p-0">
+                  {ambiguities.map((a) => (
+                    <li key={a.id} className="flex items-center justify-between gap-2">
+                      <span>{a.text}</span>
+                      <button
+                        type="button"
+                        className="pf-btn pf-btn-secondary pf-btn-sm"
+                        onClick={() => setAmbiguities((prev) => prev.filter((x) => x.id !== a.id))}
+                      >
+                        Mark as {a.guess ?? "product"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {secrets.length > 0 && (
+              <div className="pf-notice pf-notice--danger flex-col items-stretch">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert size={15} style={{ color: "var(--pf-danger)" }} />
+                  <span className="font-semibold" style={{ color: "var(--pf-danger)" }}>
+                    Possible secrets detected — redact or dismiss
+                  </span>
+                </div>
+                <ul className="mt-1 flex list-none flex-col gap-1.5 p-0">
+                  {secrets.map((s) => (
+                    <li key={s} className="flex items-center justify-between gap-2">
+                      <code className="pf-mono">{s.slice(0, 12)}…</code>
+                      <button
+                        type="button"
+                        className="pf-btn pf-btn-secondary pf-btn-sm"
+                        onClick={() => setDismissedSecrets((prev) => [...prev, s])}
+                      >
+                        Dismiss
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
         </div>
-        <PrdEditor sync={sync} />
-        {ambiguities.length > 0 && (
-          <div className="rounded border p-2 text-sm" style={{ borderColor: "var(--pf-warn)" }}>
-            <p className="mb-1 font-medium">Resolve ambiguities before confirm:</p>
-            <ul className="flex list-none flex-col gap-1">
-              {ambiguities.map((a) => (
-                <li key={a.id} className="flex items-center gap-2">
-                  <span>{a.text}</span>
-                  <button
-                    type="button"
-                    className="rounded px-2 py-0.5 text-xs"
-                    style={{ background: "var(--pf-accent)", color: "var(--pf-accent-ink)" }}
-                    onClick={() => setAmbiguities((prev) => prev.filter((x) => x.id !== a.id))}
-                  >
-                    resolve: {a.guess ?? "product"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {secrets.length > 0 && (
-          <div className="rounded border p-2 text-sm" style={{ borderColor: "var(--pf-danger)" }}>
-            <p className="mb-1 font-medium">Possible secrets detected — redact or dismiss:</p>
-            <ul className="flex list-none flex-col gap-1">
-              {secrets.map((s) => (
-                <li key={s} className="flex items-center gap-2">
-                  <code className="text-xs">{s.slice(0, 12)}…</code>
-                  <button
-                    type="button"
-                    className="rounded px-2 py-0.5 text-xs"
-                    onClick={() => setDismissedSecrets((prev) => [...prev, s])}
-                  >
-                    dismiss
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={hostAck} onChange={(e) => setHostAck(e.target.checked)} />
+      </div>
+
+      {/* Footer: generation-host line + primary CTA */}
+      <footer className="pf-footer-bar">
+        <label className="flex items-center gap-2.5 text-[13px]" style={{ color: "var(--pf-ink-2)" }}>
+          <input
+            type="checkbox"
+            checked={hostAck}
+            onChange={(e) => setHostAck(e.target.checked)}
+            className="h-4 w-4 accent-[#0052cc]"
+          />
           Product requirements will be sent to the generation host through its local CLI
         </label>
         <button
           type="button"
+          className="pf-btn pf-btn-primary pf-btn-lg ml-auto"
           disabled={!confirmEnabled}
-          className="self-end rounded px-4 py-2 text-sm font-semibold disabled:opacity-40"
-          style={{ background: "var(--pf-accent)", color: "var(--pf-accent-ink)" }}
           onClick={onConfirm}
         >
-          Confirm Context &amp; Launch Avatars →
+          Confirm Context &amp; Launch Avatars
+          <ArrowRight size={15} />
         </button>
-      </section>
+      </footer>
     </div>
   );
 }
 
 function Pill(props: { kind: "ast" | "docHealth" | "ocr"; pills: StatusPills }): React.ReactElement {
   const { kind, pills } = props;
-  const tone =
-    kind === "ast" && pills.ast === "ok"
-      ? "var(--pf-ok)"
-      : kind === "docHealth" && pills.docHealth === 0
-        ? "var(--pf-ok)"
-        : kind === "ocr" && pills.ocr === "available"
-          ? "var(--pf-ok)"
-          : "var(--pf-warn)";
+  const healthy =
+    kind === "ast"
+      ? pills.ast === "ok"
+      : kind === "docHealth"
+        ? pills.docHealth === 0
+        : pills.ocr === "available";
+  const scanning = kind === "ast" && pills.ast === "scanning";
   const label =
     kind === "ast"
-      ? `AST: ${pills.ast} — ${pills.astDetail}`
+      ? `AST ${pills.ast} · ${pills.astDetail}`
       : kind === "docHealth"
-        ? `Doc health: ${pills.docHealth} stale doc sections detected in docs/`
-        : `OCR: ${pills.ocr}`;
+        ? pills.docHealth === 0
+          ? "Docs in sync"
+          : `Docs: ${pills.docHealth} stale ${pills.docHealth === 1 ? "section" : "sections"}`
+        : `OCR ${pills.ocr}`;
+  const Icon = kind === "ast" ? GitBranch : kind === "docHealth" ? FileText : ScanText;
+  const tone = scanning ? "pf-chip--accent pf-chip--live" : healthy ? "pf-chip--ok" : "pf-chip--warn";
   return (
-    <span className="rounded-full px-2 py-0.5" style={{ background: tone, color: "#fff" }}>
+    <span className={`pf-chip ${tone}`}>
+      <Icon size={12} />
+      <span className="pf-dot" />
       {label}
     </span>
   );
@@ -302,16 +391,7 @@ function Pill(props: { kind: "ast" | "docHealth" | "ocr"; pills: StatusPills }):
 function TabButton(props: { label: string; active: boolean; onClick: () => void }): React.ReactElement {
   const { label, active, onClick } = props;
   return (
-    <button
-      type="button"
-      className="rounded px-2 py-1 text-xs"
-      style={{
-        background: active ? "var(--pf-accent)" : "transparent",
-        color: active ? "var(--pf-accent-ink)" : "var(--pf-ink)",
-        border: "1px solid var(--pf-border)",
-      }}
-      onClick={onClick}
-    >
+    <button type="button" className="pf-tab" data-active={active} onClick={onClick}>
       {label}
     </button>
   );
@@ -321,20 +401,27 @@ function RecoveryPanel(props: { recovery: RecoveryItem[] }): React.ReactElement 
   const { recovery } = props;
   if (recovery.length === 0) return null;
   return (
-    <div className="rounded border p-2 text-sm" style={{ borderColor: "var(--pf-warn)" }}>
-      <p className="mb-1 font-medium">Recovery — edits kept locally</p>
-      <ul className="flex list-none flex-col gap-1">
+    <div className="pf-notice pf-notice--warn flex-col items-stretch">
+      <div className="flex items-center gap-2">
+        <TriangleAlert size={15} style={{ color: "var(--pf-warn)" }} />
+        <span className="font-semibold" style={{ color: "var(--pf-warn)" }}>
+          Recovery — edits kept locally
+        </span>
+      </div>
+      <ul className="mt-1 flex list-none flex-col gap-1 p-0">
         {recovery.map((r) => (
           <li key={r.at}>
-            <code className="text-xs">
+            <code className="pf-mono pf-caption">
               {new Date(r.at).toISOString()} · {r.room}
             </code>
           </li>
         ))}
       </ul>
-      <button type="button" className="mt-1 rounded px-2 py-0.5 text-xs" onClick={exportRecovery}>
-        Export unconfirmed edits
-      </button>
+      <div className="mt-2">
+        <button type="button" className="pf-btn pf-btn-secondary pf-btn-sm" onClick={exportRecovery}>
+          Export unconfirmed edits
+        </button>
+      </div>
     </div>
   );
 }
@@ -357,7 +444,7 @@ function PrdEditor(props: { sync: SyncState }): React.ReactElement {
     });
     setView(new EditorView({ state, parent: node }));
   }, [sync.docText]);
-  return <div ref={refCallback} className="min-h-0 flex-1 overflow-hidden" />;
+  return <div ref={refCallback} className="min-h-0 flex-1 overflow-auto" />;
 }
 
 /** Editor changes flow through submitEdit (transactionFilter rejects \r and lone surrogates). */
@@ -382,4 +469,3 @@ function detectOS(): string {
   if (ua.includes("Windows")) return "Windows";
   return "Linux";
 }
-

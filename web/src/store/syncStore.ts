@@ -84,6 +84,23 @@ export interface DecisionCard {
   stale: boolean;
 }
 
+/** Public avatar activity (status + public summary; never raw reasoning). */
+export interface AvatarThought {
+  avatarId: string;
+  cycle: number;
+  status: string;
+  summary: string;
+}
+
+/** A single critic finding carried by AVATAR_CRITIQUE. */
+export interface CritiqueIssue {
+  issueId: string;
+  avatarId: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM";
+  summary: string;
+  resolved: boolean;
+}
+
 export interface SyncState {
   conn: ConnState;
   phase: Phase;
@@ -94,6 +111,11 @@ export interface SyncState {
   recovery: RecoveryItem[];
   drafts: DraftSummary[];
   decisions: DecisionCard[];
+  thoughts: Record<string, AvatarThought>;
+  critiques: CritiqueIssue[];
+  runId: string | null;
+  cycle: number;
+  leaseHolder: string | null;
   banner: string | null;
   serverUrl: string;
   role: "owner" | "editor" | "viewer" | null;
@@ -103,7 +125,7 @@ export interface SyncState {
 
 type Listener = () => void;
 
-const state: SyncState = {
+let state: SyncState = {
   conn: "connecting",
   phase: "INGESTION",
   route: "/ingest",
@@ -113,6 +135,11 @@ const state: SyncState = {
   recovery: [],
   drafts: [],
   decisions: [],
+  thoughts: {},
+  critiques: [],
+  runId: null,
+  cycle: 1,
+  leaseHolder: null,
   banner: null,
   serverUrl: globalThis.PLAN_FORGE_WS_URL ?? "ws://127.0.0.1:0/",
   role: null,
@@ -137,8 +164,12 @@ function emit(): void {
   for (const l of listeners) l();
 }
 
+/**
+ * Every update replaces `state` with a fresh object. `useSyncExternalStore`
+ * compares snapshots by reference, so in-place mutation would never re-render.
+ */
 function setState(patch: Partial<SyncState>): void {
-  Object.assign(state, patch);
+  state = { ...state, ...patch };
   emit();
 }
 
@@ -281,8 +312,57 @@ function handleEnvelope(env: WSEnvelope): void {
       });
       break;
     }
+    case "AVATAR_THOUGHT": {
+      const p = env.payload as {
+        run_id?: string;
+        avatar_id?: string;
+        cycle?: number;
+        status?: string;
+        public_summary?: string;
+      };
+      const avatarId = p.avatar_id ?? "?";
+      setState({
+        thoughts: {
+          ...state.thoughts,
+          [avatarId]: {
+            avatarId,
+            cycle: p.cycle ?? state.cycle,
+            status: p.status ?? "Thinking",
+            summary: p.public_summary ?? "",
+          },
+        },
+        cycle: p.cycle ?? state.cycle,
+        runId: state.runId ?? p.run_id ?? null,
+      });
+      break;
+    }
+    case "AVATAR_CRITIQUE": {
+      const p = env.payload as {
+        run_id?: string;
+        avatar_id?: string;
+        issue_id?: string;
+        severity?: string;
+        summary?: string;
+        resolved?: boolean;
+      };
+      const severity =
+        p.severity === "CRITICAL" || p.severity === "HIGH" ? p.severity : "MEDIUM";
+      const issue: CritiqueIssue = {
+        issueId: p.issue_id ?? crypto.randomUUID(),
+        avatarId: p.avatar_id ?? "critic",
+        severity,
+        summary: p.summary ?? "",
+        resolved: p.resolved === true,
+      };
+      setState({
+        critiques: [...state.critiques.filter((c) => c.issueId !== issue.issueId), issue],
+        runId: state.runId ?? p.run_id ?? null,
+      });
+      break;
+    }
     case "AVATAR_DRAFT": {
       const p = env.payload as {
+        run_id?: string;
         avatar_id?: string;
         schema_id?: string;
         draft_revision?: string;
@@ -300,6 +380,7 @@ function handleEnvelope(env: WSEnvelope): void {
             ...(p.content !== undefined ? { content: p.content } : {}),
           },
         ],
+        runId: state.runId ?? p.run_id ?? null,
       });
       break;
     }
@@ -368,6 +449,24 @@ function handleEnvelope(env: WSEnvelope): void {
       setState({ members: p.members ?? state.members });
       break;
     }
+    case "RUN_ASSIGNED": {
+      const p = env.payload as { run_id?: string };
+      setState({ runId: p.run_id ?? state.runId });
+      break;
+    }
+    case "LEASE_GRANTED": {
+      const p = env.payload as { holder_id?: string; actor_id?: string };
+      setState({ leaseHolder: p.holder_id ?? p.actor_id ?? state.leaseHolder });
+      break;
+    }
+    case "LEASE_LOST": {
+      setState({ leaseHolder: null });
+      break;
+    }
+    case "PLAN_APPROVED": {
+      setState({ phase: "APPROVED", route: ROUTE_BY_PHASE.APPROVED });
+      break;
+    }
     default:
       // Control events surfaced elsewhere (leases, runs, artifacts).
       break;
@@ -375,8 +474,11 @@ function handleEnvelope(env: WSEnvelope): void {
 }
 
 export function connect(url?: string): void {
-  if (url !== undefined) state.serverUrl = url;
-  setState({ conn: "connecting", banner: null });
+  setState({
+    conn: "connecting",
+    banner: null,
+    ...(url !== undefined ? { serverUrl: url } : {}),
+  });
   try {
     ws = new WebSocket(state.serverUrl, "plan-forge.v1");
   } catch {
@@ -403,7 +505,9 @@ export function connect(url?: string): void {
     const frame = decodeFrame(ev.data);
     if (!frame.ok || frame.envelope === undefined) {
       setState({ errorMessage: `protocol violation: ${frame.error}` });
-      ws?.close(1008, "protocol violation");
+      // Browsers reject reserved code 1008 on close(); 4408 carries the
+      // same policy-violation meaning inside the app-defined 4000 range.
+      ws?.close(4408, "protocol violation");
       return;
     }
     if (frame.envelope.event_type === "AVATAR_DRAFT") {
