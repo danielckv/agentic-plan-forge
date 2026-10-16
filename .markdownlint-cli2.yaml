@@ -16,4 +16,5 @@ config:
 ignores:
   - ".agents/**"
   - "node_modules/**"
+  - "web/node_modules/**"
   - "docs/plans/**"

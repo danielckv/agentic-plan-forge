@@ -1,3 +1,5 @@
+# Antigravity skill locations
+
 Plan Forge supports Antigravity through skills in both documented global locations:
 
 - `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` (Antigravity CLI)
