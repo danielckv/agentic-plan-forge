@@ -1,13 +1,17 @@
 # Plan-Forge relay image. Multi-stage: build with CGO disabled (the relay
 # depends on no tree-sitter/host code), then ship the static binary on a
-# distroless non-root base.
-FROM golang:1.27.2 AS build
+# distroless non-root base. The build stage always runs on the builder's
+# native platform and cross-compiles, so multi-architecture images need no
+# emulation.
+FROM --platform=$BUILDPLATFORM golang:1.27.2 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -tags server -trimpath \
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -tags server -trimpath \
     -ldflags "-s -w -X main.version=${VERSION}" \
     -o /out/plan-forge-relay ./cmd/relay
 
