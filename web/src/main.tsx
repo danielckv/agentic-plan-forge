@@ -5,7 +5,7 @@ import "./app.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
-  throw new Error("Plan-Forge: #root missing from index.html");
+  throw new Error("Plan Forge: #root missing from index.html");
 }
 
 createRoot(rootEl).render(

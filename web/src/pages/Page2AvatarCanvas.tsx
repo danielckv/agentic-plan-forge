@@ -5,10 +5,12 @@ import {
   Compass,
   Crown,
   DraftingCompass,
+  LoaderCircle,
   ShieldAlert,
   Sparkles,
   TriangleAlert,
   Users,
+  WifiOff,
 } from "lucide-react";
 
 import {
@@ -33,8 +35,9 @@ import { MermaidSvg } from "../components/MermaidSvg";
  * the label never says reasoning). Decision cards with 2-4 options,
  * tradeoffs, recommended badge. Controls: cancel run (owner), retry stage,
  * run superseded notice, executor lost notice, max-cycles panel. Footer:
- * Synthesize Master Spec, enabled only when all contracts validate, no
- * CRITICAL/HIGH open, and no pending decisions.
+ * Synthesize Master Spec, enabled only when every avatar has finished the
+ * cycle, all contracts validate, no CRITICAL/HIGH is open, and no decision is
+ * pending.
  */
 
 const CYCLE_STEPS: Array<{ n: number; label: string }> = [
@@ -45,6 +48,7 @@ const CYCLE_STEPS: Array<{ n: number; label: string }> = [
 
 export type AvatarStatus =
   | "Idle"
+  | "Queued"
   | "Thinking"
   | "Drafting"
   | "Critiquing"
@@ -71,6 +75,7 @@ const AVATAR_CARDS: AvatarCardSpec[] = [
 
 const STATUS_CHIP: Record<AvatarStatus, string> = {
   Idle: "",
+  Queued: "pf-chip--accent pf-chip--live",
   Thinking: "pf-chip--accent pf-chip--live",
   Drafting: "pf-chip--accent pf-chip--live",
   Critiquing: "pf-chip--danger pf-chip--live",
@@ -93,6 +98,19 @@ const KNOWN_STATUS: Record<string, true> = {
   Stale: true,
 };
 
+/**
+ * Statuses that mean the avatar is working right now. The run chip and the
+ * card skeletons key off these: an avatar with no output yet still has to
+ * look busy, or a cycle that takes minutes reads as a frozen page.
+ */
+const WORKING_STATUS: Record<string, true> = {
+  Queued: true,
+  Thinking: true,
+  Drafting: true,
+  Critiquing: true,
+  Revising: true,
+};
+
 const MERMAID_HEAD = /^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|mindmap|timeline)\b/;
 
 export function Page2AvatarCanvas(): React.ReactElement {
@@ -110,25 +128,41 @@ export function Page2AvatarCanvas(): React.ReactElement {
     (d) => d.resolvedOptionId === undefined && !d.stale,
   );
 
+  // Synthesis reads every avatar's draft, so it cannot start while any of
+  // them is still producing one: `working` is computed below, once statusFor
+  // exists.
+
+  // A run is in flight: an avatar the authority has not reported on yet is
+  // queued behind the ones that are working, not idle.
+  const runActive = runId !== null;
+
+  const statusFor = (avatarId: string): AvatarStatus => {
+    const t = sync.thoughts[avatarId];
+    if (t !== undefined && KNOWN_STATUS[t.status] === true) return t.status as AvatarStatus;
+    if (sync.drafts.some((d) => d.avatarId === avatarId)) return "Synced";
+    return runActive ? "Queued" : "Idle";
+  };
+
+  const working = AVATAR_CARDS.filter((c) => WORKING_STATUS[statusFor(c.id)] === true);
+
   const synthesizeEnabled =
     sync.role === "owner" &&
+    working.length === 0 &&
     openBlockers.length === 0 &&
     openCritiques.length === 0 &&
     openDecisions.length === 0 &&
     !maxCyclesReached;
 
-  const statusFor = (avatarId: string): AvatarStatus => {
-    const t = sync.thoughts[avatarId];
-    if (t !== undefined && KNOWN_STATUS[t.status] === true) return t.status as AvatarStatus;
-    return sync.drafts.some((d) => d.avatarId === avatarId) ? "Synced" : "Idle";
-  };
+  // The authority is the source of progress; while the socket is away the
+  // page keeps its last state and says so rather than claiming work stalled.
+  const linkDown = sync.conn !== "open";
 
   return (
     <div className="pf-page">
       {/* Top bar: cycle progress, presence, lease */}
       <div
-        className="flex items-center gap-5 border-b bg-white px-8 py-3"
-        style={{ borderColor: "var(--pf-border)" }}
+        className="flex items-center gap-5 border-b px-8 py-3"
+        style={{ borderColor: "var(--pf-border)", background: "var(--pf-panel)" }}
       >
         <div className="pf-stepper">
           {CYCLE_STEPS.map((s, i) => (
@@ -161,6 +195,22 @@ export function Page2AvatarCanvas(): React.ReactElement {
             <Crown size={12} />
             Lease: {sync.leaseHolder ?? (sync.role === "owner" ? "you" : "owner")}
           </span>
+          {linkDown ? (
+            <span className="pf-chip pf-chip--warn pf-chip--live" title="Progress resumes when the session authority is back">
+              <WifiOff size={12} />
+              Reconnecting — last known state
+            </span>
+          ) : working.length > 0 ? (
+            <span className="pf-chip pf-chip--accent pf-chip--live">
+              <LoaderCircle size={12} className="pf-spin" />
+              Cycle {cycle} running — {working.length} of {AVATAR_CARDS.length} working
+            </span>
+          ) : runActive ? (
+            <span className="pf-chip pf-chip--ok">
+              <span className="pf-dot" />
+              Cycle {cycle} settled
+            </span>
+          ) : null}
           {maxCyclesReached && (
             <span className="pf-chip pf-chip--warn">
               <TriangleAlert size={12} />
@@ -234,6 +284,16 @@ export function Page2AvatarCanvas(): React.ReactElement {
                     {thought === undefined && status === "Idle" && (
                       <p className="pf-caption">Waiting for cycle {cycle} to reach this role.</p>
                     )}
+                    {thought === undefined && status === "Queued" && (
+                      <p className="pf-caption">Queued for cycle {cycle}.</p>
+                    )}
+                    {WORKING_STATUS[status] === true &&
+                      (thought === undefined || thought.summary === "") && (
+                        <div className="flex w-full flex-col gap-1.5 pt-0.5" aria-hidden="true">
+                          <span className="pf-skeleton" style={{ width: "92%" }} />
+                          <span className="pf-skeleton" style={{ width: "74%" }} />
+                        </div>
+                      )}
                   </button>
                   {isOpen && (
                     <div
@@ -242,7 +302,19 @@ export function Page2AvatarCanvas(): React.ReactElement {
                     >
                       <p className="pf-label mb-2">Live output and rationale</p>
                       {draft === undefined ? (
-                        <p className="pf-caption">No draft yet — output appears here as the avatar works.</p>
+                        WORKING_STATUS[status] === true ? (
+                          <div className="flex flex-col gap-2">
+                            <p className="pf-caption flex items-center gap-1.5">
+                              <LoaderCircle size={12} className="pf-spin" />
+                              {status} — output appears here as it lands.
+                            </p>
+                            <span className="pf-skeleton" style={{ width: "88%" }} />
+                            <span className="pf-skeleton" style={{ width: "96%" }} />
+                            <span className="pf-skeleton" style={{ width: "61%" }} />
+                          </div>
+                        ) : (
+                          <p className="pf-caption">No draft yet — output appears here as the avatar works.</p>
+                        )
                       ) : isArchitectDiagram ? (
                         <MermaidSvg source={draft.content!} title="Proposed architecture" />
                       ) : (
@@ -378,17 +450,31 @@ export function Page2AvatarCanvas(): React.ReactElement {
         >
           Cancel session
         </button>
-        <p className="pf-caption ml-3">
-          {openDecisions.length > 0
-            ? "Resolve open decisions to enable synthesis."
-            : openCritiques.length > 0
-              ? "Blocking critique findings must resolve before synthesis."
-              : "All contracts validated — ready to synthesize."}
+        <p className="pf-caption ml-3 flex items-center gap-1.5">
+          {working.length > 0 ? (
+            <>
+              <LoaderCircle size={12} className="pf-spin" />
+              {working.length === 1
+                ? `${working[0]!.label} is still working — synthesis waits for the cycle to finish.`
+                : `${String(working.length)} avatars are still working — synthesis waits for the cycle to finish.`}
+            </>
+          ) : openDecisions.length > 0 ? (
+            "Resolve open decisions to enable synthesis."
+          ) : openCritiques.length > 0 ? (
+            "Blocking critique findings must resolve before synthesis."
+          ) : (
+            "All contracts validated — ready to synthesize."
+          )}
         </p>
         <button
           type="button"
           className="pf-btn pf-btn-primary pf-btn-lg ml-auto"
           disabled={!synthesizeEnabled}
+          title={
+            working.length > 0
+              ? "Available when every avatar finishes this cycle"
+              : "Synthesize the master specification"
+          }
           onClick={() => runId !== null && synthesize(runId)}
         >
           Synthesize Master Spec

@@ -98,6 +98,11 @@ type StatusView struct {
 	DocHealth int    `json:"docHealth"`
 	OCR       string `json:"ocr"`
 	Secrets   int    `json:"secrets"`
+	// Repo names the repository this session plans, so the window states
+	// which project it belongs to. RepoPath is the absolute path; it is shown
+	// only through the loopback bridge and never leaves the machine.
+	Repo     string `json:"repo"`
+	RepoPath string `json:"repoPath"`
 	HostSummary
 }
 
@@ -293,6 +298,8 @@ func (e *executor) Status() StatusView {
 	if err == nil {
 		v.Secrets = len(e.pendingSecrets(text))
 	}
+	v.RepoPath = e.cfg.Repo
+	v.Repo = filepath.Base(e.cfg.Repo)
 	return v
 }
 

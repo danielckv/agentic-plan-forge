@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { EditorView } from "@codemirror/view";
 import { EditorState, type Extension } from "@codemirror/state";
 import { editorBase } from "../codemirror/keymap";
@@ -16,7 +16,7 @@ import {
 
 import { apiFetch } from "../protocol/bridge";
 import { useSync, submitEdit, freezeRequest, exportRecovery } from "../store/syncStore";
-import type { RecoveryItem, SyncState } from "../store/syncStore";
+import type { RecoveryItem, StatusView, SyncState } from "../store/syncStore";
 
 /**
  * Page 1 — Ingestion & normalization.
@@ -45,12 +45,8 @@ export interface UploadState {
   warnings: string[];
 }
 
-export interface StatusPills {
-  ast: "scanning" | "partial" | "failed" | "not-a-Git-repo" | "timeout" | "ok";
-  astDetail: string;
-  docHealth: number;
-  ocr: "available" | "missing" | "unknown";
-}
+/** The pills read from the window-wide status slice; App owns the polling. */
+export type StatusPills = StatusView;
 
 const AMBIGUITY_DEFAULT: Array<{ id: string; text: string; guess?: string }> = [];
 
@@ -62,34 +58,16 @@ export function Page1Ingestion(): React.ReactElement {
     error: null,
     warnings: [],
   });
-  const [pills, setPills] = useState<StatusPills>({
-    ast: "scanning",
-    astDetail: "0 files parsed, 0 symbols indexed",
-    docHealth: 0,
-    ocr: "unknown",
-  });
+  const pills = sync.status;
   const [ambiguities, setAmbiguities] = useState(AMBIGUITY_DEFAULT);
   const [composerText, setComposerText] = useState("");
   const [secrets] = useState<string[]>([]);
   const [dismissedSecrets, setDismissedSecrets] = useState<string[]>([]);
   const [tab, setTab] = useState<"product" | "appendix">("product");
-  const [hostAck, setHostAck] = useState(false);
-
-  // Status pills arrive from the local bridge; polling keeps them fresh
-  // without blocking the page (background AST scan budget: 120s total).
-  useEffect(() => {
-    const id = window.setInterval(async () => {
-      try {
-        const res = await apiFetch("/api/status");
-        if (!res.ok) return;
-        const data = (await res.json()) as Partial<StatusPills>;
-        setPills((prev) => ({ ...prev, ...data }));
-      } catch {
-        /* offline: pills stay at last known values */
-      }
-    }, 5000);
-    return () => window.clearInterval(id);
-  }, []);
+  // Sending the PRD to the local generation host is what the page is for;
+  // the box states that plainly and starts checked, so confirming the
+  // context is one click. Unchecking it still blocks the launch.
+  const [hostAck, setHostAck] = useState(true);
 
   const onDrop = useCallback(
     async (e: React.DragEvent<HTMLElement>): Promise<void> => {
@@ -165,7 +143,7 @@ export function Page1Ingestion(): React.ReactElement {
             <div>
               <h1 className="pf-title">Ingestion &amp; normalization</h1>
               <p className="pf-caption mt-1">
-                Add source documents or raw notes. Plan-Forge separates product
+                Add source documents or raw notes. Plan Forge separates product
                 requirements from technical context before any avatar sees them.
               </p>
             </div>

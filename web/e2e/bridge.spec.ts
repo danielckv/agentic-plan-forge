@@ -40,7 +40,7 @@ test("the bundle boots under the bridge CSP", async ({ page }) => {
   // An uncaught error during module evaluation leaves #root empty and the
   // window blank; assert on the error too so a failure names the cause.
   await expect(page.locator("#root")).not.toBeEmpty();
-  await expect(page.getByText("Planning session")).toBeVisible();
+  await expect(page.getByText("Plan Forge").first()).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 
@@ -74,4 +74,47 @@ test("authenticated API calls reach the bridge", async ({ page }) => {
     timeout: 20_000,
   });
   expect(status.status()).toBe(200);
+});
+
+test("the window names the repository it is planning", async ({ page }) => {
+  await page.goto(launchURL());
+
+  // The sidebar and the breadcrumb both answer "which project is this?".
+  await expect(page.getByText("billing-service").first()).toBeVisible({ timeout: 20_000 });
+});
+
+test.describe("dark theme", () => {
+  test.use({ colorScheme: "dark" });
+
+  test("follows the OS preference with no hard-coded light surfaces", async ({ page }) => {
+    await page.goto(launchURL());
+    await expect(page.locator("#root")).not.toBeEmpty();
+
+    const theme = await page.evaluate(() => {
+      const topBar = document.querySelector(".pf-topbar");
+      return {
+        body: getComputedStyle(document.body).backgroundColor,
+        ink: getComputedStyle(document.body).color,
+        topBar: topBar === null ? null : getComputedStyle(topBar).backgroundColor,
+      };
+    });
+
+    // rgb(20, 20, 22): a light build reports rgb(255, 255, 255) here.
+    expect(theme.body).toBe("rgb(20, 20, 22)");
+    expect(theme.ink).toBe("rgb(236, 236, 239)");
+    // Every surface is tokenised; none may stay hard-coded white.
+    expect(theme.topBar).not.toBe("rgb(255, 255, 255)");
+  });
+});
+
+test.describe("light theme", () => {
+  test.use({ colorScheme: "light" });
+
+  test("keeps the light token set when the OS asks for light", async ({ page }) => {
+    await page.goto(launchURL());
+    await expect(page.locator("#root")).not.toBeEmpty();
+
+    const body = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(body).toBe("rgb(255, 255, 255)");
+  });
 });

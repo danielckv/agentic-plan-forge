@@ -1,65 +1,138 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------ *
- * Plan-Forge design system — Atlassian (Jira) language
- * Dark slate sidebar, light content area, Jira blue accent, small
- * radii, status lozenges. System font stack only — nothing fetched.
+ * Plan Forge design system — Cursor language
+ * Low-chroma neutral greys, one blue accent, hairline borders, small
+ * radii, status lozenges. Light and dark are the same system with one
+ * token block each; every surface, line and ink reads from a variable,
+ * so `prefers-color-scheme` is the only switch. System font stack only
+ * — nothing fetched.
  * ------------------------------------------------------------------ */
 
 :root {
+  color-scheme: light;
+
   /* surfaces */
-  --pf-bg: #f7f8f9;
+  --pf-bg: #ffffff;
   --pf-panel: #ffffff;
-  --pf-panel-subtle: #fafbfc;
-  --pf-inset: #f4f5f7;
-  --pf-sidebar: #1d2125;
-  --pf-sidebar-hover: #2c333a;
-  --pf-sidebar-active: #1c2b41;
-  --pf-sidebar-ink: #b6c2cf;
-  --pf-sidebar-ink-strong: #dee4ea;
+  --pf-panel-subtle: #fafafa;
+  --pf-inset: #f4f4f5;
+  --pf-sidebar: #f7f7f8;
+  --pf-sidebar-hover: #ededee;
+  --pf-sidebar-active: #e7eefb;
+  --pf-sidebar-ink: #62626a;
+  --pf-sidebar-ink-strong: #1b1b1f;
+  --pf-sidebar-border: #e4e4e7;
 
   /* ink */
-  --pf-ink: #172b4d;
-  --pf-ink-2: #42526e;
-  --pf-muted: #5e6c84;
-  --pf-faint: #97a0af;
+  --pf-ink: #18181b;
+  --pf-ink-2: #3f3f46;
+  --pf-muted: #71717a;
+  --pf-faint: #a1a1aa;
 
   /* lines */
-  --pf-border: #dfe1e6;
-  --pf-border-strong: #c1c7d0;
+  --pf-border: #e4e4e7;
+  --pf-border-strong: #d4d4d8;
 
-  /* accent (Jira blue) */
-  --pf-accent: #0052cc;
-  --pf-accent-hover: #0065ff;
-  --pf-accent-soft: #deebff;
-  --pf-accent-border: #b3d4ff;
+  /* accent */
+  --pf-accent: #0a66d0;
+  --pf-accent-hover: #1a7aef;
+  --pf-accent-soft: #e9f1fd;
+  --pf-accent-border: #bcd8f7;
   --pf-accent-ink: #ffffff;
 
-  /* special marker (epic purple) */
-  --pf-epic: #6554c0;
-  --pf-epic-soft: #eae6ff;
+  /* special marker */
+  --pf-epic: #6d4fd0;
+  --pf-epic-soft: #f0ebfd;
 
   /* semantic status */
-  --pf-ok: #006644;
-  --pf-ok-bright: #36b37e;
-  --pf-ok-soft: #e3fcef;
-  --pf-ok-border: #abf5d1;
-  --pf-warn: #974f0c;
-  --pf-warn-bright: #ff991f;
-  --pf-warn-soft: #fffae6;
-  --pf-warn-border: #ffe380;
-  --pf-danger: #bf2600;
-  --pf-danger-bright: #ff5630;
-  --pf-danger-soft: #ffebe6;
-  --pf-danger-border: #ffbdad;
+  --pf-ok: #15803d;
+  --pf-ok-bright: #22c55e;
+  --pf-ok-soft: #e9f7ef;
+  --pf-ok-border: #bbe7cb;
+  --pf-warn: #a65b09;
+  --pf-warn-bright: #f59e0b;
+  --pf-warn-soft: #fdf5e4;
+  --pf-warn-border: #f5dba8;
+  --pf-danger: #b91c1c;
+  --pf-danger-bright: #ef4444;
+  --pf-danger-soft: #fdeded;
+  --pf-danger-border: #f6c5c5;
+
+  /* ink that sits on a bright status fill (banners) */
+  --pf-bright-ink: #ffffff;
 
   /* elevation */
-  --pf-shadow-sm: 0 1px 1px rgb(9 30 66 / 0.25);
-  --pf-shadow-md: 0 4px 8px -2px rgb(9 30 66 / 0.25), 0 0 1px rgb(9 30 66 / 0.31);
+  --pf-shadow-sm: 0 1px 2px rgb(16 16 20 / 0.06);
+  --pf-shadow-md: 0 6px 16px -6px rgb(16 16 20 / 0.18), 0 0 0 1px rgb(16 16 20 / 0.04);
 
-  /* radii (Atlassian: small) */
-  --pf-radius-card: 3px;
-  --pf-radius-ctl: 3px;
+  /* radii */
+  --pf-radius-card: 6px;
+  --pf-radius-ctl: 5px;
+}
+
+/*
+ * Dark follows the OS. Surfaces step up in lightness as they come forward
+ * (bg -> panel -> inset), lines stay hairline, and the status colors move to
+ * their lighter variants so they keep contrast on a dark fill.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    /* surfaces */
+    --pf-bg: #141416;
+    --pf-panel: #1a1a1d;
+    --pf-panel-subtle: #1f1f23;
+    --pf-inset: #26262b;
+    --pf-sidebar: #151517;
+    --pf-sidebar-hover: #242429;
+    --pf-sidebar-active: #1d2a3d;
+    --pf-sidebar-ink: #9a9aa2;
+    --pf-sidebar-ink-strong: #ececef;
+    --pf-sidebar-border: #2a2a30;
+
+    /* ink */
+    --pf-ink: #ececef;
+    --pf-ink-2: #b6b6be;
+    --pf-muted: #8a8a94;
+    --pf-faint: #6b6b75;
+
+    /* lines */
+    --pf-border: #2a2a30;
+    --pf-border-strong: #3a3a42;
+
+    /* accent */
+    --pf-accent: #58a6ff;
+    --pf-accent-hover: #79b8ff;
+    --pf-accent-soft: #15243a;
+    --pf-accent-border: #2b4a73;
+    --pf-accent-ink: #0c1420;
+
+    /* special marker */
+    --pf-epic: #a78bfa;
+    --pf-epic-soft: #241d3a;
+
+    /* semantic status */
+    --pf-ok: #4ade80;
+    --pf-ok-bright: #34d399;
+    --pf-ok-soft: #10281e;
+    --pf-ok-border: #1f5240;
+    --pf-warn: #fbbf24;
+    --pf-warn-bright: #f59e0b;
+    --pf-warn-soft: #2a2110;
+    --pf-warn-border: #5a4418;
+    --pf-danger: #f87171;
+    --pf-danger-bright: #ef4444;
+    --pf-danger-soft: #2d1616;
+    --pf-danger-border: #5c2828;
+
+    --pf-bright-ink: #15151a;
+
+    /* elevation */
+    --pf-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+    --pf-shadow-md: 0 8px 20px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.05);
+  }
 }
 
 html,
@@ -185,7 +258,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 16px 16px 14px;
-  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  border-bottom: 1px solid var(--pf-sidebar-border);
 }
 
 .pf-brand-mark {
@@ -195,7 +268,7 @@ body {
   height: 28px;
   border-radius: 4px;
   background: var(--pf-accent-hover);
-  color: #fff;
+  color: var(--pf-accent-ink);
   flex: none;
 }
 
@@ -305,6 +378,37 @@ body {
 @keyframes pf-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+
+/* Work in progress: a spinner on the run chip, shimmer where output lands. */
+.pf-spin { animation: pf-spin 1s linear infinite; }
+
+@keyframes pf-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pf-skeleton {
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--pf-panel-subtle) 0%,
+    var(--pf-border) 50%,
+    var(--pf-panel-subtle) 100%
+  );
+  background-size: 200% 100%;
+  animation: pf-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes pf-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-chip--live .pf-dot,
+  .pf-spin,
+  .pf-skeleton { animation: none; }
 }
 
 /* Severity badges (critic issues, subtasks) */
@@ -490,7 +594,7 @@ body {
   padding: 7px 24px;
   font-size: 12.5px;
   font-weight: 500;
-  color: #fff;
+  color: var(--pf-bright-ink);
 }
 
 /* ---------- callouts / notice panels (Atlassian flag style) ---------- */
@@ -572,7 +676,7 @@ body {
 .pf-step[data-state="active"] .pf-step-index {
   border-color: var(--pf-accent);
   background: var(--pf-accent);
-  color: #fff;
+  color: var(--pf-accent-ink);
 }
 
 .pf-step[data-state="done"] { color: var(--pf-ink-2); }
@@ -601,7 +705,7 @@ body {
   border-radius: 999px;
   border: 2px solid var(--pf-panel);
   background: var(--pf-accent);
-  color: #fff;
+  color: var(--pf-accent-ink);
   font-size: 10px;
   font-weight: 700;
   margin-left: -6px;
@@ -785,7 +889,18 @@ body {
 .cm-editor {
   height: 100%;
   font-size: 13px;
+  background: var(--pf-panel);
+  color: var(--pf-ink);
 }
+
+.cm-editor .cm-gutters {
+  background: var(--pf-panel-subtle);
+  color: var(--pf-faint);
+  border-right: 1px solid var(--pf-border);
+}
+
+.cm-editor .cm-activeLine { background: var(--pf-panel-subtle); }
+.cm-editor .cm-activeLineGutter { background: var(--pf-inset); color: var(--pf-ink-2); }
 
 .cm-editor .cm-scroller {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;

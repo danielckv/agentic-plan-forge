@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   apiFetch,
+  AUTH_OK,
   authFrame,
   bootstrap,
   bridgeWSURL,
+  controlFrameType,
   HandshakeError,
   resetBootstrapForTests,
   WS_SUBPROTOCOL,
@@ -133,5 +135,26 @@ describe("socket contract", () => {
   it("builds the auth frame the bridge reads first", () => {
     expect(JSON.parse(authFrame(TOKEN))).toEqual({ type: "auth", token: TOKEN });
     expect(WS_SUBPROTOCOL).toBe("plan-forge.v1");
+  });
+});
+
+describe("controlFrameType", () => {
+  it("recognises the bridge's auth acknowledgement", () => {
+    expect(controlFrameType(JSON.stringify({ type: AUTH_OK }))).toBe(AUTH_OK);
+  });
+
+  it("leaves application envelopes to the envelope decoder", () => {
+    const envelope = JSON.stringify({ version: 1, event_type: "STATE_SNAPSHOT", payload: {} });
+    expect(controlFrameType(envelope)).toBeNull();
+  });
+
+  it("treats a versioned frame as an envelope even when it carries a type", () => {
+    expect(controlFrameType(JSON.stringify({ version: 1, type: "auth.ok" }))).toBeNull();
+  });
+
+  it("leaves malformed and oversized frames to the envelope decoder", () => {
+    expect(controlFrameType("{not json")).toBeNull();
+    expect(controlFrameType(JSON.stringify([1, 2, 3]))).toBeNull();
+    expect(controlFrameType(`{"type":"${"a".repeat(300)}"}`)).toBeNull();
   });
 });

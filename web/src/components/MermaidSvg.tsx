@@ -12,15 +12,39 @@ import { mermaidSourceRejected } from "../protocol/schema";
  * DOMPurify SVG profile before insertion. Anything that survives is inert.
  */
 
+/**
+ * Diagrams follow the window theme. Mermaid bakes colors into the SVG at
+ * render time, so the theme is read from the OS preference rather than from
+ * a CSS variable, and a change re-initializes for subsequent renders.
+ */
+function prefersDark(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+}
+
 // Initialize once from constants; never pass user/LLM data here.
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: "strict",
-  suppressErrorRendering: true,
-  htmlLabels: false,
-  maxTextSize: 50000,
-  maxEdges: 500,
-});
+function initMermaid(dark: boolean): void {
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    suppressErrorRendering: true,
+    htmlLabels: false,
+    maxTextSize: 50000,
+    maxEdges: 500,
+    theme: dark ? "dark" : "neutral",
+  });
+}
+
+initMermaid(prefersDark());
+
+if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  window
+    .matchMedia("(prefers-color-scheme: dark)")
+    .addEventListener("change", (e) => initMermaid(e.matches));
+}
 
 export interface MermaidSvgProps {
   source: string;

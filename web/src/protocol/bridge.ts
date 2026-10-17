@@ -133,6 +133,33 @@ export function bootstrap(): Promise<string | null> {
   return pending;
 }
 
+/** The bridge's acknowledgement of the auth frame. */
+export const AUTH_OK = "auth.ok";
+
+/**
+ * Classify one text frame from the bridge.
+ *
+ * The bridge answers the auth frame with `{"type":"auth.ok"}` and only then
+ * forwards application envelopes (`internal/relay/local_ws.go`). Control
+ * frames carry `type` and no `version`; feeding one to the envelope decoder
+ * reads as `unsupported wire version undefined`, which closes the socket and
+ * starts a reconnect loop that re-authenticates and fails the same way.
+ * Returns the control type, or null when the frame is an envelope.
+ */
+export function controlFrameType(text: string): string | null {
+  if (text.length > 256) return null; // control frames are tiny
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null; // malformed: let the envelope decoder report it
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const frame = parsed as { type?: unknown; version?: unknown };
+  if (frame.version !== undefined) return null;
+  return typeof frame.type === "string" ? frame.type : null;
+}
+
 /** The first WebSocket frame the bridge reads; nothing else is read before it. */
 export function authFrame(token: string): string {
   return JSON.stringify({ type: "auth", token });

@@ -125,7 +125,16 @@ export async function startBridgeHarness() {
       }
       if (url.pathname === "/api/status") {
         res.writeHead(200, { "Content-Type": CONTENT_TYPES[".json"] });
-        res.end(JSON.stringify({ ast: "ok", astDetail: "12 files parsed", docHealth: 80, ocr: "ok" }));
+        res.end(
+          JSON.stringify({
+            ast: "ok",
+            astDetail: "12 files parsed",
+            docHealth: 0,
+            ocr: "available",
+            repo: "billing-service",
+            repoPath: "/Users/dev/src/billing-service",
+          }),
+        );
         return;
       }
       res.writeHead(404, { "Content-Type": CONTENT_TYPES[".json"] });
@@ -172,6 +181,8 @@ export async function startBridgeHarness() {
           return;
         }
         authenticated = true;
+        // The bridge acknowledges with a control frame before any envelope.
+        socket.send(JSON.stringify({ type: "auth.ok" }));
         socket.send(
           JSON.stringify({
             version: 1,

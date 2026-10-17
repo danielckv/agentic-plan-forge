@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import {
   BrainCircuit,
   Crown,
+  FolderGit2,
   FileText,
   Layers,
   ScrollText,
@@ -11,8 +12,16 @@ import {
   WifiOff,
 } from "lucide-react";
 
-import { useSync, navigate, connect, disconnect, ROUTE_ORDER } from "./store/syncStore";
-import type { ConnState, Phase } from "./store/syncStore";
+import { apiFetch } from "./protocol/bridge";
+import {
+  applyStatus,
+  useSync,
+  navigate,
+  connect,
+  disconnect,
+  ROUTE_ORDER,
+} from "./store/syncStore";
+import type { ConnState, Phase, StatusView } from "./store/syncStore";
 import { Page1Ingestion } from "./pages/Page1Ingestion";
 import { Page2AvatarCanvas } from "./pages/Page2AvatarCanvas";
 import { Page3SynthesisConfluence } from "./pages/Page3SynthesisConfluence";
@@ -34,12 +43,17 @@ const PHASE_LABEL: Record<Phase, string> = {
   CANCELLED: "Cancelled",
 };
 
+/**
+ * A dropped socket is the normal case, not a failure: the authority restarts,
+ * a cycle finishes, the machine sleeps. "closed" therefore reads as
+ * reconnecting, and only a refused handshake ("offline") reads as broken.
+ */
 const CONN_META: Record<ConnState, { label: string; tone: string }> = {
   connecting: { label: "Connecting", tone: "pf-chip--warn pf-chip--live" },
   open: { label: "Connected", tone: "pf-chip--ok" },
   resyncing: { label: "Resyncing", tone: "pf-chip--warn pf-chip--live" },
   offline: { label: "Offline", tone: "pf-chip--danger" },
-  closed: { label: "Disconnected", tone: "pf-chip--danger" },
+  closed: { label: "Reconnecting", tone: "pf-chip--warn pf-chip--live" },
 };
 
 const NAV_ITEMS: Array<{ route: string; label: string; icon: React.ComponentType<{ size?: number | string }> }> = [
@@ -54,6 +68,28 @@ export function App(): React.ReactElement {
   useEffect(() => {
     connect();
     return () => disconnect();
+  }, []);
+
+  // The bridge owns the status pills and the repository identity. Polling
+  // lives here, not on Page 1, so the project stays named on every page and
+  // survives a reload straight into deliberation or synthesis.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async (): Promise<void> => {
+      try {
+        const res = await apiFetch("/api/status");
+        if (!res.ok || cancelled) return;
+        applyStatus((await res.json()) as Partial<StatusView>);
+      } catch {
+        /* the authority is away: the last known status stays on screen */
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   // Manual URL jumps are blocked: navigate() only honors routes the phase
@@ -86,12 +122,23 @@ export function App(): React.ReactElement {
           <span className="pf-brand-mark">
             <Layers size={16} strokeWidth={2.2} />
           </span>
-          <div className="flex flex-col leading-tight">
+          <div className="flex min-w-0 flex-col leading-tight">
             <span className="text-[14px] font-semibold" style={{ color: "var(--pf-sidebar-ink-strong)" }}>
-              Plan-Forge
+              Plan Forge
             </span>
-            <span className="text-[11px]" style={{ color: "var(--pf-sidebar-ink)" }}>
-              Planning session
+            <span
+              className="flex items-center gap-1 truncate text-[11px]"
+              style={{ color: "var(--pf-sidebar-ink)" }}
+              title={sync.status.repoPath === "" ? "Planning session" : sync.status.repoPath}
+            >
+              {sync.status.repo === "" ? (
+                "Planning session"
+              ) : (
+                <>
+                  <FolderGit2 size={11} className="shrink-0" />
+                  <span className="truncate">{sync.status.repo}</span>
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -120,7 +167,7 @@ export function App(): React.ReactElement {
           })}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-2 border-t px-4 py-4" style={{ borderColor: "rgb(255 255 255 / 0.08)" }}>
+        <div className="mt-auto flex flex-col gap-2 border-t px-4 py-4" style={{ borderColor: "var(--pf-sidebar-border)" }}>
           {sync.role !== null && (
             <span className="flex items-center gap-2 text-[12px]" style={{ color: "var(--pf-sidebar-ink)" }}>
               <Crown size={12} />
@@ -138,7 +185,7 @@ export function App(): React.ReactElement {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="pf-topbar">
           <nav className="pf-breadcrumb" aria-label="Session phase">
-            <span>Plan-Forge</span>
+            <span>{sync.status.repo === "" ? "Plan Forge" : sync.status.repo}</span>
             <span aria-hidden="true">/</span>
             <span className="pf-breadcrumb-current">{PHASE_LABEL[sync.phase]}</span>
           </nav>

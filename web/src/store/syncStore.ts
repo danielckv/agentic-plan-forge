@@ -14,7 +14,14 @@ import type { ChangeDesc } from "@codemirror/state";
 
 import { decodeFrame } from "../protocol/wire";
 import type { WSEnvelope, WSEventType } from "../protocol/wire";
-import { authFrame, bootstrap, bridgeWSURL, WS_SUBPROTOCOL } from "../protocol/bridge";
+import {
+  AUTH_OK,
+  authFrame,
+  bootstrap,
+  bridgeWSURL,
+  controlFrameType,
+  WS_SUBPROTOCOL,
+} from "../protocol/bridge";
 import { validate } from "../protocol/schema";
 import { insertAllowed, textSha256 } from "../collab/model";
 
@@ -102,6 +109,29 @@ export interface CritiqueIssue {
   resolved: boolean;
 }
 
+/**
+ * GET /api/status, as the bridge answers it (`app.StatusView`). It carries
+ * the Page 1 pills and the identity of the repository this session plans, so
+ * every page can say which project the window belongs to.
+ */
+export interface StatusView {
+  ast: "scanning" | "partial" | "failed" | "not-a-Git-repo" | "timeout" | "ok";
+  astDetail: string;
+  docHealth: number;
+  ocr: "available" | "missing" | "unknown";
+  repo: string;
+  repoPath: string;
+}
+
+export const STATUS_UNKNOWN: StatusView = {
+  ast: "scanning",
+  astDetail: "0 files parsed, 0 symbols indexed",
+  docHealth: 0,
+  ocr: "unknown",
+  repo: "",
+  repoPath: "",
+};
+
 export interface SyncState {
   conn: ConnState;
   phase: Phase;
@@ -122,6 +152,7 @@ export interface SyncState {
   role: "owner" | "editor" | "viewer" | null;
   members: string[];
   errorMessage: string | null;
+  status: StatusView;
 }
 
 type Listener = () => void;
@@ -146,6 +177,7 @@ let state: SyncState = {
   role: null,
   members: [],
   errorMessage: null,
+  status: STATUS_UNKNOWN,
 };
 
 let ws: WebSocket | null = null;
@@ -510,6 +542,14 @@ function openSocket(token: string | null): void {
   ws.onmessage = (ev: MessageEvent) => {
     if (typeof ev.data !== "string") return;
     if (ev.data.length > 4 * 1024 * 1024) return; // decode max 4 MiB per frame
+    const control = controlFrameType(ev.data);
+    if (control !== null) {
+      if (control !== AUTH_OK) {
+        setState({ errorMessage: `unexpected bridge control frame: ${control}` });
+        ws?.close(4408, "protocol violation");
+      }
+      return;
+    }
     const frame = decodeFrame(ev.data);
     if (!frame.ok || frame.envelope === undefined) {
       setState({ errorMessage: `protocol violation: ${frame.error}` });
@@ -553,8 +593,10 @@ export function connect(url?: string): void {
       openSocket(token);
     },
     (err: unknown) => {
+      // Terminal, not transient: "closed" means a reconnect is scheduled, and
+      // no reconnect can redeem a spent nonce.
       setState({
-        conn: "closed",
+        conn: "offline",
         errorMessage: `session handshake failed: ${err instanceof Error ? err.message : String(err)}`,
       });
     },
@@ -577,6 +619,11 @@ export function disconnect(): void {
   ws?.close(1000, "client closing");
   ws = null;
   setState({ conn: "closed" });
+}
+
+/** Merge one `/api/status` body; absent fields keep their last known value. */
+export function applyStatus(patch: Partial<StatusView>): void {
+  setState({ status: { ...state.status, ...patch } });
 }
 
 /** Local edit (composer/editor): filter, queue, push. */

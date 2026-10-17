@@ -14,9 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The bridge offers the `plan-forge.v1` subprotocol on `GET /ws`. The window always asks for it, and a handshake answered without it fails in the browser.
 - The window supervisor no longer closes the session when a browser launcher hands off and exits before the page connects.
 
+- The window consumes the bridge's `{"type":"auth.ok"}` acknowledgement instead of failing it as an envelope. Decoding it as one reported `unsupported wire version undefined`, closed the socket, and left the session reconnecting several times a second.
+
 ### Added
 
 - `web/e2e/bridge.spec.ts` boots the built bundle behind the production Content-Security-Policy and the real handshake, and runs as the `web-e2e` CI job. The previous checks fetched the bundle without executing it, or drove it with the policy and the handshake removed.
+- An automatic dark theme. The design system moves to a Cursor-style neutral palette with a light and a dark token block, selected by `prefers-color-scheme`; the editor, diagrams and every surface follow it. Nothing is hard-coded light any more.
+- The window names the repository it is planning, in the sidebar and the breadcrumb. `GET /api/status` carries `repo` and `repoPath`, and `App` owns the poll so every page knows the project, not only Page 1.
+- Deliberation shows that work is in flight: a run chip counting the working avatars, a spinner, shimmer placeholders where output will land, and a `Queued` state for avatars the authority has not reached yet.
+
+### Changed
+
+- Synthesis is blocked while any avatar is still working, and the footer names what it is waiting for. It was enabled mid-cycle, when the drafts it reads did not exist yet.
+- The host acknowledgement on Page 1 starts checked, so confirming the context is one click. Unchecking it still blocks the launch.
+- A dropped socket reads as `Reconnecting`, not `Disconnected`: the authority going away is routine. Only a refused handshake, which no retry can fix, reads as `Offline`.
+- The product name is written `Plan Forge` in the UI.
 
 ## [0.1.1] - 2026-10-17
 
