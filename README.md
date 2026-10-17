@@ -32,37 +32,49 @@ constraints. Plan Forge inserts a deliberation step that is deliberately slower 
 
 ## How it works
 
-```text
-  requirements input            repository grounding
-  (.docx, .pdf, .md, text)      (Tree-sitter symbols, docs drift)
-            |                              |
-            v                              |
-      +------------------+                  |
-      | Normalized PRD   |                  |
-      | product/technical|                  |
-      +--------+---------+                  |
-            v                              |
-      +------------------+                  |
-      | 1 Product Manager|  product context only, never code
-      +--------+---------+
-            v
-      +------------------+<-------------------+
-      | 2 Architect      |  interfaces, diagrams, workstream DAG
-      +--------+---------+
-            v
-      +--------+---------+
-      v                  v
-    +-----------+  +------------+
-    | 3 Domain  |<>| Red-Team   |  severity-ranked critiques force revisions
-    | Special.  |  | Critic     |  (up to 3 cycles, then a human decision)
-    +-----+-----+  +-----+------+
-          +------+-------+
-                v
-      +------------------+
-      | 4 Synthesizer    |  spec, epics and subtasks, dual effort schedule
-      +--------+---------+
-            v
-      review -> approve -> .plan/synthesized_spec.md + .plan/plan_manifest.json
+```mermaid
+flowchart TD
+    classDef input fill:#DEEBFF,stroke:#0052CC,color:#172B4D
+    classDef avatar fill:#FFFFFF,stroke:#0052CC,color:#172B4D
+    classDef critic fill:#FFEBE6,stroke:#DE350B,color:#172B4D
+    classDef output fill:#E3FCEF,stroke:#006644,color:#172B4D
+    classDef human fill:#FFFAE6,stroke:#FF991F,color:#172B4D
+    classDef infra fill:#F4F5F7,stroke:#5E6C84,color:#172B4D
+
+    subgraph IN["Inputs"]
+        REQ["Requirements<br/>.docx, .pdf, .md, free text"]:::input
+        PRD["Normalized PRD<br/>product vs technical split"]:::input
+        GROUND["Repository grounding<br/>Tree-sitter symbols, docs drift"]:::input
+    end
+
+    subgraph DELIB["Deliberation: fresh, tool-free host CLI call per avatar"]
+        PM["1 Product Manager<br/>product context only, never code"]:::avatar
+        ARCH["2 Architect<br/>interfaces, diagrams, workstream DAG"]:::avatar
+        DOMAIN["3 Domain Specialist<br/>deep-dives each workstream"]:::avatar
+        CRITIC["Red-Team Critic<br/>separate model slot"]:::critic
+        DECIDE{{"Human decision<br/>cycle limit of 3 reached"}}:::human
+        SYNTH["4 Synthesizer<br/>spec, epics, subtasks,<br/>human and agent schedules"]:::avatar
+    end
+
+    RELAY["Optional relay<br/>live shared PRD, roles, decisions"]:::infra
+    REVIEW["Review and approve<br/>in the three-page UI"]:::human
+    OUT[".plan/synthesized_spec.md<br/>.plan/plan_manifest.json"]:::output
+
+    REQ --> PRD
+    PRD --> PM
+    PM --> ARCH
+    GROUND -. "symbols, signatures, drift" .-> ARCH
+    GROUND -. "symbols, signatures, drift" .-> DOMAIN
+    ARCH --> DOMAIN
+    DOMAIN -- "draft" --> CRITIC
+    CRITIC -- "severity-ranked critiques<br/>force a revision" --> DOMAIN
+    CRITIC -- "unresolved" --> DECIDE
+    DECIDE --> DOMAIN
+    CRITIC -- "accepted" --> SYNTH
+    SYNTH --> REVIEW
+    RELAY -. "remote mode" .- REVIEW
+    REVIEW -- "approve" --> OUT
+    REVIEW -- "edit baseline" --> PRD
 ```
 
 Each avatar runs as a fresh, tool-free model invocation through the host agent CLI you already have installed and

@@ -1,7 +1,7 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { readdirSync, existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import mermaid from "mermaid";
 
 import { mermaidSourceRejected } from "../protocol/schema";
@@ -13,7 +13,7 @@ import { mermaidSourceRejected } from "../protocol/schema";
  * file must pass both the shared statement gate and `mermaid.parse`.
  */
 
-const fixtureDir = fileURLToPath(new URL("../../../tests/fixtures/mermaid/", import.meta.url));
+const fixtureDir = resolve(import.meta.dirname, "../../../tests/fixtures/mermaid");
 
 // Initialize once from constants; never pass user/LLM data to initialize.
 mermaid.initialize({
@@ -37,10 +37,8 @@ describe("mermaid.parse over tests/fixtures/mermaid/*.mmd", () => {
     for (const file of files) {
       const src = readFileSync(join(fixtureDir, file), "utf8");
       expect(mermaidSourceRejected(src), `${file}: shared gate`).toBeNull();
-      await expect(
-        mermaid.parse(src, { suppressErrors: true }),
-        `${file}: mermaid.parse`,
-      ).resolves.toBeDefined();
+      // No suppressErrors: an invalid fixture must throw and fail this test.
+      await expect(mermaid.parse(src), `${file}: mermaid.parse`).resolves.toBeTruthy();
     }
   });
 
