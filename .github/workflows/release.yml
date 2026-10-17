@@ -165,8 +165,15 @@ jobs:
           pattern: relay-*
           path: out
           merge-multiple: true
+      - name: Resolve version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "VERSION=$GITHUB_REF_NAME" >>"$GITHUB_ENV"
+          else
+            echo "VERSION=0.0.0-main.${GITHUB_SHA::7}" >>"$GITHUB_ENV"
+          fi
       - name: Package archives
-        run: ./scripts/package-release.sh
+        run: PLAN_FORGE_VERSION="$VERSION" ./scripts/package-release.sh
       - name: Verify archives
         run: |
           for archive in dist/plan-forge-*.tar.gz dist/plan-forge-*.zip; do

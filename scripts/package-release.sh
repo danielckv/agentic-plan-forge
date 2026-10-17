@@ -50,17 +50,23 @@ die() {
     exit 1
 }
 
-# stage_archive <name> <binary> <installer>
-# The client archive layout: plan-forge[.exe], LICENSE, README.md, install.sh
-# (Windows: install.ps1), commands/plan-forge.md, commands/plan-config.md,
-# hooks/post-merge.sh, integrations/ (per-host templates).
-stage_archive() {
+# stage_client <name> <binary> <installer>
+# Fills a fresh temp directory (left in $stage) with the client archive layout:
+# plan-forge[.exe], LICENSE, README.md, install.sh (Windows: install.ps1),
+# commands/plan-forge.md, commands/plan-config.md, hooks/post-merge.sh,
+# integrations/ (per-host templates). Tar and zip archives both use it, so
+# every client archive renders identical commands and hooks.
+stage_client() {
     name=$1
     binary=$2
     installer=$3
     stage=$(mktemp -d) || die "mktemp failed"
     mkdir -p "$stage/commands" "$stage/hooks" "$stage/integrations"
-    cp "$binary" "$stage/plan-forge$(case $name in *windows*) printf '.exe';; esac)" || die "copy binary failed"
+    exe=""
+    case $name in
+    *windows*) exe=".exe" ;;
+    esac
+    cp "$binary" "$stage/plan-forge$exe" || die "copy binary failed"
     cp "$root/LICENSE" "$root/README.md" "$stage/" || die "copy docs failed"
     cp "$root/scripts/$installer" "$stage/" || die "copy installer failed"
     # Generic copies of the skill bodies for manual installation.
@@ -71,11 +77,17 @@ stage_archive() {
         "$root/integrations/skill-plan-forge.md" >"$stage/commands/plan-forge.md" || die "render command failed"
     sed -e "s|{{PLAN_FORGE_BIN}}|plan-forge|g" \
         "$root/integrations/skill-plan-config.md" >"$stage/commands/plan-config.md" || die "render command failed"
-    # The guarded git-hook block with a generic binary resolution.
-    sed -e "s|{{PLAN_FORGE_BIN}}|\$(command -v plan-forge | tr -d '\n')|g" \
+    # The guarded git-hook block with a generic binary resolution. The
+    # replacement contains a pipe, so `|` cannot be the sed delimiter here.
+    sed -e "s#{{PLAN_FORGE_BIN}}#\$(command -v plan-forge | tr -d '\n')#g" \
         "$root/integrations/git-hook-post-merge.txt" >"$stage/hooks/post-merge.sh" || die "render hook failed"
     cp "$root"/integrations/*.md "$root"/integrations/*.ts "$root"/integrations/*.txt "$stage/integrations/" || die "copy integrations failed"
-    tar -czf "$dist/$name.tar.gz" -C "$stage" . || die "archive failed"
+}
+
+# stage_archive <name> <binary> <installer>: stage_client, then a tarball.
+stage_archive() {
+    stage_client "$1" "$2" "$3"
+    tar -czf "$dist/$1.tar.gz" -C "$stage" . || die "archive failed"
     rm -rf "$stage"
 }
 
@@ -86,21 +98,10 @@ stage_archive plan-forge-linux-amd64 "$out/plan-forge-linux-amd64/plan-forge" in
 stage_archive plan-forge-linux-arm64 "$out/plan-forge-linux-arm64/plan-forge" install.sh
 stage_archive plan-forge-windows-amd64 "$out/plan-forge-windows-amd64/plan-forge.exe" install.ps1
 
-# Windows zip (same layout, plan-forge.exe + install.ps1).
-stage=$(mktemp -d) || die "mktemp failed"
-mkdir -p "$stage/commands" "$stage/hooks" "$stage/integrations"
-cp "$out/plan-forge-windows-amd64/plan-forge.exe" "$stage/" || die "copy exe failed"
-cp "$root/LICENSE" "$root/README.md" "$root/scripts/install.ps1" "$stage/" || die "copy docs failed"
-sed -e "s|{{PLAN_FORGE_BIN}}|plan-forge|g" "$root/integrations/skill-plan-forge.md" >"$stage/commands/plan-forge.md"
-sed -e "s|{{PLAN_FORGE_BIN}}|plan-forge|g" "$root/integrations/skill-plan-config.md" >"$stage/commands/plan-config.md"
-sed -e "s|{{PLAN_FORGE_BIN}}|\$(command -v plan-forge | tr -d '\n')|g" \
-    "$root/integrations/git-hook-post-merge.txt" >"$stage/hooks/post-merge.sh"
-cp "$root"/integrations/*.md "$root"/integrations/*.ts "$root"/integrations/*.txt "$stage/integrations/"
-if command -v zip >/dev/null 2>&1; then
-    (cd "$stage" && zip -qr - .) >"$dist/plan-forge-windows-amd64.zip" || die "zip failed"
-else
-    die "zip is required to build plan-forge-windows-amd64.zip"
-fi
+# Windows zip (same layout as the Windows tarball, built from the same staging).
+command -v zip >/dev/null 2>&1 || die "zip is required to build plan-forge-windows-amd64.zip"
+stage_client plan-forge-windows-amd64 "$out/plan-forge-windows-amd64/plan-forge.exe" install.ps1
+(cd "$stage" && zip -qr - .) >"$dist/plan-forge-windows-amd64.zip" || die "zip failed"
 rm -rf "$stage"
 
 # Relay archives: binary + LICENSE + README.md.
