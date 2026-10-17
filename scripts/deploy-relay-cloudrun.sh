@@ -48,7 +48,8 @@ is built by Cloud Build and deployed pinned by digest.
 Options:
   --project ID        GCP project (default: gcloud config get-value project)
   --region REGION     Cloud Run / Artifact Registry region (default: us-central1)
-  --service NAME      Cloud Run service name (default: plan-forge-relay)
+  --service NAME      Cloud Run service name and service account id; 6-30
+                      characters (default: plan-forge-relay)
   --repository NAME   Artifact Registry Docker repository (default: plan-forge)
   --source MODE       What to build and deploy:
                         local         upload this repository's working tree
@@ -67,7 +68,7 @@ Options:
   --version V         Image tag and build VERSION (default: the ref name for
                       ref:..., else git describe --tags --always --dirty,
                       else dev)
-  --yes               Do not ask for confirmation before building
+  -y, --yes           Do not ask for confirmation before building
   --dry-run           Print every gcloud command (prefixed "+ ") instead of
                       running mutating ones; read-only lookups still run
   -h, --help          Show this help
@@ -91,9 +92,11 @@ info() {
 cleanup() {
   if [[ -n ${TMP_DIR} ]]; then
     rm -rf "${TMP_DIR}"
+    TMP_DIR=""
   fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
 
 # Print a command with a "+ " prefix; run it unless --dry-run.
 mut() {
@@ -208,8 +211,8 @@ parse_source() {
     image:*)
       SOURCE_MODE="image"
       IMAGE_REF="${SOURCE#image:}"
-      [[ -n ${IMAGE_REF} && ! ${IMAGE_REF} =~ [[:space:]] ]] ||
-        die "invalid --source '${SOURCE}': image:<REF> needs a reference without whitespace"
+      [[ -n ${IMAGE_REF} && ${IMAGE_REF} != -* && ! ${IMAGE_REF} =~ [[:space:]] ]] ||
+        die "invalid --source '${SOURCE}': image:<REF> needs a reference that does not start with '-' and has no whitespace"
       ;;
     *)
       die "invalid --source '${SOURCE}': expected local, ref:<git-ref> or image:<REF>"
@@ -228,6 +231,8 @@ validate_inputs() {
     [[ ${value} =~ ${NAME_RE} ]] ||
       die "invalid ${label} name '${value}': must match ${NAME_RE}"
   done
+  [[ ${#SERVICE} -ge 6 && ${#SERVICE} -le 30 ]] ||
+    die "--service must be 6-30 characters (it is also the service account id)"
   [[ ${MIN_INSTANCES} =~ ^[0-9]+$ ]] ||
     die "--min-instances must be a non-negative integer, got '${MIN_INSTANCES}'"
   [[ ${REGION} =~ ^[a-z]+-[a-z]+[0-9]+$ ]] ||

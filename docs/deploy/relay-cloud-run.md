@@ -42,20 +42,20 @@ The script prints the service URL when the deploy finishes.
 | Flag | Default | Purpose |
 | --- | --- | --- |
 | `--project ID` | `gcloud` config project | Target project. |
-| `--region` | `us-central1` | Deploy region. |
-| `--service` | `plan-forge-relay` | Cloud Run service name. |
-| `--repository` | `plan-forge` | Artifact Registry repository name. |
-| `--source MODE` | interactive menu; `local` otherwise | Build source. `local` uploads the repository root (resolved from the script location, not the cwd) to Cloud Build. `ref:<git-ref>` exports the ref with `git archive` into a temp folder and builds from it — reproducible, ignores uncommitted changes; the image version defaults to the ref. `image:<REF>` deploys an existing Artifact Registry image with no build. |
-| `--image REF` | build from source | Alias for `--source image:REF`. Cloud Run cannot pull `ghcr.io/danielckv/plan-forge-relay` directly; use an Artifact Registry remote repository proxying GHCR, or let the script build. |
-| `--yes` | off | Skip the confirmation prompt. |
-| `--secret` | `plan-forge-relay-token` | Secret Manager secret holding the relay token. |
-| `--rotate-token` | off | Mint a new token and roll the service. |
-| `--min-instances` | `0` | Set to `1` to keep rooms warm (always-on cost). |
-| `--memory` | `512Mi` | Instance memory. |
-| `--cpu` | `1` | Instance CPUs. |
-| `--version` | - | Print version and exit. |
-| `--dry-run` | off | Print the actions without executing them. |
-| `-h` | - | Help. |
+| `--region REGION` | `us-central1` | Cloud Run and Artifact Registry region. |
+| `--service NAME` | `plan-forge-relay` | Cloud Run service name. Also the service account id, so it must be 6–30 characters. |
+| `--repository NAME` | `plan-forge` | Artifact Registry Docker repository name. |
+| `--source MODE` | interactive menu; `local` otherwise (and with `--dry-run`) | Build source. `local` uploads the repository root (resolved from the script location, not the cwd) to Cloud Build. `ref:<git-ref>` exports the ref with `git archive` into a temp folder and builds from it — reproducible, ignores uncommitted changes; the image version defaults to the ref. `image:<REF>` deploys an existing Artifact Registry image with no build. |
+| `--image REF` | build from source | Alias for `--source image:REF`; mutually exclusive with `--source`. Cloud Run cannot pull `ghcr.io/danielckv/plan-forge-relay` directly; use an Artifact Registry remote repository proxying GHCR, or let the script build. |
+| `--secret NAME` | `plan-forge-relay-token` | Secret Manager secret holding the relay token. |
+| `--rotate-token` | off | Add a new random secret version and redeploy. |
+| `--min-instances N` | `0` | Minimum instances. Set to `1` to keep rooms warm (always-on cost). |
+| `--memory SIZE` | `512Mi` | Memory per instance. |
+| `--cpu N` | `1` | vCPUs per instance. |
+| `--version V` | ref name for `ref:...`, else `git describe --tags --always --dirty`, else `dev` | Image tag and the `VERSION` build arg. |
+| `-y`, `--yes` | off | Skip the confirmation prompt before building. |
+| `--dry-run` | off | Print every `gcloud` command, prefixed with a plus sign, instead of running mutating ones; read-only lookups still run. |
+| `-h`, `--help` | - | Show help. |
 
 ## What gets created
 

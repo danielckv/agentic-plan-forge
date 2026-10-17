@@ -18,6 +18,13 @@ mkdir -p "${FAKE_BIN}"
 cat >"${FAKE_BIN}/gcloud" <<'FAKE'
 #!/usr/bin/env bash
 printf 'PWD=%s %s\n' "${PWD}" "$*" >>"${GCLOUD_LOG}"
+# exists NAME: succeeds when FAKE_EXISTING is 1/all or lists NAME (comma list).
+exists() {
+  case ",${FAKE_EXISTING:-}," in
+    ,1, | ,all, | *",$1,"*) return 0 ;;
+  esac
+  return 1
+}
 args=" $* "
 case "${args}" in
   *" --data-file=- "*) cat >/dev/null ;;
@@ -29,6 +36,21 @@ case "${args}" in
     printf 'sha256:%064d\n' 0 | tr 0 a
     ;;
   *" run services describe "*) echo "https://plan-forge-relay-test.a.run.app" ;;
+  *" builds submit "*)
+    if [[ ${FAKE_BUILD_FAIL:-0} == 1 ]]; then
+      echo "fake: build failed" >&2
+      exit 1
+    fi
+    ;;
+  *" artifacts repositories describe "*)
+    exists repository || exit 1
+    ;;
+  *" secrets describe "*)
+    exists secret || exit 1
+    ;;
+  *" iam service-accounts describe "*)
+    exists service-account || exit 1
+    ;;
   *" describe "*) exit 1 ;;
 esac
 exit 0
@@ -242,6 +264,123 @@ case_bad_service_name() {
   pass "${name}"
 }
 
+case_rotate_token() {
+  local name="--rotate-token adds a version via stdin, does not create"
+  FAKE_EXISTING=secret run_script --source image:us-docker.pkg.dev/p/r/relay:1 --rotate-token --yes
+  expect_rc_ok "${name}" || return 0
+  local log add_line
+  log="$(log_text)"
+  add_line="$(grep 'secrets versions add' "${GCLOUD_LOG}" || true)"
+  expect_contains "${name}" "${add_line}" 'secrets versions add plan-forge-relay-token' || return 0
+  expect_contains "${name}" "${add_line}" '--data-file=-' || return 0
+  expect_absent "${name}" "${log}" 'secrets create' || return 0
+  pass "${name}"
+}
+
+case_existing_resources() {
+  local name="existing resources are not recreated"
+  FAKE_EXISTING=1 run_script --source local --yes
+  expect_rc_ok "${name}" || return 0
+  local log
+  log="$(log_text)"
+  expect_absent "${name}" "${log}" 'repositories create' || return 0
+  expect_absent "${name}" "${log}" 'secrets create' || return 0
+  expect_absent "${name}" "${log}" 'service-accounts create' || return 0
+  expect_contains "${name}" "${log}" 'builds submit' || return 0
+  expect_contains "${name}" "${log}" 'run deploy' || return 0
+  pass "${name}"
+}
+
+case_image_and_source_conflict() {
+  local name="--image with --source local fails"
+  run_script --dry-run --image us-docker.pkg.dev/p/r/relay:1 --source local
+  expect_rc_fail "${name}" || return 0
+  expect_contains "${name}" "${OUT}" 'mutually exclusive' || return 0
+  expect_absent "${name}" "$(log_text)" 'run deploy' || return 0
+  pass "${name}"
+}
+
+case_option_injection() {
+  local name="option-like ref and image values fail"
+  local args
+  for args in 'ref:-x' 'image:-x' 'image:a b'; do
+    run_script --dry-run --source "${args}"
+    expect_rc_fail "${name} (--source ${args})" || return 0
+    expect_contains "${name} (--source ${args})" "${OUT}" '--source' || return 0
+    expect_absent "${name} (--source ${args})" "$(log_text)" 'run deploy' || return 0
+  done
+  run_script --dry-run --image -x
+  expect_rc_fail "${name} (--image -x)" || return 0
+  expect_absent "${name} (--image -x)" "$(log_text)" 'run deploy' || return 0
+  pass "${name}"
+}
+
+case_service_length() {
+  local name="--service outside 6-30 chars fails before gcloud"
+  local long
+  long="$(printf '%031d' 0 | tr 0 a)"
+  run_script --service relay --yes
+  expect_rc_fail "${name} (5 chars)" || return 0
+  expect_contains "${name} (5 chars)" "${OUT}" '6-30' || return 0
+  if [[ -s ${GCLOUD_LOG} ]]; then
+    fail "${name}: gcloud was called before validation: $(log_text)"
+    return 0
+  fi
+  run_script --service "${long}" --yes
+  expect_rc_fail "${name} (31 chars)" || return 0
+  expect_contains "${name} (31 chars)" "${OUT}" '6-30' || return 0
+  if [[ -s ${GCLOUD_LOG} ]]; then
+    fail "${name}: gcloud was called before validation: $(log_text)"
+    return 0
+  fi
+  pass "${name}"
+}
+
+case_bad_memory_cpu() {
+  local name="invalid --memory and --cpu fail"
+  run_script --dry-run --memory 512
+  expect_rc_fail "${name} (memory)" || return 0
+  expect_contains "${name} (memory)" "${OUT}" '--memory' || return 0
+  run_script --dry-run --cpu abc
+  expect_rc_fail "${name} (cpu)" || return 0
+  expect_contains "${name} (cpu)" "${OUT}" '--cpu' || return 0
+  pass "${name}"
+}
+
+case_dry_run_executes_nothing() {
+  local name="dry-run sends no mutating calls to gcloud"
+  run_script --dry-run
+  expect_rc_ok "${name}" || return 0
+  local log needle
+  log="$(log_text)"
+  for needle in \
+    'services enable' \
+    'repositories create' \
+    'service-accounts create' \
+    'secrets create' \
+    'add-iam-policy-binding' \
+    'builds submit' \
+    'run deploy'; do
+    expect_contains "${name} (printed)" "${OUT}" "${needle}" || return 0
+    expect_absent "${name} (executed)" "${log}" "${needle}" || return 0
+  done
+  pass "${name}"
+}
+
+case_build_failure_cleans_up() {
+  local name="failed build removes the temp export"
+  local tmp="${WORK}/tmp-build-fail"
+  mkdir -p "${tmp}"
+  FAKE_BUILD_FAIL=1 TMPDIR="${tmp}" run_script --source ref:HEAD --yes
+  expect_rc_fail "${name}" || return 0
+  expect_contains "${name}" "$(log_text)" 'builds submit' || return 0
+  if compgen -G "${tmp}/plan-forge-relay-src.*" >/dev/null; then
+    fail "${name}: leftover temp export in ${tmp}"
+    return 0
+  fi
+  pass "${name}"
+}
+
 case_dry_run_default
 case_image_skips_build
 case_source_image
@@ -252,6 +391,14 @@ case_ref_invalid
 case_source_bogus
 case_bad_min_instances
 case_bad_service_name
+case_rotate_token
+case_existing_resources
+case_image_and_source_conflict
+case_option_injection
+case_service_length
+case_bad_memory_cpu
+case_dry_run_executes_nothing
+case_build_failure_cleans_up
 
 if [[ ${FAILURES} -ne 0 ]]; then
   printf '\n%d case(s) failed\n' "${FAILURES}" >&2
