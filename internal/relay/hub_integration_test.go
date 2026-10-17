@@ -227,6 +227,12 @@ type simClient struct {
 	version   uint64
 	snapshots int // TEXT_SNAPSHOT frames applied
 	docErr    error
+
+	// pending maps the event ID of an outstanding TEXT_DELTA to the changes
+	// it carried, so the read loop can apply the matching TEXT_ACK in stream
+	// order (see observe).
+	pendingMu sync.Mutex
+	pending   map[string]json.RawMessage
 }
 
 type dialOpts struct {
@@ -339,10 +345,13 @@ func (c *simClient) readLoop() {
 			c.t.Errorf("%s: %s payload does not decode into its protocol type: %v (%s)", c.name, env.EventType, terr, env.Payload)
 		}
 		now := time.Now()
+		// Apply the frame's effects before publishing it: a waiter that sees
+		// the frame in c.frames must already observe its document/state
+		// effects, which is the stream-order processing a real client does.
+		c.observe(env, now)
 		c.mu.Lock()
 		c.frames = append(c.frames, simFrame{env: env, at: now})
 		c.mu.Unlock()
-		c.observe(env, now)
 	}
 }
 
@@ -370,6 +379,37 @@ func (c *simClient) observe(env WSEnvelope, now time.Time) {
 		c.doc, c.version = p.Text, p.Version
 		c.snapshots++
 		c.docMu.Unlock()
+	case EventTextAck:
+		// The hub sequences a pusher's TEXT_ACK before any update that builds
+		// on it, so the push must be applied here, in stream order. Applying
+		// it in the pushing goroutine instead would race the updates this
+		// loop applies and produce spurious gaps.
+		var p TextAckPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		c.pendingMu.Lock()
+		changes, ok := c.pending[env.EventID]
+		if ok {
+			delete(c.pending, env.EventID)
+		}
+		c.pendingMu.Unlock()
+		if !ok {
+			return // not a pushToken push (raw TEXT_DELTA senders)
+		}
+		c.docMu.Lock()
+		defer c.docMu.Unlock()
+		if c.version == p.Version-1 {
+			next, err := applyChangesASCII(c.doc, changes)
+			if err != nil {
+				c.docErr = err
+				return
+			}
+			c.doc, c.version = next, p.Version
+		} else if c.version < p.Version-1 {
+			c.docErr = fmt.Errorf("ack %d but local version %d", p.Version, c.version)
+		}
+		// version >= p.Version: a snapshot already covered this push.
 	}
 }
 
@@ -472,11 +512,17 @@ func insertedText(raw json.RawMessage) string {
 
 func (c *simClient) send(t WSEventType, payload any, epoch uint64) string {
 	c.t.Helper()
+	return c.sendWithID(t, payload, epoch, newUUID())
+}
+
+// sendWithID is send with a caller-chosen event ID, for senders that must
+// register state keyed by that ID before the frame goes out.
+func (c *simClient) sendWithID(t WSEventType, payload any, epoch uint64, id string) string {
+	c.t.Helper()
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		c.t.Fatal(err)
 	}
-	id := newUUID()
 	frame, err := Encode(WSEnvelope{
 		Version: 1, SessionID: c.sessionID, EventID: id, EventType: t, Epoch: epoch,
 		Timestamp: time.Now().UTC(), Payload: raw,
@@ -590,35 +636,41 @@ func (c *simClient) pushToken(tok string) bool {
 		if c.sentAt != nil {
 			c.sentAt.Store(tok, time.Now())
 		}
-		id := c.send(EventTextDelta, TextDeltaPayload{
+		id := newUUID()
+		c.pendingMu.Lock()
+		if c.pending == nil {
+			c.pending = map[string]json.RawMessage{}
+		}
+		c.pending[id] = changes
+		c.pendingMu.Unlock()
+		c.sendWithID(EventTextDelta, TextDeltaPayload{
 			DocumentID: "prd", BaseVersion: base,
 			Updates: []Update{{ClientID: c.memberID + ":1", Changes: changes}},
-		}, 0)
+		}, 0, id)
 		reply, _, ok := c.waitFor(5*time.Second, 0, func(e WSEnvelope) bool {
 			return e.EventID == id && (e.EventType == EventTextAck || e.EventType == EventTextReject)
 		})
 		if !ok {
+			c.pendingMu.Lock()
+			delete(c.pending, id)
+			c.pendingMu.Unlock()
 			c.t.Errorf("%s: no reply to push of %q", c.name, tok)
 			return false
 		}
 		if reply.EventType == EventTextAck {
-			var ack TextAckPayload
-			_ = json.Unmarshal(reply.Payload, &ack)
+			// The read loop applied the push in stream order before the ack
+			// frame became visible to waitFor.
 			c.docMu.Lock()
-			defer c.docMu.Unlock()
-			if c.version == ack.Version-1 {
-				next, err := applyChangesASCII(c.doc, changes)
-				if err != nil {
-					c.docErr = err
-					return false
-				}
-				c.doc, c.version = next, ack.Version
-			} else if c.version < ack.Version-1 {
-				c.docErr = fmt.Errorf("ack %d but local version %d", ack.Version, c.version)
+			derr := c.docErr
+			c.docMu.Unlock()
+			if derr != nil {
 				return false
 			}
 			return true
 		}
+		c.pendingMu.Lock()
+		delete(c.pending, id)
+		c.pendingMu.Unlock()
 		var rej TextRejectPayload
 		_ = json.Unmarshal(reply.Payload, &rej)
 		if rej.Reason != "stale_base" {
@@ -811,6 +863,59 @@ func TestHubLoadOrderingAndConvergence(t *testing.T) {
 		}
 	}
 	t.Logf("load: %d control events, %d document pushes over %v", want, auth.Version, dur)
+}
+
+// TestHubContendedPushStreamOrdering is the fast, focused regression test for
+// the load test's "gap: update from N but local version N-1" failure: two
+// editors push with no pacing, so a pusher's TEXT_ACK and the fan-out of the
+// other writer's next update interleave maximally. The hub sequences a
+// pusher's ACK before any update that builds on it; a client that applies its
+// own ack in stream order converges, one that applies it in a side goroutine
+// gaps. Runs in about a second instead of a minute.
+func TestHubContendedPushStreamOrdering(t *testing.T) {
+	h := newHarness(t, nil)
+	sess := h.createSession(nil)
+	inv2 := h.invite(sess.RelaySessionID, sess.OwnerSecret, inviteRequest{Role: "editor"})
+	bj := h.join(sess.RelaySessionID, sess.InviteSecret)
+	cj := h.join(sess.RelaySessionID, inv2.InviteSecret)
+
+	b := h.dial("B", sess.RelaySessionID, bj.MemberSecret, dialOpts{}, nil, nil)
+	c := h.dial("C", sess.RelaySessionID, cj.MemberSecret, dialOpts{}, nil, nil)
+
+	const pushes = 150
+	var wg sync.WaitGroup
+	for _, w := range []*simClient{b, c} {
+		wg.Add(1)
+		go func(w *simClient) {
+			defer wg.Done()
+			for i := range pushes {
+				if !w.pushToken(fmt.Sprintf("%s%d;", w.name, i)) {
+					return
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+	time.Sleep(500 * time.Millisecond) // drain the last fan-out
+
+	room := h.room(sess.RelaySessionID)
+	auth := room.doc.Snapshot()
+	if want := uint64(2 * pushes); auth.Version != want {
+		t.Fatalf("authority version = %d, want %d", auth.Version, want)
+	}
+	for _, cl := range []*simClient{b, c} {
+		cl.docMu.Lock()
+		derr := cl.docErr
+		cl.docMu.Unlock()
+		if derr != nil {
+			t.Errorf("%s document error: %v", cl.name, derr)
+		}
+		text, ver := cl.localDoc()
+		if shaHex(text) != auth.SHA256 || ver != auth.Version {
+			t.Errorf("%s diverged: version %d hash %.12s, authority version %d hash %.12s",
+				cl.name, ver, shaHex(text), auth.Version, auth.SHA256)
+		}
+	}
 }
 
 // --- replay, resync, document catch-up -----------------------------------------------
