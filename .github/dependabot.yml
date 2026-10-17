@@ -31,5 +31,11 @@ updates:
       web-dependencies:
         patterns:
           - "*"
+    ignore:
+      # eslint-plugin-react declares peer eslint <= 9; hold eslint majors until it supports 10.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps"
