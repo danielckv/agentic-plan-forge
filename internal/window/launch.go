@@ -484,7 +484,10 @@ func Supervise(ctx context.Context, sig Signals, grace, startupWait time.Duratio
 			proc = nil
 			_ = ok
 			procGone = true
-			if !connected {
+			// Before the first connect the socket has not had its say: a
+			// launcher that hands off exits before the page connects, and
+			// the startup timer already covers a window that never shows.
+			if everConnected && !connected {
 				return OutcomeWindowGone, ErrWindowClosed
 			}
 		case <-graceC:
