@@ -1,0 +1,12 @@
+.git
+.agents
+.idea
+.vscode
+web/node_modules
+node_modules
+web/dist
+dist
+out
+docs/*.png
+graphify-out
+*.log

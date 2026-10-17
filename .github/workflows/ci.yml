@@ -85,3 +85,16 @@ jobs:
         run: go test ./internal/contracts/... ./internal/config/... ./internal/session/... ./internal/collab/... ./internal/synthesizer/... ./internal/avatars/... ./internal/storage/... ./internal/buildguard/...
       - name: Test relay protocol (no tags)
         run: go test ./internal/relay/
+
+  deploy-script:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Shellcheck
+        run: shellcheck scripts/deploy-relay-cloudrun.sh tests/deploy/cloudrun_test.sh
+      - name: Test Cloud Run deploy script
+        run: bash tests/deploy/cloudrun_test.sh

@@ -185,7 +185,7 @@ func parse(args []string) (options, error) {
 	opts := options{port: defaultPort}
 	fs := flag.NewFlagSet("plan-forge-relay", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	fs.IntVar(&opts.port, "port", defaultPort, "port to listen on")
+	fs.IntVar(&opts.port, "port", defaultPort, "port to listen on (default: $PORT when set, else 8443)")
 	fs.StringVar(&opts.listen, "listen", "", "host:port to listen on (overrides --port)")
 	fs.StringVar(&opts.tlsCert, "tls-cert", "", "TLS certificate file")
 	fs.StringVar(&opts.tlsKey, "tls-key", "", "TLS private key file")
@@ -199,6 +199,21 @@ func parse(args []string) (options, error) {
 	}
 	if fs.NArg() != 0 {
 		return options{}, fmt.Errorf("%w: unexpected arguments %v", errUsage, fs.Args())
+	}
+	// Managed platforms such as Cloud Run publish the listen port in PORT.
+	// Explicit --port or --listen always wins over the environment.
+	explicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "port" || f.Name == "listen" {
+			explicit = true
+		}
+	})
+	if envPort, ok := os.LookupEnv("PORT"); ok && envPort != "" && !explicit {
+		p, convErr := strconv.Atoi(envPort)
+		if convErr != nil || p < 1 || p > 65535 {
+			return options{}, fmt.Errorf("%w: PORT must be an integer between 1 and 65535, got %q", errUsage, envPort)
+		}
+		opts.port = p
 	}
 	// A token on the command line is visible to every local user through the
 	// process listing, so the flag is refused with an explanation rather than

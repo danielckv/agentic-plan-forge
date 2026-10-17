@@ -1,0 +1,30 @@
+# Cloud Build config for the Plan-Forge relay image.
+# Submitted by scripts/deploy-relay-cloudrun.sh from the repository root:
+#   gcloud builds submit --config deploy/cloudrun/cloudbuild.yaml \
+#     --substitutions _IMAGE=...,_VERSION=... .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - build
+      - -f
+      - Dockerfile.relay
+      - --platform
+      - linux/amd64
+      - --build-arg
+      - VERSION=${_VERSION}
+      - -t
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/${PROJECT_ID}/plan-forge/plan-forge-relay:latest
+  _VERSION: dev
+
+options:
+  dynamicSubstitutions: true
+  logging: CLOUD_LOGGING_ONLY
