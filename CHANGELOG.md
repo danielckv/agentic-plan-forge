@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The window supervisor no longer closes the session when a browser launcher hands off and exits before the page connects.
+
 ## [0.1.1] - 2026-10-17
 
 ### Added

@@ -23,20 +23,42 @@ For large changes, open an issue first to discuss the proposal before writing co
 
 ## Local Checks
 
+Prerequisites: Go 1.27.2, Node.js 24 (see `web/.nvmrc`), a C toolchain for CGO client builds, and `shellcheck`.
+
 Before opening a pull request, run the following checks from the repository root:
 
 ```sh
+# Go: shared packages and the relay (server build tag)
+go test ./...
+go test -tags server ./cmd/relay/... ./internal/relay/...
+
+# Web UI; the client embeds web/dist, so build it before client-tag Go builds
+npm --prefix web ci
+npm --prefix web run typecheck
+npm --prefix web test
+npm --prefix web run build
+
+# Go: client (client build tag, CGO)
+go vet -tags client ./...
+go test -tags client ./...
+
+# Scripts, Markdown, EditorConfig, workflows and links
+shellcheck scripts/*.sh tests/deploy/*.sh
+bash tests/deploy/cloudrun_test.sh
 npx --yes markdownlint-cli2 "**/*.md"
 actionlint
 npx --yes editorconfig-checker
 lychee --no-progress --config lychee.toml "**/*.md"
 ```
 
+The `client` and `server` build tags are mutually exclusive: never pass both.
+
 Tooling installation notes:
 
 - `markdownlint-cli2` and `editorconfig-checker` run through `npx` and require a recent Node.js installation.
 - `actionlint` can be installed with `brew install actionlint` or by following the instructions at <https://github.com/rhysd/actionlint>.
 - `lychee` can be installed with `brew install lychee` or by following the instructions at <https://github.com/lycheeverse/lychee>.
+- `shellcheck` can be installed with `brew install shellcheck` or your platform's package manager.
 
 ## Pull Request Expectations
 

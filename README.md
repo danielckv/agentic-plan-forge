@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/danielckv/agentic-plan-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/danielckv/agentic-plan-forge/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-unreleased%2C%20pre--1.0-lightgrey.svg)](#status)
+[![Release](https://img.shields.io/github/v/release/danielckv/agentic-plan-forge?sort=semver)](https://github.com/danielckv/agentic-plan-forge/releases/latest)
 
 Agentic Plan Forge is a blocking pre-planning gate for coding agents. Instead of letting an agent jump from a brief
 straight to a linear plan, it deliberates first: it reads your requirements documents, scans the repository's actual
@@ -14,12 +14,9 @@ It ships as one Go binary with an embedded web UI, plus an optional relay server
 
 ## Status
 
-The project is **pre-1.0 and unreleased**. The client, relay, ingestion pipeline, grounding scanner and avatar engine
-are under active implementation; there is no published binary or package yet.
-
-The install and usage sections below describe the interface planned for the first release, `v0.1.0`. They are
-documented now because the interface is fixed, but the commands will not work until a release is published. What runs
-today is listed under [Local development checks](#local-development-checks).
+The project is **pre-1.0**. Releases are published on [GitHub Releases](https://github.com/danielckv/agentic-plan-forge/releases)
+with client archives for macOS, Linux and Windows, relay archives for Linux, and a multi-architecture relay image at
+`ghcr.io/danielckv/plan-forge-relay`. Interfaces can still change between minor versions; see [CHANGELOG.md](CHANGELOG.md).
 
 ## Why
 
@@ -105,8 +102,6 @@ Plan Forge never asks for or stores provider API keys. It uses the credentials a
 has.
 
 ## Install
-
-Nothing is published yet. These are the commands planned for the first release.
 
 ### One command
 
@@ -262,20 +257,33 @@ integrations                skill, command and hook templates
 Run from the repository root:
 
 ```sh
+# Go: shared packages, relay (server tag) and client (client tag; needs CGO and a built web/dist)
+go test ./...
+go test -tags server ./cmd/relay/... ./internal/relay/...
+npm --prefix web ci && npm --prefix web run build
+go test -tags client ./...
+
+# Web
+npm --prefix web run typecheck
+npm --prefix web test
+
+# Scripts, docs and workflows
+bash tests/deploy/cloudrun_test.sh
 npx --yes markdownlint-cli2 "**/*.md"
 actionlint
 npx --yes editorconfig-checker
 lychee --no-progress --config lychee.toml "**/*.md"
 ```
 
-Once application code lands, the same checks extend to Go builds, tests and type checks. [CONTRIBUTING.md](CONTRIBUTING.md)
-is the single source of truth for the workflow.
+[CONTRIBUTING.md](CONTRIBUTING.md) is the single source of truth for the workflow.
 
 ## Roadmap
 
-- `v0.1.0`: client with embedded UI, document ingestion, Tree-sitter grounding, staged avatars, specification compiler,
-  relay server for remote sessions, one-command install and skill registration.
-- After that: release packaging for every supported platform, and signing plus notarisation for macOS and Windows builds.
+- Shipped in `v0.1.x`: client with embedded UI, document ingestion, Tree-sitter grounding, staged avatars,
+  specification compiler, relay server for remote sessions, one-command install and skill registration, and a Cloud
+  Run deployment script for the relay.
+- Next: signing and notarisation for macOS and Windows builds, and Antigravity as a generation host once its CLI
+  exposes an isolated-settings selector.
 
 ## Contributing
 
