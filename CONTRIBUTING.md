@@ -38,6 +38,10 @@ npm --prefix web run typecheck
 npm --prefix web test
 npm --prefix web run build
 
+# End to end: boots the built bundle behind the bridge CSP and handshake
+npm --prefix web exec -- playwright install --with-deps chromium
+npm --prefix web run test:e2e
+
 # Go: client (client build tag, CGO)
 go vet -tags client ./...
 go test -tags client ./...

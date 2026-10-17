@@ -14,6 +14,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
+import { apiFetch } from "../protocol/bridge";
 import { useSync, submitEdit, freezeRequest, exportRecovery } from "../store/syncStore";
 import type { RecoveryItem, SyncState } from "../store/syncStore";
 
@@ -79,7 +80,7 @@ export function Page1Ingestion(): React.ReactElement {
   useEffect(() => {
     const id = window.setInterval(async () => {
       try {
-        const res = await fetch("/api/status");
+        const res = await apiFetch("/api/status");
         if (!res.ok) return;
         const data = (await res.json()) as Partial<StatusPills>;
         setPills((prev) => ({ ...prev, ...data }));
@@ -107,7 +108,7 @@ export function Page1Ingestion(): React.ReactElement {
         for (const f of files) {
           const body = new FormData();
           body.append("file", f);
-          const res = await fetch("/api/upload", { method: "POST", body });
+          const res = await apiFetch("/api/upload", { method: "POST", body });
           if (!res.ok) {
             const err = (await res.json().catch(() => ({}))) as { error?: string };
             throw new Error(err.error ?? `upload failed (${res.status})`);

@@ -29,6 +29,12 @@ tmp/
 node_modules/
 dist/
 coverage/
+test-results/
+playwright-report/
+
+# Build-time Ajv output (web/scripts/gen-validators.mjs regenerates it)
+/web/src/protocol/validators.generated.js
+/web/src/protocol/validators.generated.d.ts
 
 # Python
 __pycache__/

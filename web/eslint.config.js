@@ -5,7 +5,16 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/", "coverage/", "playwright-report/", "test-results/", "node_modules/"],
+    ignores: [
+      "dist/",
+      "coverage/",
+      "playwright-report/",
+      "test-results/",
+      "node_modules/",
+      // Build-time Ajv output; owned by web/scripts/gen-validators.mjs.
+      "src/protocol/validators.generated.js",
+      "src/protocol/validators.generated.d.ts",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -31,6 +40,22 @@ export default tseslint.config(
         window: "readonly",
         document: "readonly",
         console: "readonly",
+      },
+    },
+  },
+  {
+    // Node scripts and harnesses: build-time codegen, the preview capture
+    // run, and the e2e bridge stand-in all execute under Node, not the DOM.
+    files: ["**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        URL: "readonly",
+        console: "readonly",
+        crypto: "readonly",
+        document: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
       },
     },
   },

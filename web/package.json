@@ -7,12 +7,20 @@
     "node": ">=24"
   },
   "scripts": {
+    "generate": "node scripts/gen-validators.mjs",
+    "predev": "npm run generate",
     "dev": "vite",
+    "pretypecheck": "npm run generate",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "pretest": "npm run generate",
     "test": "vitest run",
+    "pretest:watch": "npm run generate",
     "test:watch": "vitest",
+    "pretest:e2e": "npm run build",
     "test:e2e": "playwright test",
+    "prelint": "npm run generate",
     "lint": "eslint .",
+    "prebuild": "npm run generate",
     "build": "vite build"
   },
   "dependencies": {
@@ -47,6 +55,7 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.2",
     "vite": "8.3.4",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "ws": "8.22.0"
   }
 }

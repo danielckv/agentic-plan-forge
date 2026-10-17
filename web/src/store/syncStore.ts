@@ -14,6 +14,7 @@ import type { ChangeDesc } from "@codemirror/state";
 
 import { decodeFrame } from "../protocol/wire";
 import type { WSEnvelope, WSEventType } from "../protocol/wire";
+import { authFrame, bootstrap, bridgeWSURL, WS_SUBPROTOCOL } from "../protocol/bridge";
 import { validate } from "../protocol/schema";
 import { insertAllowed, textSha256 } from "../collab/model";
 
@@ -141,7 +142,7 @@ let state: SyncState = {
   cycle: 1,
   leaseHolder: null,
   banner: null,
-  serverUrl: globalThis.PLAN_FORGE_WS_URL ?? "ws://127.0.0.1:0/",
+  serverUrl: globalThis.PLAN_FORGE_WS_URL ?? "",
   role: null,
   members: [],
   errorMessage: null,
@@ -473,14 +474,13 @@ function handleEnvelope(env: WSEnvelope): void {
   }
 }
 
-export function connect(url?: string): void {
-  setState({
-    conn: "connecting",
-    banner: null,
-    ...(url !== undefined ? { serverUrl: url } : {}),
-  });
+/**
+ * Open the session socket. The caller has already redeemed the launch nonce;
+ * `token` is null only under the preview harness, which needs no auth frame.
+ */
+function openSocket(token: string | null): void {
   try {
-    ws = new WebSocket(state.serverUrl, "plan-forge.v1");
+    ws = new WebSocket(state.serverUrl, WS_SUBPROTOCOL);
   } catch {
     setState({ conn: "offline", banner: "relay unreachable — edits are kept locally" });
     scheduleReconnect();
@@ -489,13 +489,21 @@ export function connect(url?: string): void {
   ws.onopen = () => {
     reconnectAttempt = 0;
     setState({ conn: "open" });
-    send(
-      commandEnvelope("HELLO", {
-        proto: 1,
-        last_seq: "0",
-        doc_version: String(state.docVersion),
-        capabilities: { can_execute: state.role === "owner" },
-      }),
+    // The bridge reads nothing before the auth frame, so both of these go out
+    // on the raw socket: send() would route them through the offline banner
+    // while the send buffer drains.
+    const socket = ws;
+    if (socket === null) return;
+    if (token !== null) socket.send(authFrame(token));
+    socket.send(
+      JSON.stringify(
+        commandEnvelope("HELLO", {
+          proto: 1,
+          last_seq: "0",
+          doc_version: String(state.docVersion),
+          capabilities: { can_execute: state.role === "owner" },
+        }),
+      ),
     );
     pushHeadEdit();
   };
@@ -526,6 +534,31 @@ export function connect(url?: string): void {
   ws.onerror = () => {
     setState({ conn: "offline", banner: "relay unreachable — edits are kept locally" });
   };
+}
+
+/**
+ * Connect to the session authority. The loopback handshake runs first and is
+ * memoized, so a reconnect reuses the token rather than replaying the spent
+ * launch nonce. A refused handshake is terminal: it is reported and not
+ * retried, because no retry can succeed.
+ */
+export function connect(url?: string): void {
+  setState({
+    conn: "connecting",
+    banner: null,
+    serverUrl: url ?? (state.serverUrl === "" ? bridgeWSURL() : state.serverUrl),
+  });
+  void bootstrap().then(
+    (token) => {
+      openSocket(token);
+    },
+    (err: unknown) => {
+      setState({
+        conn: "closed",
+        errorMessage: `session handshake failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    },
+  );
 }
 
 function scheduleReconnect(): void {

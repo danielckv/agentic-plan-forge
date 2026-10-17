@@ -440,11 +440,19 @@ func (b *Bridge) handleWS(w http.ResponseWriter, r *http.Request) {
 		bridgeError(w, http.StatusConflict, "another window is already connected")
 		return
 	}
+	// The window asks for plan-forge.v1; without it in AcceptOptions the
+	// handshake answers with no Sec-WebSocket-Protocol and the browser fails
+	// the connection before a single frame is written.
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns:  []string{strings.TrimPrefix(b.origin, "http://")},
+		Subprotocols:    []string{WSSubprotocol},
 		CompressionMode: websocket.CompressionDisabled,
 	})
 	if err != nil {
+		return
+	}
+	if c.Subprotocol() != WSSubprotocol {
+		_ = c.Close(websocket.StatusPolicyViolation, "subprotocol "+WSSubprotocol+" required")
 		return
 	}
 	c.SetReadLimit(MaxFrameBytes)

@@ -13,12 +13,14 @@ import { expect, test } from "@playwright/test";
  * - the render surface exists for pages 1–3.
  */
 
-test.beforeAll(() => {
-  if (process.env.PLAN_FORGE_UI_URL === undefined) {
-    // Scaffolding mode: the suite is runnable against `npm run dev`.
-    console.log("[e2e] PLAN_FORGE_UI_URL unset; set it to the local bridge URL");
-  }
-});
+// These cases drive a UI someone else started (`npm run dev`, or a launched
+// binary) through PLAN_FORGE_UI_URL. Without it there is no baseURL to resolve
+// "/" against, so they are skipped; `bridge.spec.ts` starts its own server and
+// always runs.
+test.skip(
+  process.env.PLAN_FORGE_UI_URL === undefined,
+  "set PLAN_FORGE_UI_URL to the running bridge URL",
+);
 
 test("index document has the app root and one bundled entry script", async ({ page }) => {
   await page.goto("/");

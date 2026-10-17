@@ -1,38 +1,26 @@
 /**
  * Schema validation shared with the Go implementation.
  *
- * The strict JSON Schemas live in `internal/contracts/schema/` and are
- * imported through the `@schema/` Vite alias, so the frontend validates
- * against the exact same bytes Go validates against. Ajv runs with the
- * 2020 dialect and no network access; `$ref` loading stays disabled.
+ * The strict JSON Schemas live in `internal/contracts/schema/`. Ajv compiles
+ * them at build time (`web/scripts/gen-validators.mjs`) into plain ES module
+ * source, so the frontend validates against the exact same bytes Go validates
+ * against and the browser never calls `new Function`: the bridge serves the UI
+ * under `default-src 'self'` with no `'unsafe-eval'`, which makes runtime
+ * schema compilation a load-time `EvalError`.
  */
 
-import Ajv2020 from "ajv/dist/2020";
-import addFormats from "ajv-formats";
+import { envelopeV1, normalizedPrdV1, synthesisV1 } from "./validators.generated.js";
+import type { StandaloneValidate } from "./validators.generated.js";
 
-import envelopeSchema from "@schema/envelope.v1.json";
-import normalizedPrdSchema from "@schema/normalized_prd.v1.json";
-import synthesisSchema from "@schema/synthesis.v1.json";
 import mermaidDenylistSchema from "@schema/mermaid-denylist.json";
 
 export type SchemaId = "envelope.v1" | "normalized_prd.v1" | "synthesis.v1";
 
-const SCHEMA_BY_ID: Record<SchemaId, object> = {
-  "envelope.v1": envelopeSchema,
-  "normalized_prd.v1": normalizedPrdSchema,
-  "synthesis.v1": synthesisSchema,
+const validators: Record<SchemaId, StandaloneValidate> = {
+  "envelope.v1": envelopeV1,
+  "normalized_prd.v1": normalizedPrdV1,
+  "synthesis.v1": synthesisV1,
 };
-
-/** Single Ajv instance; schemas are local embedded resources, no network. */
-const ajv = new Ajv2020({ allErrors: true, strict: true, allowUnionTypes: true });
-addFormats(ajv);
-
-const validators: Record<SchemaId, (data: unknown) => boolean> = {
-  "envelope.v1": ajv.compile(SCHEMA_BY_ID["envelope.v1"]) as (d: unknown) => boolean,
-  "normalized_prd.v1": ajv.compile(SCHEMA_BY_ID["normalized_prd.v1"]) as (d: unknown) => boolean,
-  "synthesis.v1": ajv.compile(SCHEMA_BY_ID["synthesis.v1"]) as (d: unknown) => boolean,
-};
-
 
 export interface SchemaResult {
   ok: boolean;
@@ -41,9 +29,11 @@ export interface SchemaResult {
 
 /** Validate a payload against a shared schema; unknown keys are errors. */
 export function validate(schemaId: SchemaId, data: unknown): SchemaResult {
-  const valid = validators[schemaId](data);
-  if (valid) return { ok: true };
-  const errs = ajv.errors ?? [];
+  const validator = validators[schemaId];
+  if (validator(data)) return { ok: true };
+  // A standalone validator reports through its own `errors` property; the
+  // next call overwrites it, so it is read immediately.
+  const errs = validator.errors ?? [];
   return {
     ok: false,
     errors: errs.map((e) => ({

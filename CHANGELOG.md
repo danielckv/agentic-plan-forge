@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Plan-Forge window is no longer blank. The UI compiled its JSON Schemas with Ajv at load time, and Ajv builds validators with `new Function`, which the bridge's `default-src 'self'` policy refuses; the resulting `EvalError` aborted the entry module before React mounted. Ajv now compiles the schemas at build time (`web/scripts/gen-validators.mjs`) into plain ES modules.
+- The window completes the loopback handshake. It now redeems the launch nonce at `POST /api/session`, keeps the token in `sessionStorage`, sends it as the first WebSocket frame, and attaches it to every `/api/*` call. Without this the socket URL fell back to `ws://127.0.0.1:0/` and `plan-forge run` ended in `startup_timeout`.
+- The bridge offers the `plan-forge.v1` subprotocol on `GET /ws`. The window always asks for it, and a handshake answered without it fails in the browser.
 - The window supervisor no longer closes the session when a browser launcher hands off and exits before the page connects.
+
+### Added
+
+- `web/e2e/bridge.spec.ts` boots the built bundle behind the production Content-Security-Policy and the real handshake, and runs as the `web-e2e` CI job. The previous checks fetched the bundle without executing it, or drove it with the policy and the handshake removed.
 
 ## [0.1.1] - 2026-10-17
 
