@@ -10,6 +10,8 @@ symbols, runs a staged multi-avatar review, and returns a verified specification
 
 It ships as one Go binary with an embedded web UI, plus an optional relay server for team planning sessions.
 
+![Agentic Plan Forge: requirements and repository scans enter a pre-planning gate where multiple avatars deliberate before a verified specification reaches execution](docs/plan-forge-overview.png)
+
 ## Status
 
 The project is **pre-1.0 and unreleased**. The client, relay, ingestion pipeline, grounding scanner and avatar engine
