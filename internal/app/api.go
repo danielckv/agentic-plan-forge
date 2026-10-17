@@ -64,18 +64,28 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 
 // GET /api/status — the Page 1 pills and the generation host summary.
 func (s *appSession) handleStatus(w http.ResponseWriter, _ *http.Request) {
+	if s.exec == nil {
+		writeJSON(w, http.StatusOK, StatusView{AST: "remote", OCR: "unknown"})
+		return
+	}
 	writeJSON(w, http.StatusOK, s.exec.Status())
 }
 
 // POST /api/reinterpret — the Page 1 "Re-interpret" button.
 func (s *appSession) handleReinterpret(w http.ResponseWriter, _ *http.Request) {
-	s.exec.Reinterpret()
+	if s.exec != nil {
+		s.exec.Reinterpret()
+	}
 	w.WriteHeader(http.StatusAccepted)
 }
 
 // GET /api/secrets — possible secrets the owner has neither redacted nor
 // dismissed. Offsets and full values never leave this process.
 func (s *appSession) handleSecrets(w http.ResponseWriter, r *http.Request) {
+	if s.exec == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"hits": []SecretHit{}})
+		return
+	}
 	hits, err := s.exec.SecretHits(r.Context())
 	if err != nil {
 		writeAPIError(w, http.StatusBadGateway, notice(err))
@@ -89,6 +99,10 @@ func (s *appSession) handleSecrets(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/secrets/resolve {"id":"…","action":"redact"|"dismiss"}.
 func (s *appSession) handleSecretResolve(w http.ResponseWriter, r *http.Request) {
+	if s.exec == nil {
+		writeAPIError(w, http.StatusUnprocessableEntity, "only the session owner can resolve secrets")
+		return
+	}
 	var req struct {
 		ID     string `json:"id"`
 		Action string `json:"action"`
@@ -117,6 +131,10 @@ func (s *appSession) handleInvite(w http.ResponseWriter, _ *http.Request) {
 // GET /api/approval — the last failed approval, including the absolute path the
 // owner's window shows. 204 when there is none.
 func (s *appSession) handleApproval(w http.ResponseWriter, _ *http.Request) {
+	if s.exec == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	f := s.exec.ApprovalFailure()
 	if f == nil {
 		w.WriteHeader(http.StatusNoContent)

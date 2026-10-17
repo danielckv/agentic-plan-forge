@@ -231,6 +231,9 @@ func renderGitHookBlock(binPath string) string {
 func ensureDir(dir string) error {
 	info, err := os.Lstat(dir)
 	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return checkSymlinkedRoot(dir)
+		}
 		if !info.IsDir() {
 			return &PathError{Path: dir, Reason: "exists and is not a directory"}
 		}

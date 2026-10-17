@@ -589,10 +589,23 @@ func saveManifest(m installManifest, path string) error {
 }
 
 // writeAtomicPrivate writes content to path via a same-directory temp file
-// and rename, with the given mode. The parent directory must exist.
+// and rename, with the given mode. The parent directory must exist. When path
+// is a symlink within the user's home directory, its target is updated in
+// place so dotfiles symlinks are preserved.
 func writeAtomicPrivate(path string, content []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	target := path
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		resolved, rerr := filepath.EvalSymlinks(path)
+		if rerr != nil {
+			return rerr
+		}
+		if cerr := checkSymlinkedRoot(filepath.Dir(resolved)); cerr != nil {
+			return cerr
+		}
+		target = resolved
+	}
+	dir := filepath.Dir(target)
+	tmp, err := os.CreateTemp(dir, filepath.Base(target)+".tmp-*")
 	if err != nil {
 		return err
 	}
@@ -613,7 +626,7 @@ func writeAtomicPrivate(path string, content []byte, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	return os.Rename(tmpName, target)
 }
 
 // sha256Hex hashes content.

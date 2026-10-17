@@ -13,7 +13,11 @@ export default function hook(pi: HookAPI): void {
         "--format",
         "omp",
       ]);
-      const banner = String(out ?? "").trim();
+      const raw =
+        typeof out === "object" && out !== null && "stdout" in out
+          ? (out as { stdout?: string }).stdout
+          : out;
+      const banner = String(raw ?? "").trim();
       if (banner) {
         pi.sendMessage(banner);
       }

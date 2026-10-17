@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
@@ -25,20 +26,36 @@ func init() {
 // PlanForgeCache()/notices/ via planstate.ShouldNotify/RecordNotice; nothing
 // is written inside the repository.
 func runHook(ctx context.Context, args []string) int {
+	sub := ""
+	flagArgs := args
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		sub = args[0]
+		flagArgs = args[1:]
+	}
 	var repoFlag, format string
-	fs, err := parseFlags("hook", args, func(fs *flag.FlagSet) {
+	fs, err := parseFlags("hook", flagArgs, func(fs *flag.FlagSet) {
 		fs.StringVar(&repoFlag, "repo", "", "repository path (default: the cwd's repository root)")
 		fs.StringVar(&format, "format", "text", "text|claude|omp|agy")
 	})
 	if err != nil {
 		return exitUsage
 	}
-	if fs.NArg() < 1 || fs.Arg(0) != "check-state" {
-		fmt.Fprintln(os.Stderr, "usage: plan-forge hook check-state [--repo PATH] --format text|claude|omp|agy")
+	if sub == "" {
+		if fs.NArg() < 1 {
+			fmt.Fprintln(os.Stderr, "usage: plan-forge hook check-state [--repo PATH] --format text|claude|omp|agy")
+			return exitUsage
+		}
+		sub = fs.Arg(0)
+		if fs.NArg() > 1 {
+			fmt.Fprintln(os.Stderr, "hook takes exactly one subcommand: check-state")
+			return exitUsage
+		}
+	} else if fs.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "hook takes exactly one subcommand: check-state")
 		return exitUsage
 	}
-	if fs.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "hook takes exactly one subcommand: check-state")
+	if sub != "check-state" {
+		fmt.Fprintln(os.Stderr, "usage: plan-forge hook check-state [--repo PATH] --format text|claude|omp|agy")
 		return exitUsage
 	}
 	switch format {
@@ -73,6 +90,7 @@ func runHook(ctx context.Context, args []string) int {
 			done <- hookResult{}
 			return
 		}
+		done <- hookResult{st: st, out: out}
 	}()
 	select {
 	case res := <-done:
