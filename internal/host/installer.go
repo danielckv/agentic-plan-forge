@@ -748,8 +748,8 @@ func (in *Installer) applyArtifact(art artifact, prev manifestRow, opts InstallO
 				}
 				return manifestRow{}, &ErrInstallModified{Path: art.path, SuggestedIn: suggested}
 			}
-		} else if prev.Path != art.path {
-			// Unowned pre-existing file at a template target: refuse.
+		} else if prev.Path != art.path && !opts.Force {
+			// Unowned pre-existing file at a template target: refuse unless --force.
 			return manifestRow{}, &PathError{
 				Path:   art.path,
 				Reason: "exists and is not owned by plan-forge; pass --force to overwrite",
