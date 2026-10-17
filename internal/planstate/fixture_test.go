@@ -112,7 +112,7 @@ func structuralManifest(t *testing.T, repo string, v contracts.VerificationComma
 	}
 }
 
-// commit writes the manifest and spec to .plan/ and returns the manifest hash.
+// commit writes the manifest and spec to docs/plans/.plan/ and returns the manifest hash.
 // It records the approval in the local ledger when approved is true.
 func commit(t *testing.T, repo string, m contracts.PlanManifest, spec string, approved bool) string {
 	t.Helper()
@@ -122,8 +122,8 @@ func commit(t *testing.T, repo string, m contracts.PlanManifest, spec string, ap
 		t.Fatal(err)
 	}
 	raw = append(raw, '\n')
-	write(t, repo, ".plan/synthesized_spec.md", spec, 0o644)
-	write(t, repo, ".plan/plan_manifest.json", string(raw), 0o644)
+	write(t, repo, planstate.SpecRel, spec, 0o644)
+	write(t, repo, planstate.ManifestRel, string(raw), 0o644)
 	sum := storage.SHA256Hex(raw)
 	if approved {
 		if err := planstate.RecordApproval(repo, sum, m.ApprovalID); err != nil {

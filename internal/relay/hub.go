@@ -1888,6 +1888,7 @@ var artifactErrorCodes = map[string]bool{
 
 var artifactRelPaths = map[string]bool{
 	".plan/synthesized_spec.md": true, ".plan/plan_manifest.json": true,
+	"docs/plans/.plan/synthesized_spec.md": true, "docs/plans/.plan/plan_manifest.json": true,
 }
 
 // cleanArtifactError keeps only allowlisted codes and relative paths, so free

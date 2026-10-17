@@ -20,9 +20,9 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 )
 
-// File names inside .plan/.
+// File names inside docs/plans/.plan/.
 const (
-	PlanDirName      = ".plan"
+	PlanDirName      = "docs/plans/.plan"
 	SpecFileName     = "synthesized_spec.md"
 	ManifestFileName = "plan_manifest.json"
 	StateFileName    = "state.json"
@@ -34,7 +34,7 @@ const (
 	CacheDir         = "cache"
 )
 
-// PlanGitignore is the exact content of .plan/.gitignore: default-deny inside a
+// PlanGitignore is the exact content of docs/plans/.plan/.gitignore: default-deny inside a
 // user's repository, with the two approved artifacts left trackable.
 const PlanGitignore = "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json\n"
 
@@ -115,11 +115,11 @@ func artifactErr(rel string, err error) error {
 }
 
 // ErrNoPlan reports that no approved plan exists in the repository.
-var ErrNoPlan = errors.New("no approved plan in .plan/")
+var ErrNoPlan = errors.New("no approved plan in docs/plans/.plan/")
 
 // ErrPairMismatch reports spec and manifest files whose hashes do not agree.
 // Such a pair is never exposed to readers.
-var ErrPairMismatch = errors.New(".plan/ spec and manifest do not match")
+var ErrPairMismatch = errors.New("docs/plans/.plan/ spec and manifest do not match")
 
 // planDir is a repository whose .plan/ directory this package may touch.
 type planDir struct {

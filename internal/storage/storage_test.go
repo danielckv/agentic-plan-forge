@@ -59,13 +59,13 @@ func TestPlanGitignoreIsCreatedWithTheFourLines(t *testing.T) {
 	if _, err := st.Load(context.Background(), repo); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, PlanDirName)); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatal("Load must not create .plan/")
+	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(PlanDirName))); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("Load must not create docs/plans/.plan/")
 	}
 	if err := st.Save(context.Background(), State{SchemaVersion: 1}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.ReadFile(filepath.Join(repo, ".plan", ".gitignore"))
+	got, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(PlanDirName), ".gitignore"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,13 +73,13 @@ func TestPlanGitignoreIsCreatedWithTheFourLines(t *testing.T) {
 		t.Fatalf(".gitignore = %q", got)
 	}
 	// A user's edit survives a later write.
-	if err := os.WriteFile(filepath.Join(repo, ".plan", ".gitignore"), []byte("custom\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, filepath.FromSlash(PlanDirName), ".gitignore"), []byte("custom\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Save(context.Background(), State{SchemaVersion: 1}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = os.ReadFile(filepath.Join(repo, ".plan", ".gitignore"))
+	got, _ = os.ReadFile(filepath.Join(repo, filepath.FromSlash(PlanDirName), ".gitignore"))
 	if string(got) != "custom\n" {
 		t.Fatal("an existing .gitignore must not be rewritten")
 	}
@@ -123,14 +123,14 @@ func TestGitCheckIgnoreSplitsArtifactsFromState(t *testing.T) {
 		t.Fatal(err)
 		return -1
 	}
-	if got := exit(".plan/synthesized_spec.md"); got != 1 {
-		t.Errorf("git check-ignore .plan/synthesized_spec.md exit = %d, want 1 (trackable)", got)
+	if got := exit(PlanDirName + "/synthesized_spec.md"); got != 1 {
+		t.Errorf("git check-ignore %s/synthesized_spec.md exit = %d, want 1 (trackable)", PlanDirName, got)
 	}
-	if got := exit(".plan/plan_manifest.json"); got != 1 {
-		t.Errorf("git check-ignore .plan/plan_manifest.json exit = %d, want 1 (trackable)", got)
+	if got := exit(PlanDirName + "/plan_manifest.json"); got != 1 {
+		t.Errorf("git check-ignore %s/plan_manifest.json exit = %d, want 1 (trackable)", PlanDirName, got)
 	}
-	if got := exit(".plan/state.json"); got != 0 {
-		t.Errorf("git check-ignore .plan/state.json exit = %d, want 0 (ignored)", got)
+	if got := exit(PlanDirName + "/state.json"); got != 0 {
+		t.Errorf("git check-ignore %s/state.json exit = %d, want 0 (ignored)", PlanDirName, got)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestStateStoreRoundTripAndMode(t *testing.T) {
 	if err := st.Save(ctx, got); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(filepath.Join(repo, ".plan", "state.json"))
+	info, err := os.Stat(filepath.Join(repo, filepath.FromSlash(PlanDirName), "state.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestStateStoreRefusesSecretsPathsAndURLs(t *testing.T) {
 	if err := (State{SchemaVersion: 1, RunLog: []RunLogEntry{{Event: "CYCLE_START", Detail: "cycle 2 of 3"}}, LastApproval: &ApprovalRecord{ApprovalID: "a"}}).Validate(); err != nil {
 		t.Errorf("a legitimate state was rejected: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".plan", "state.json")); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(PlanDirName), "state.json")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("a rejected Save must not create state.json")
 	}
 }
@@ -207,10 +207,10 @@ func TestStateStoreRefusesSecretsPathsAndURLs(t *testing.T) {
 func TestStateStoreMalformedAndUnsupported(t *testing.T) {
 	repo := testRepo(t)
 	ctx := context.Background()
-	if err := os.MkdirAll(filepath.Join(repo, ".plan"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, filepath.FromSlash(PlanDirName)), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(repo, ".plan", "state.json")
+	path := filepath.Join(repo, filepath.FromSlash(PlanDirName), "state.json")
 	if err := os.WriteFile(path, []byte(`{"schema_version": 1, "run_log": [`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -259,8 +259,8 @@ func TestCommitAndReadBack(t *testing.T) {
 		t.Fatalf("read back %+v", p.Meta)
 	}
 	for _, leftover := range []string{"transactions"} {
-		if _, err := os.Stat(filepath.Join(repo, ".plan", leftover)); err == nil {
-			entries, _ := os.ReadDir(filepath.Join(repo, ".plan", leftover))
+		if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(PlanDirName), leftover)); err == nil {
+			entries, _ := os.ReadDir(filepath.Join(repo, filepath.FromSlash(PlanDirName), leftover))
 			if len(entries) != 0 {
 				t.Fatalf("%s still holds %d entries after a clean commit", leftover, len(entries))
 			}
@@ -288,7 +288,7 @@ func TestCommitRejectsInconsistentInput(t *testing.T) {
 	if _, err := s.Commit(ctx, meta, nil, manifest); ArtifactCode(err) != CodeEHASH {
 		t.Fatalf("empty spec: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".plan")); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(PlanDirName))); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("a rejected commit must not touch the repository")
 	}
 }
@@ -302,7 +302,7 @@ func TestHistoryKeepsFivePriorPairs(t *testing.T) {
 			t.Fatalf("commit %d: %v", i, err)
 		}
 	}
-	entries, err := os.ReadDir(filepath.Join(repo, ".plan", "history"))
+	entries, err := os.ReadDir(filepath.Join(repo, filepath.FromSlash(PlanDirName), "history"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestHistoryKeepsFivePriorPairs(t *testing.T) {
 	if !strings.Contains(first, "approval-03") {
 		t.Fatalf("oldest retained = %s, want approval-03", first)
 	}
-	spec, err := os.ReadFile(filepath.Join(repo, ".plan", "history", first, SpecFileName))
+	spec, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(PlanDirName), "history", first, SpecFileName))
 	if err != nil || string(spec) != "# generation 3\n" {
 		t.Fatalf("history spec = %q, %v", spec, err)
 	}
@@ -347,7 +347,7 @@ func crashPoints(t *testing.T, withPrior bool) []string {
 
 func assertNoLeftovers(t *testing.T, repo, label string) {
 	t.Helper()
-	dir := filepath.Join(repo, ".plan")
+	dir := filepath.Join(repo, filepath.FromSlash(PlanDirName))
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -513,7 +513,11 @@ func TestSymlinkComponentsAreRejected(t *testing.T) {
 
 	repo := testRepo(t)
 	outside := testRepo(t)
-	if err := os.Symlink(outside, filepath.Join(repo, ".plan")); err != nil {
+	planPath := filepath.Join(repo, filepath.FromSlash(PlanDirName))
+	if err := os.MkdirAll(filepath.Dir(planPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, planPath); err != nil {
 		t.Fatal(err)
 	}
 	_, err := newStore(t, repo).Commit(ctx, meta, spec, manifest)
@@ -532,10 +536,10 @@ func TestSymlinkComponentsAreRejected(t *testing.T) {
 	}
 
 	repo2 := testRepo(t)
-	if err := os.MkdirAll(filepath.Join(repo2, ".plan"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo2, filepath.FromSlash(PlanDirName)), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(repo2, ".plan", "history")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(repo2, filepath.FromSlash(PlanDirName), "history")); err != nil {
 		t.Fatal(err)
 	}
 	old, oldSpec, oldManifest := pairBytes(t, "old", "# old\n")
@@ -555,14 +559,14 @@ func TestSymlinkComponentsAreRejected(t *testing.T) {
 	}
 
 	repo3 := testRepo(t)
-	if err := os.MkdirAll(filepath.Join(repo3, ".plan"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo3, filepath.FromSlash(PlanDirName)), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	target := filepath.Join(outside, "elsewhere.md")
 	if err := os.WriteFile(target, []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(target, filepath.Join(repo3, ".plan", SpecFileName)); err != nil {
+	if err := os.Symlink(target, filepath.Join(repo3, filepath.FromSlash(PlanDirName), SpecFileName)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newStore(t, repo3).Commit(ctx, meta, spec, manifest); ArtifactCode(err) != CodeESYMLINK {
@@ -578,12 +582,12 @@ func TestPathRejectsTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{"../escape", ".plan/../../escape", "/etc/passwd", ".."} {
+	for _, rel := range []string{"../escape", PlanDirName + "/../../../../escape", "/etc/passwd", ".."} {
 		if _, err := p.path(rel); err == nil {
 			t.Errorf("path(%q) accepted a traversal", rel)
 		}
 	}
-	if _, err := p.path(".plan/state.json"); err != nil {
+	if _, err := p.path(PlanDirName + "/state.json"); err != nil {
 		t.Errorf("a plain path was rejected: %v", err)
 	}
 }
@@ -644,7 +648,7 @@ func TestReceiptsRoundTripAndAreKeyedByHashes(t *testing.T) {
 	if ok != 1 || bad != 1 {
 		t.Fatalf("succeeded/failed = %d/%d", ok, bad)
 	}
-	entries, _ := os.ReadDir(filepath.Join(repo, ".plan", "verification"))
+	entries, _ := os.ReadDir(filepath.Join(repo, filepath.FromSlash(PlanDirName), "verification"))
 	for _, e := range entries {
 		if strings.Contains(e.Name(), "passwd") || strings.Contains(e.Name(), "..") {
 			t.Fatalf("an untrusted task ID reached a file name: %s", e.Name())
@@ -661,7 +665,11 @@ func TestArtifactErrorsNeverCarryAbsolutePaths(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation needs privileges on Windows")
 	}
-	if err := os.Symlink(outside, filepath.Join(repo, ".plan")); err != nil {
+	planPath := filepath.Join(repo, filepath.FromSlash(PlanDirName))
+	if err := os.MkdirAll(filepath.Dir(planPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, planPath); err != nil {
 		t.Fatal(err)
 	}
 	meta, spec, manifest := pairBytes(t, "a1", "# one\n")

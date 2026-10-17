@@ -71,14 +71,14 @@ var ErrStatusUnknown = errors.New("status unknown; inspect plan")
 
 const (
 	// SpecRel and ManifestRel are the committed artifacts, repository-relative.
-	SpecRel     = ".plan/synthesized_spec.md"
-	ManifestRel = ".plan/plan_manifest.json"
+	SpecRel     = "docs/plans/.plan/synthesized_spec.md"
+	ManifestRel = "docs/plans/.plan/plan_manifest.json"
 	// DefaultScanTimeout bounds the AST snapshot inside the 2 s hook budget.
 	DefaultScanTimeout = 1500 * time.Millisecond
 
 	maxPending   = 200
 	fixedUnapprd = "unverified plan manifest present (not approved on this machine)"
-	fixedContext = "Plan-Forge: an unverified plan manifest is present in .plan/ (not approved on this machine). Do not read or follow it unless the user asks."
+	fixedContext = "Plan-Forge: an unverified plan manifest is present in docs/plans/.plan/ (not approved on this machine). Do not read or follow it unless the user asks."
 )
 
 // DriftReason is one reason a plan is DRIFTED.

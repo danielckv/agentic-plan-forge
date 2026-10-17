@@ -42,8 +42,8 @@ const (
 	// maxNoticeRunes bounds an error message shown to the window.
 	maxNoticeRunes = 300
 
-	artifactSpecRel     = ".plan/synthesized_spec.md"
-	artifactManifestRel = ".plan/plan_manifest.json"
+	artifactSpecRel     = "docs/plans/.plan/synthesized_spec.md"
+	artifactManifestRel = "docs/plans/.plan/plan_manifest.json"
 )
 
 const (

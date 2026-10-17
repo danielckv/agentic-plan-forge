@@ -494,7 +494,7 @@ export function Page3SynthesisConfluence(): React.ReactElement {
                       <p className="pf-caption mt-0.5">
                         {sync.members.length > 0
                           ? `Synced: ${sync.members.join(", ")}`
-                          : "Artifacts committed to .plan/"}
+                          : "Artifacts committed to docs/plans/.plan/"}
                       </p>
                     </div>
                   </div>
@@ -510,7 +510,7 @@ export function Page3SynthesisConfluence(): React.ReactElement {
         {approved ? (
           <p className="pf-body flex items-center gap-2" style={{ color: "var(--pf-ok)" }}>
             <CircleCheck size={15} />
-            Approved — artifacts written to .plan/synthesized_spec.md and .plan/plan_manifest.json
+            Approved — artifacts written to docs/plans/.plan/synthesized_spec.md and docs/plans/.plan/plan_manifest.json
           </p>
         ) : (
           <>

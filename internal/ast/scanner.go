@@ -44,7 +44,7 @@ const (
 	// not exceed in one stage.
 	SnapshotBudgetBytes = 200 << 10
 	// CachePath is the repository-relative location of the parse cache.
-	CachePath = ".plan/cache/graph.json"
+	CachePath = "docs/plans/.plan/cache/graph.json"
 
 	maxScanFiles       = 200_000
 	maxDocBytes        = 1 << 20
@@ -1092,11 +1092,11 @@ func queriesDigest() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// cacheDir returns <root>/.plan/cache. Each component must be a plain
-// directory, never a symbolic link; with create the missing ones are made 0700.
+// cacheDir returns <root>/docs/plans/.plan/cache. Each component must be a plain
+// directory, never a symbolic link; with create the missing ones are made.
 func cacheDir(root string, create bool) (string, error) {
 	cur := root
-	for _, seg := range []string{".plan", "cache"} {
+	for _, seg := range []string{"docs", "plans", ".plan", "cache"} {
 		cur = filepath.Join(cur, seg)
 		info, err := os.Lstat(cur)
 		switch {
@@ -1108,7 +1108,11 @@ func cacheDir(root string, create bool) (string, error) {
 			if !create {
 				return "", err
 			}
-			if merr := os.Mkdir(cur, 0o700); merr != nil {
+			perm := fs.FileMode(0o755)
+			if seg == "cache" {
+				perm = 0o700
+			}
+			if merr := os.Mkdir(cur, perm); merr != nil {
 				return "", fmt.Errorf("cannot create %s", seg)
 			}
 		default:

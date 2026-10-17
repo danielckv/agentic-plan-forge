@@ -49,7 +49,7 @@ func runOpen(_ context.Context, args []string) int {
 	if !snap.Approved {
 		fmt.Fprintln(os.Stderr, "open: UNAPPROVED PLAN (not approved on this machine)")
 	}
-	fmt.Printf("plan at %s\n", filepath.Join(repo, ".plan", "synthesized_spec.md"))
+	fmt.Printf("plan at %s\n", filepath.Join(repo, filepath.FromSlash(planstate.SpecRel)))
 	spec := string(snap.SpecBytes)
 	if spec == "" {
 		fmt.Fprintln(os.Stderr, "open: synthesized spec is empty")
