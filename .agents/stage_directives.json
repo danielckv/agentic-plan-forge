@@ -50,5 +50,36 @@
       "avgMs": 193933,
       "label": "[3m14s, avg: 3m14s]"
     }
+  },
+  {
+    "id": "dir-5aqjdi9",
+    "text": "also, add an \"coordinator\" that in real-times moves the tasks; also support a visual of Graph Nodes so we can see that the agent harness found out another tasks or paths that should be handled (so it's like the approach of dev3)",
+    "stage": "subagents_running",
+    "kind": "instruction",
+    "timestamp": 1792401444035,
+    "sessionOffsetMs": 25891,
+    "lastTriggeredAt": 1792401444035,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "internal",
+        "CHANGELOG.md",
+        "README.md",
+        "cmd",
+        "integrations",
+        "scripts",
+        "web"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      25891
+    ],
+    "timeRange": {
+      "minMs": 25891,
+      "maxMs": 25891,
+      "avgMs": 25891,
+      "label": "[25.9s, avg: 25.9s]"
+    }
   }
 ]
