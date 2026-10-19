@@ -277,5 +277,38 @@
       "avgMs": 52134,
       "label": "[52.1s, avg: 52.1s]"
     }
+  },
+  {
+    "id": "dir-3jt2jp0",
+    "text": "please do it faster, dispatch multiple, orchestrate all todos in parallel just finish with this!!!!!!!!!!!",
+    "stage": "end_of_session",
+    "kind": "instruction",
+    "timestamp": 1792407865566,
+    "sessionOffsetMs": 422891,
+    "lastTriggeredAt": 1792407865566,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "internal",
+        "integrations",
+        "cmd",
+        "docs",
+        "agent:",
+        "web",
+        "scripts",
+        "CHANGELOG.md",
+        "README.md"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      422891
+    ],
+    "timeRange": {
+      "minMs": 422891,
+      "maxMs": 422891,
+      "avgMs": 422891,
+      "label": "[7m3s, avg: 7m3s]"
+    }
   }
 ]
