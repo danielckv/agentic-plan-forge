@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A command center: one long-lived loopback server on `127.0.0.1:8420`, opened in a browser tab when `claude` or `omp` starts. **Live** shows every running harness with its branch, tool and touched files, and works with no approved plan at all — the board is keyed by manifest digest and refuses to exist without one, so a session in an unplanned repository previously left no trace anywhere. Where a plan does exist, Live leads with the coordinator's verdict: Active now and Begin next, the same ranking the board window computes, so the task to start is stated rather than inferred. **Sprint** renders the approved plan as epic, story and task. **Setup** explains the local surface.
+- `plan-forge center serve|ensure|status|report`. `center ensure` starts the daemon when it is down and opens a tab only when none is connected, behind a cooldown so several terminals starting together still produce one tab. It is bounded and always exits 0, because a dashboard that failed to open must never be why an agent stops.
+- `center_port` and `center_auto_open` settings, with `PLAN_FORGE_CENTER_PORT`. A port already in use is reported rather than worked around: a fixed port that moves breaks every bookmark.
+- A drawn brand mark — two bars narrowing into a struck diamond, the pre-planning gate itself — replacing the generic icon in a tinted box. It is inline SVG, so it needs no Content-Security-Policy exception and takes its colours from the theme; `docs/logo.svg` carries the same geometry for the README.
+
 ### Changed
 
 - oh-my-pi is command-only. `plan-forge install` no longer writes `~/.omp/agent/skills/plan-forge/SKILL.md` or `plan-config/SKILL.md`: the hook registers `/plan-forge` and `/plan-forge-board` with `pi.registerCommand`, and `/plan-config` is a command file, so a command can never be listed twice. Upgrading removes the skill copies an earlier version installed, dropping their manifest rows and the emptied directories, while a copy whose bytes you changed keeps its row and stays on disk. The trade is that oh-my-pi can no longer match Plan Forge from a prose request the way a skill description allows; type `/plan-forge`.
+- Claude Code's managed `SessionStart` carries a second handler that opens the command center, and both hosts now report tool calls to it alongside the board. `--purge` also removes the cache directories holding board overlays and live sessions; both are caches it already promised to delete, and the board one was missed before this change.
 - `plan-forge install` and `plan-forge doctor` now warn when oh-my-pi would read a skill that shadows one of these built-in commands, instead of only when the same name appeared in two roots. The `enabled: false` marker on the Claude copies carries that guarantee alone now that oh-my-pi installs none of its own.
 
 ## [0.1.3] - 2026-10-19
