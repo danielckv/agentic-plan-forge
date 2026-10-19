@@ -25,6 +25,10 @@ logs/
 tmp/
 *.tmp
 
+# Compiled binaries from `go build ./cmd/...`
+/client
+/relay
+
 # Node
 node_modules/
 dist/
