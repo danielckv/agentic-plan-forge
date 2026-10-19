@@ -283,9 +283,9 @@
     "text": "please do it faster, dispatch multiple, orchestrate all todos in parallel just finish with this!!!!!!!!!!!",
     "stage": "end_of_session",
     "kind": "instruction",
-    "timestamp": 1792407865566,
+    "timestamp": 1792408003252,
     "sessionOffsetMs": 422891,
-    "lastTriggeredAt": 1792407865566,
+    "lastTriggeredAt": 1792408003252,
     "context": {
       "branch": "main",
       "paths": [
@@ -300,15 +300,16 @@
         "README.md"
       ]
     },
-    "triggerCount": 1,
+    "triggerCount": 2,
     "historicalOffsets": [
-      422891
+      422891,
+      560577
     ],
     "timeRange": {
       "minMs": 422891,
-      "maxMs": 422891,
-      "avgMs": 422891,
-      "label": "[7m3s, avg: 7m3s]"
+      "maxMs": 560577,
+      "avgMs": 491734,
+      "label": "[7m3s-9m21s, avg: 8m12s]"
     }
   }
 ]
