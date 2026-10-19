@@ -128,17 +128,21 @@ The one-command install fetches the latest published release, `v0.1.2` or later.
 ### What gets installed
 
 The installer verifies the release checksum, places the binary, then runs `plan-forge install --host auto`, which detects
-installed agents and writes the skills:
+installed agents and writes the skills, commands and hooks:
 
-| Host | Skill files | Slash commands |
+| Host | Installed files | Slash commands |
 | :--- | :--- | :--- |
 | Claude Code | `~/.claude/skills/plan-forge/SKILL.md`, `~/.claude/skills/plan-config/SKILL.md` and `~/.claude/skills/plan-forge-board/SKILL.md` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
-| OMP | `~/.omp/agent/skills/plan-forge/SKILL.md`, `~/.omp/agent/skills/plan-config/SKILL.md`, `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
+| OMP | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board`. No skill files | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
 
 Every row above ships in `v0.1.2` and later. `v0.1.1` installed none of the `plan-forge-board` artifacts or the board hook entries.
 
-**OMP and duplicate skills.** Plan Forge marks the Claude copies of its skills `enabled: false`, which oh-my-pi's skill scanners skip, so those copies stay hidden even when `~/.claude/skills` is in `skills.customDirectories` or a foreign provider is enabled; Claude Code ignores the key. That hiding is the whole guarantee: a copy oh-my-pi reads from any other root can still surface twice, because nothing else deduplicates across roots. `/plan-forge` in oh-my-pi comes from its own `~/.omp/agent/skills` copy plus the command the hook registers; a probe on this machine lists exactly one `skill:plan-forge`. `plan-forge doctor` lists the roots each host reads and flags a duplicate, and `plan-forge install` warns with both paths; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
+**OMP installs no skills.** oh-my-pi reaches Plan Forge through built-in commands only: the hook registers `/plan-forge` and `/plan-forge-board` with `pi.registerCommand`, and `/plan-config` is `~/.omp/agent/commands/plan-config.md`. Because no `SKILL.md` is written for oh-my-pi, a command can never be listed twice. Upgrading removes the `plan-forge` and `plan-config` skill copies an earlier version installed, and leaves a copy you edited yourself untouched.
+
+Plan Forge still marks the Claude copies `enabled: false`, which oh-my-pi's skill scanners skip. That marker now carries the whole guarantee on its own: oh-my-pi reads `<repo>/.claude/skills` by default and `~/.claude/skills` on opt-in, and an unmarked copy would surface the Claude-rendered body — whose plan-mode step calls `EnterPlanMode`, a tool oh-my-pi does not have — beside the command the hook registers. Claude Code ignores the key. `plan-forge doctor` lists the roots each host reads and flags any skill that would shadow a built-in command, and `plan-forge install` prints the same warning; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
+
+One trade comes with this: a skill can be matched from its description, a registered command cannot. Asking oh-my-pi in prose to "forge a plan" no longer triggers Plan Forge on its own — type `/plan-forge`.
 
 Hooks are registered where the host supports them:
 

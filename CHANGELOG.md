@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- oh-my-pi is command-only. `plan-forge install` no longer writes `~/.omp/agent/skills/plan-forge/SKILL.md` or `plan-config/SKILL.md`: the hook registers `/plan-forge` and `/plan-forge-board` with `pi.registerCommand`, and `/plan-config` is a command file, so a command can never be listed twice. Upgrading removes the skill copies an earlier version installed, dropping their manifest rows and the emptied directories, while a copy whose bytes you changed keeps its row and stays on disk. The trade is that oh-my-pi can no longer match Plan Forge from a prose request the way a skill description allows; type `/plan-forge`.
+- `plan-forge install` and `plan-forge doctor` now warn when oh-my-pi would read a skill that shadows one of these built-in commands, instead of only when the same name appeared in two roots. The `enabled: false` marker on the Claude copies carries that guarantee alone now that oh-my-pi installs none of its own.
+
 ## [0.1.3] - 2026-10-19
 
 ### Fixed
