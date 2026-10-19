@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19
+
 ### Added
 
 - A command center: one long-lived loopback server on `127.0.0.1:8420`, opened in a browser tab when `claude` or `omp` starts. **Live** shows every running harness with its branch, tool and touched files, and works with no approved plan at all — the board is keyed by manifest digest and refuses to exist without one, so a session in an unplanned repository previously left no trace anywhere. Where a plan does exist, Live leads with the coordinator's verdict: Active now and Begin next, the same ranking the board window computes, so the task to start is stated rather than inferred. **Sprint** renders the approved plan as epic, story and task. **Setup** explains the local surface.
@@ -131,7 +133,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.0...v0.1.1

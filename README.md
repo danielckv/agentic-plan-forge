@@ -123,7 +123,7 @@ Windows (PowerShell 5.1 or later):
 Restart your agent afterwards, then type `/plan-forge`. Restarting matters because agents scan their skill directories at
 start-up. If the install directory is not on your `PATH`, the installer prints the exact line to add.
 
-The one-command install fetches the latest published release, `v0.1.2` or later. Every feature in this README, including the plan-mode handoff, `plan-forge validate`, the board, the coordinator and the Graph view, ships in `v0.1.2`. Earlier releases did not: `v0.1.1` still had the blank-window and handshake failures that `v0.1.2` fixes. [Build from source](#build-from-source) remains the path for unreleased changes.
+The one-command install fetches the latest published release. The command center, the `PreToolUse` guard, the managed-hook check in `doctor` and the command-only oh-my-pi surface ship in `v0.2.0`; the plan-mode handoff, `plan-forge validate`, the board, the coordinator and the Graph view ship in `v0.1.2`. Earlier releases did not: `v0.1.1` still had the blank-window and handshake failures that `v0.1.2` fixes. [Build from source](#build-from-source) remains the path for unreleased changes.
 
 ### What gets installed
 
@@ -136,7 +136,7 @@ installed agents and writes the skills, commands and hooks:
 | OMP | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board`. No skill files | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
 
-Every row above ships in `v0.1.2` and later. `v0.1.1` installed none of the `plan-forge-board` artifacts or the board hook entries.
+The oh-my-pi row changed in `v0.2.0`: before it, oh-my-pi also received `SKILL.md` copies of `plan-forge` and `plan-config`. Every other row ships in `v0.1.2` and later; `v0.1.1` installed none of the `plan-forge-board` artifacts or the board hook entries.
 
 **OMP installs no skills.** oh-my-pi reaches Plan Forge through built-in commands only: the hook registers `/plan-forge` and `/plan-forge-board` with `pi.registerCommand`, and `/plan-config` is `~/.omp/agent/commands/plan-config.md`. Because no `SKILL.md` is written for oh-my-pi, a command can never be listed twice. Upgrading removes the `plan-forge` and `plan-config` skill copies an earlier version installed, and leaves a copy you edited yourself untouched.
 
@@ -256,7 +256,7 @@ plan-forge validate --json
 
 ### Command center
 
-*Ships after `v0.1.3`.*
+*Ships in `v0.2.0` and later.*
 
 Starting `claude` or `omp` opens `http://127.0.0.1:8420` in your browser, once. It is a browser tab, not the dedicated
 window the forge and board use, and it outlives any one session.
