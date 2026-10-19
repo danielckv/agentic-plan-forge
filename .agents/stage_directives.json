@@ -81,5 +81,39 @@
       "avgMs": 25891,
       "label": "[25.9s, avg: 25.9s]"
     }
+  },
+  {
+    "id": "dir-2m2gfhz",
+    "text": "looking good from the preview!",
+    "stage": "subagents_running",
+    "kind": "instruction",
+    "timestamp": 1792403253433,
+    "sessionOffsetMs": 561749,
+    "lastTriggeredAt": 1792403253433,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "docs",
+        "cmd",
+        "internal",
+        "README.md",
+        "src",
+        "scripts",
+        "CHANGELOG.md",
+        "web",
+        "notes",
+        "integrations"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      561749
+    ],
+    "timeRange": {
+      "minMs": 561749,
+      "maxMs": 561749,
+      "avgMs": 561749,
+      "label": "[9m22s, avg: 9m22s]"
+    }
   }
 ]
