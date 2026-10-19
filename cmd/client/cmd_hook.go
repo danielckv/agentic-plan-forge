@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danielckv/agentic-plan-forge/internal/app"
 	"github.com/danielckv/agentic-plan-forge/internal/board"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/sanitize"
@@ -213,7 +214,8 @@ func runHookClaude(ctx context.Context, stdin io.Reader, stdout io.Writer, bound
 
 	var parts []string
 	if in.Event == "PostToolUse" {
-		claudeRecordActivity(ctx, repo, in, time.Until(deadline)/2)
+		claudeRecordActivity(ctx, repo, in, time.Until(deadline)/3)
+		claudeReportToCenter(ctx, repo, in, time.Until(deadline)/3)
 	}
 	if in.Event == "PostToolUse" && in.ToolName == "Bash" && commandRunsWait(in.ToolInput.Command) {
 		if result, ok := approvedWaitResult(in.ToolResponse); ok {
@@ -325,6 +327,36 @@ func claudeRecordActivity(ctx context.Context, repo string, in claudeHookInput, 
 	}
 	runBounded(ctx, budget, func() struct{} {
 		_ = boardActivity(repo, consumer, []string{path})
+		return struct{}{}
+	})
+}
+
+// claudeReportToCenter feeds one tool call to a running command center, so a
+// session is visible whether or not a plan governs it. The board covers the
+// planned half and refuses to exist without an approved manifest; this covers
+// the other half.
+//
+// It is silent and best-effort: no daemon means the loopback dial is refused
+// in about a millisecond and the record is dropped. Nothing here may delay or
+// fail the tool call that triggered it.
+func claudeReportToCenter(ctx context.Context, repo string, in claudeHookInput, budget time.Duration) {
+	session := "claude:" + in.SessionID
+	if repo == "" || budget <= 0 || !board.ValidConsumer(session) {
+		return
+	}
+	rec := app.CenterRecord{
+		Repo: repo, SessionID: session, Harness: "claude-code",
+		Tool: hookField(in.ToolName), Kind: "tool",
+	}
+	if path := claudeEditedPath(in); path != "" {
+		rec.Detail = hookField(path)
+	}
+	if in.ToolName == "Bash" && strings.TrimSpace(in.ToolInput.Command) != "" {
+		rec.Command = hookField(in.ToolInput.Command)
+		rec.Kind = "command"
+	}
+	runBounded(ctx, budget, func() struct{} {
+		_ = app.CenterReport(ctx, rec)
 		return struct{}{}
 	})
 }

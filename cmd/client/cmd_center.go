@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/danielckv/agentic-plan-forge/internal/app"
 	"github.com/danielckv/agentic-plan-forge/internal/config"
@@ -21,7 +23,7 @@ func init() {
 
 // The subcommand is `center`, not `ui`: `serve-ui` is already the hidden
 // release smoke test, and `open` already means "print the approved spec".
-const centerUsage = "center takes one subcommand: serve, ensure or status"
+const centerUsage = "center takes one subcommand: serve, ensure, status or report"
 
 func runCenter(ctx context.Context, args []string) int {
 	if len(args) == 0 {
@@ -35,6 +37,8 @@ func runCenter(ctx context.Context, args []string) int {
 		return runCenterEnsure(ctx, args[1:])
 	case "status":
 		return runCenterStatus(ctx, args[1:])
+	case "report":
+		return runCenterReport(ctx, args[1:])
 	}
 	fmt.Fprintln(os.Stderr, centerUsage)
 	return exitUsage
@@ -172,5 +176,45 @@ func runCenterStatus(ctx context.Context, args []string) int {
 		return exitOK
 	}
 	fmt.Printf("command center: running on http://127.0.0.1:%d (pid %d)\n", rec.Port, rec.PID)
+	return exitOK
+}
+
+// centerReportBound keeps a report well inside the budget a host hook allows.
+// It is deliberately tighter than the hook's own bound: telemetry is the least
+// important thing happening in that process.
+const centerReportBound = 400 * time.Millisecond
+
+// runCenterReport posts one telemetry record. It always exits 0 and prints
+// nothing: it runs inside host hooks, where a non-zero exit or stray output
+// would surface to the user as a failure of whatever they were actually doing.
+func runCenterReport(ctx context.Context, args []string) int {
+	var (
+		rec   app.CenterRecord
+		dirty string
+	)
+	if _, err := parseFlags("center report", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&rec.Repo, "repo", "", "repository path")
+		fs.StringVar(&rec.SessionID, "session", "", "harness-qualified session id, e.g. claude:abc")
+		fs.StringVar(&rec.Harness, "harness", "", "harness name, e.g. claude-code or omp")
+		fs.StringVar(&rec.Developer, "developer", "", "developer handle")
+		fs.StringVar(&rec.Branch, "branch", "", "git branch")
+		fs.StringVar(&rec.Mode, "mode", "", "PLANNED or UNPLANNED")
+		fs.StringVar(&rec.TaskID, "task", "", "planned task id")
+		fs.StringVar(&rec.Tool, "tool", "", "tool name")
+		fs.StringVar(&rec.Command, "command", "", "command line")
+		fs.StringVar(&rec.Kind, "kind", "", "event kind: session_start, tool, command, untracked, idle or session_end")
+		fs.StringVar(&rec.Detail, "detail", "", "short description")
+		fs.StringVar(&dirty, "dirty", "", "comma-separated repository-relative paths")
+	}); err != nil {
+		return exitOK
+	}
+	for _, p := range strings.Split(dirty, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			rec.DirtyFiles = append(rec.DirtyFiles, p)
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, centerReportBound)
+	defer cancel()
+	_ = app.CenterReport(ctx, rec)
 	return exitOK
 }

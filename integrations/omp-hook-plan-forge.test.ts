@@ -895,3 +895,42 @@ test("session_start: the command center launch is not awaited", async () => {
   await pi.handlers.get("session_start")![0]({}, new FakeCtx());
   assert.equal(pi.messages.length, 1, "the banner was blocked by the launch");
 });
+
+test("tool_result: an edit reports to both the board and the command center", async () => {
+  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
+  createHook(pi, makeDeps());
+  await pi.handlers.get("tool_result")![0](
+    { toolName: "edit", input: { file_path: "/repo/src/a.ts" } },
+    new FakeCtx(),
+  );
+  const board = pi.execCalls.find((a) => a[0] === "board" && a[1] === "activity");
+  const center = pi.execCalls.find((a) => a[0] === "center" && a[1] === "report");
+  assert.ok(board, "the board capture was lost");
+  assert.ok(center, "the command center was not told");
+  const session = center[center.indexOf("--session") + 1];
+  assert.ok(session.startsWith("omp:"), `session = ${session}`);
+  assert.ok(center.includes("src/a.ts"), `detail missing: ${center.join(" ")}`);
+  // The board and the command center agree on who is reporting.
+  assert.equal(session, board[board.indexOf("--consumer") + 1]);
+});
+
+test("tool_result: a bash command reaches the command center, but a wait poll does not", async () => {
+  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
+  createHook(pi, makeDeps());
+  await pi.handlers.get("tool_result")![0](
+    { toolName: "bash", input: { command: "go test ./..." } },
+    new FakeCtx(),
+  );
+  const reported = pi.execCalls.filter((a) => a[0] === "center" && a[1] === "report");
+  assert.equal(reported.length, 1);
+  assert.ok(reported[0].includes("go test ./..."));
+
+  // A `plan-forge wait` poll is the forge talking to itself.
+  const quiet = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
+  createHook(quiet, makeDeps());
+  await quiet.handlers.get("tool_result")![0](
+    { toolName: "bash", input: { command: '"/bin/plan-forge" wait --session s1 --timeout 50s' } },
+    new FakeCtx(),
+  );
+  assert.equal(quiet.execCalls.filter((a) => a[0] === "center" && a[1] === "report").length, 0);
+});

@@ -431,3 +431,42 @@ func startCenterDetached(ctx context.Context, opts CenterOptions) (applock.Recor
 		}
 	}
 }
+
+// CenterRecord is one telemetry report from a local hook.
+type CenterRecord struct {
+	Repo       string   `json:"repo"`
+	SessionID  string   `json:"session_id"`
+	Harness    string   `json:"harness"`
+	Developer  string   `json:"developer,omitempty"`
+	Branch     string   `json:"branch,omitempty"`
+	Mode       string   `json:"mode,omitempty"`
+	TaskID     string   `json:"task_id,omitempty"`
+	Tool       string   `json:"tool,omitempty"`
+	Command    string   `json:"command,omitempty"`
+	DirtyFiles []string `json:"dirty_files,omitempty"`
+	Kind       string   `json:"kind"`
+	Detail     string   `json:"detail,omitempty"`
+}
+
+// CenterReport posts one record to a running command center.
+//
+// It never starts the daemon. A hook fires this on every tool call, and paying
+// a process spawn for each one — on the off chance the user wants a dashboard
+// they have not opened — is not a trade worth making; `center ensure` at
+// session start is where the daemon comes up. With no daemon the loopback dial
+// is refused in about a millisecond and the record is simply dropped.
+func CenterReport(ctx context.Context, rec CenterRecord) error {
+	rec.Repo = strings.TrimSpace(rec.Repo)
+	if rec.Repo == "" || rec.SessionID == "" || rec.Kind == "" {
+		return errors.New("center: repo, session id and kind are required")
+	}
+	held, up := CenterHolder()
+	if !up {
+		return nil
+	}
+	secret, err := readCenterSecret()
+	if err != nil {
+		return nil
+	}
+	return centerPostJSON(ctx, held.Port, "/api/ingest", secret, rec, nil)
+}

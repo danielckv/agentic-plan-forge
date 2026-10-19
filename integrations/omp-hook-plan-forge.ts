@@ -625,6 +625,30 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
     }
   };
 
+  // reportToCenter mirrors reportActivity for the command center, which records
+  // a session whether or not a plan governs it. The board covers the planned
+  // half and refuses to exist without an approved manifest; this covers the
+  // rest. Fire-and-forget, on its own budget, errors swallowed.
+  const reportToCenter = (ctx: CtxLike, tool: string, detail: string, command?: string): void => {
+    try {
+      const args = [
+        "center", "report",
+        "--repo", ctx.cwd,
+        "--session", `omp:${sessionIdOf(ctx)}`,
+        "--harness", "omp",
+        "--kind", command === undefined ? "tool" : "command",
+        "--tool", tool,
+      ];
+      if (detail) args.push("--detail", detail);
+      if (command !== undefined) args.push("--command", command);
+      execPlanForge(pi, args, deps.centerEnsureMs ?? 3_000).catch(() => {
+        // Capture is best-effort.
+      });
+    } catch {
+      // Capture is best-effort.
+    }
+  };
+
   // Skill path: the model ran `plan-forge wait` itself and it approved.
   // Capture path: a successful edit-like tool reports its path to the board.
   pi.on("tool_result", async (event: unknown, ctx: CtxLike) => {
@@ -635,8 +659,18 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
       const input: Record<string, unknown> =
         ev.input && typeof ev.input === "object" ? (ev.input as Record<string, unknown>) : {};
       const edited = editedPathOf(ev.toolName, input);
-      if (edited) reportActivity(ctx, edited);
+      const toolName = typeof ev.toolName === "string" ? ev.toolName : "";
+      if (edited) {
+        reportActivity(ctx, edited);
+        reportToCenter(ctx, toolName, repoRelative(ctx.cwd, edited));
+      }
       if (ev.toolName !== "bash") return;
+      const bashCommand = typeof input.command === "string" ? input.command : "";
+      // A `plan-forge wait` poll is the forge talking to itself, not work the
+      // dashboard should show as activity.
+      if (bashCommand && !isWaitCommand(bashCommand)) {
+        reportToCenter(ctx, toolName, "", cleanField(bashCommand));
+      }
       if (!isWaitCommand(typeof input.command === "string" ? input.command : "")) return;
       let text = "";
       if (typeof ev.content === "string") {
