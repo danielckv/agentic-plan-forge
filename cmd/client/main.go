@@ -24,14 +24,15 @@ import (
 // Exit codes shared by every subcommand. They are part of the documented
 // interface: the installed agent skills branch on them.
 const (
-	exitOK              = 0
-	exitRuntimeError    = 1
-	exitUsage           = 2
-	exitPrerequisite    = 3
-	exitInstallRefused  = 4
-	exitInstallModified = 5
-	exitWaitTimeout     = 75
-	exitCancelled       = 130
+	exitOK               = 0
+	exitRuntimeError     = 1
+	exitUsage            = 2
+	exitPrerequisite     = 3
+	exitInstallRefused   = 4
+	exitInstallModified  = 5
+	exitValidationFailed = 6
+	exitWaitTimeout      = 75
+	exitCancelled        = 130
 )
 
 // Build metadata, overridden with -ldflags "-X main.version=... -X main.commit=...".

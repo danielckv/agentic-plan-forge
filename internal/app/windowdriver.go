@@ -23,6 +23,9 @@ type windowParams struct {
 	StartupWait time.Duration
 	// OnRunning is called once, when the window first connects and authenticates.
 	OnRunning func()
+	// OnConnect is called every time the window's socket authenticates, the
+	// first connect included (after OnRunning) and every reconnect.
+	OnConnect func()
 	// OnWindowGone is called whenever the window's socket closes.
 	OnWindowGone func()
 }
@@ -64,6 +67,9 @@ func startWindow(ctx context.Context, p windowParams) (windowHandle, <-chan Resu
 						p.OnRunning()
 					}
 				})
+				if p.OnConnect != nil {
+					go p.OnConnect()
+				}
 			} else if p.OnWindowGone != nil {
 				p.OnWindowGone()
 			}

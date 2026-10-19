@@ -120,6 +120,10 @@ type BridgeConfig struct {
 	// OpenURL opens a validated URL in the user's browser. nil uses the
 	// platform opener (OpenURLArgv).
 	OpenURL func(rawURL string) error
+	// LaunchPath is the path the window opens at, for example "/board". It
+	// must be "/" followed by lowercase letters, digits, '-' and '/'; anything
+	// else (including empty) launches at "/".
+	LaunchPath string
 }
 
 // Bridge is the loopback HTTP and WebSocket server for the dedicated window.
@@ -254,7 +258,23 @@ func (b *Bridge) LaunchURL() (string, error) {
 	b.nonceSet, b.nonceUsed = true, false
 	b.nonceExpires = b.clock().Add(bridgeNonceTTL)
 	b.mu.Unlock()
-	return b.origin + "/#n=" + nonce, nil
+	return b.origin + launchPath(b.cfg.LaunchPath) + "#n=" + nonce, nil
+}
+
+// launchPath returns p when it is "/" plus [a-z0-9-/] and carries no "//";
+// otherwise "/". The fragment that follows is the only credential-bearing part
+// of the launch URL, so the path never needs escaping.
+func launchPath(p string) string {
+	if p == "" || p[0] != '/' || strings.Contains(p, "//") {
+		return "/"
+	}
+	for i := 1; i < len(p); i++ {
+		c := p[i]
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' && c != '/' {
+			return "/"
+		}
+	}
+	return p
 }
 
 // Serve answers requests until ctx ends or the listener fails.

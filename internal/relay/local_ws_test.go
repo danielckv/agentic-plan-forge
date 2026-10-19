@@ -177,3 +177,36 @@ func TestBridgeCSPMatchesE2EHarness(t *testing.T) {
 		t.Errorf("%s pins\n  %s\nbut the bridge sends\n  %s", path, got, relay.BridgeCSP)
 	}
 }
+
+// The board window launches at /board; any path outside "/" plus [a-z0-9-/]
+// falls back to "/".
+func TestBridgeLaunchPath(t *testing.T) {
+	cases := []struct{ path, want string }{
+		{"", "/"},
+		{"/", "/"},
+		{"/board", "/board"},
+		{"/a-b/c9", "/a-b/c9"},
+		{"board", "/"},
+		{"/Board", "/"},
+		{"/a b", "/"},
+		{"/a?x=1", "/"},
+		{"/a#frag", "/"},
+		{"//evil", "/"},
+		{"/../x", "/"},
+	}
+	for _, tc := range cases {
+		bridge, err := relay.NewBridge(relay.BridgeConfig{LaunchPath: tc.path})
+		if err != nil {
+			t.Fatalf("NewBridge: %v", err)
+		}
+		url, err := bridge.LaunchURL()
+		bridge.Close()
+		if err != nil {
+			t.Fatalf("LaunchURL(%q): %v", tc.path, err)
+		}
+		prefix := bridge.Origin() + tc.want + "#n="
+		if !strings.HasPrefix(url, prefix) || len(url) == len(prefix) {
+			t.Errorf("LaunchPath %q: got %q, want prefix %q followed by a nonce", tc.path, url, prefix)
+		}
+	}
+}

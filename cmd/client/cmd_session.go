@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/danielckv/agentic-plan-forge/internal/app"
+	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 )
 
@@ -170,16 +172,44 @@ func runWait(ctx context.Context, args []string) int {
 		return code
 	}
 	out, _ := json.Marshal(struct {
-		SessionID     string   `json:"session_id"`
-		State         string   `json:"state"`
-		ArtifactPaths []string `json:"artifact_paths"`
+		SessionID     string               `json:"session_id"`
+		State         string               `json:"state"`
+		ArtifactPaths []string             `json:"artifact_paths"`
+		Validation    planstate.Validation `json:"validation"`
 	}{
 		SessionID:     st.SessionID,
 		State:         string(st.State),
 		ArtifactPaths: st.ArtifactPaths,
+		Validation:    waitValidation(ctx, st.ArtifactPaths),
 	})
 	fmt.Println(string(out))
 	return exitOK
+}
+
+// waitValidationTimeout bounds the scan `wait` runs after approval.
+const waitValidationTimeout = 20 * time.Second
+
+// waitValidation validates the repository derived from the spec artifact path.
+// Approval already happened, so a failure never changes wait's exit code: it
+// reports status UNKNOWN with the run-validate note and zero-valued fields.
+func waitValidation(ctx context.Context, artifactPaths []string) planstate.Validation {
+	unknown := planstate.Validation{
+		Status: string(planstate.StatusUnknown), Pending: []string{}, Drift: []planstate.ValidationDrift{},
+		Notes: []string{"validation timed out; run plan-forge validate"},
+	}
+	if len(artifactPaths) == 0 {
+		return unknown
+	}
+	suffix := filepath.FromSlash("/" + planstate.SpecRel)
+	repo := strings.TrimSuffix(artifactPaths[0], suffix)
+	if repo == artifactPaths[0] || repo == "" {
+		return unknown
+	}
+	v, err := planstate.Validate(ctx, repo, planstate.CheckOptions{ScanTimeout: waitValidationTimeout})
+	if err != nil {
+		return unknown
+	}
+	return v
 }
 
 func runJoin(ctx context.Context, args []string) int {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
@@ -28,6 +29,8 @@ type doctorReport struct {
 	Browser doctorBrowser     `json:"browser"`
 	Hosts   []doctorHost      `json:"hosts"`
 	OCR     map[string]string `json:"ocr"`
+
+	SkillRoots []host.SkillRootView `json:"skill_roots"`
 }
 
 type doctorBrowser struct {
@@ -118,6 +121,18 @@ func runDoctor(ctx context.Context, args []string) int {
 		}
 	}
 
+	var found []string
+	for _, entry := range report.Hosts {
+		if entry.Found {
+			found = append(found, entry.Host)
+		}
+	}
+	repo, _ := os.Getwd()
+	report.SkillRoots = []host.SkillRootView{}
+	if views, serr := host.InspectSkillRoots(found, repo); serr == nil {
+		report.SkillRoots = views
+	}
+
 	if asJSON {
 		raw, err := json.MarshalIndent(report, "", "  ")
 		if err != nil {
@@ -152,7 +167,59 @@ func runDoctor(ctx context.Context, args []string) int {
 		}
 	}
 	fmt.Println()
+	printSkillRoots(os.Stdout, report.SkillRoots)
+	fmt.Println()
 	fmt.Printf("ocr (optional, scanned PDFs only): pdftoppm %s; tesseract %s\n",
 		report.OCR["pdftoppm"], report.OCR["tesseract"])
 	return exitOK
+}
+
+// printSkillRoots lists, per detected host, the skill roots it reads and
+// flags every Plan Forge skill present in more than one of them. Read-only.
+func printSkillRoots(w io.Writer, views []host.SkillRootView) {
+	home, _ := os.UserHomeDir()
+	short := func(p string) string {
+		if home != "" && strings.HasPrefix(p, home+string(os.PathSeparator)) {
+			return "~" + strings.TrimPrefix(p, home)
+		}
+		return p
+	}
+	fmt.Fprintln(w, "skill roots (per host):")
+	anyVisible := false
+	for _, view := range views {
+		label := view.Host
+		if view.Surface != "" {
+			label += " (" + view.Surface + ")"
+		}
+		fmt.Fprintf(w, "  %s reads:\n", label)
+		for _, root := range view.Roots {
+			var parts []string
+			if len(root.Skills) > 0 {
+				parts = append(parts, strings.Join(root.Skills, ", "))
+			}
+			if len(root.Hidden) > 0 {
+				parts = append(parts, strings.Join(root.Hidden, ", ")+": hidden from oh-my-pi (enabled: false)")
+			}
+			present := "no plan-forge skills"
+			if len(parts) > 0 {
+				present = strings.Join(parts, "; ")
+			}
+			fmt.Fprintf(w, "    %s [%s] %s\n", short(root.Path), root.Via, present)
+		}
+		for _, dup := range view.Duplicates {
+			paths := make([]string, len(dup.Paths))
+			for i, p := range dup.Paths {
+				paths[i] = short(p)
+			}
+			if dup.Identical {
+				fmt.Fprintf(w, "    duplicate: %s in %s (identical bodies; OMP collapses them)\n", dup.Name, strings.Join(paths, " and "))
+				continue
+			}
+			anyVisible = true
+			fmt.Fprintf(w, "    DUPLICATE: %s in %s (bodies differ)\n", dup.Name, strings.Join(paths, " and "))
+		}
+	}
+	if anyVisible {
+		fmt.Fprintf(w, "  remedy: %s\n", host.SkillDuplicateRemedy)
+	}
 }
