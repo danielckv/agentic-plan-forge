@@ -1,6 +1,6 @@
 # Command center, live harness telemetry, and the command-only host surface
 
-Status: in progress (2026-10-19). Owner: main session. This is the cross-slice contract every worker codes against.
+Status: implemented (2026-10-19), with all gates green. Owner: main session. This is the cross-slice contract every worker codes against.
 Contracts in this file are fixed. A worker who needs to change a contract stops and reports the request back to the main session.
 Contracts `C1`–`C12` live in [GUI_BOARD_HANDOFF_PLAN.md](GUI_BOARD_HANDOFF_PLAN.md); numbering continues here at `C13`.
 
@@ -203,6 +203,20 @@ authority for requirement text; this file is the authority for the contracts.
 | C19 | PreToolUse spec-drift guard | `REQ-HANDOFF`/`REQ-SEC` |
 | C20 | Session-start auto-launch | `REQ-UI`/`REQ-INSTALL` |
 | C21 | Doctor hook verification | `REQ-INSTALL` |
+
+## What is not finished
+
+Two things are deliberately short of the contract rather than silently absent, and both are open questions
+in the catalogue:
+
+- **C17, `/sprint` titles.** `PlanManifest` carries `TaskDAG` but no epic or story titles: those survive approval only
+  as headings in `synthesized_spec.md`. The view therefore groups by identifier. Parsing the headings back out, or
+  persisting them in the manifest, is undecided.
+- **C16, the Claude-side budget.** `CenterEnsureBound` and `centerReportBound` are declared and the oh-my-pi side is
+  covered by tests that prove the launch is never awaited, but no test asserts the Claude-side wall clock the way
+  `REQ-PERF-001` does for `hook claude`.
+
+Delegating the board's own pid lock to `internal/applock` also remains optional and last, as recorded in C14.
 
 ## Verify (each slice runs its own; the main session runs all)
 
