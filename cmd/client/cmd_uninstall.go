@@ -59,7 +59,7 @@ func runUninstall(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "uninstall: %v\n", err)
 		return exitRuntimeError
 	}
-	opts := host.InstallOptions{Host: hostFlag, Scope: scopeFlag, Repo: repoFlag}
+	opts := host.InstallOptions{Host: hostFlag, Scope: scopeFlag, Repo: repoFlag, DryRun: dryRun}
 	removed, err := installer.Uninstall(opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "uninstall: %v\n", err)

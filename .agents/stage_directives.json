@@ -150,5 +150,41 @@
       "avgMs": 670698,
       "label": "[11m11s, avg: 11m11s]"
     }
+  },
+  {
+    "id": "dir-fgp38e0",
+    "text": "uninstall the local version, let's try to install it like we are showing in the README.md",
+    "stage": "user_asked_in_between",
+    "kind": "instruction",
+    "timestamp": 1792404344387,
+    "sessionOffsetMs": 504029,
+    "lastTriggeredAt": 1792404344387,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "graph",
+        "internal",
+        "web",
+        "s",
+        "a",
+        "src",
+        "scripts",
+        "integrations",
+        "e2e",
+        "README.md",
+        "cmd",
+        "origin"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      504029
+    ],
+    "timeRange": {
+      "minMs": 504029,
+      "maxMs": 504029,
+      "avgMs": 504029,
+      "label": "[8m24s, avg: 8m24s]"
+    }
   }
 ]
