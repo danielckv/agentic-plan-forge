@@ -39,6 +39,7 @@ func managedHandler(t *testing.T, settings map[string]any, event string) map[str
 
 const (
 	newStartCmd   = `"/new/path/plan-forge" hook check-state --repo "$CLAUDE_PROJECT_DIR" --format claude`
+	newCenterCmd  = `"/new/path/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR" --open`
 	newHandoffCmd = `"/new/path/plan-forge" hook claude`
 )
 
@@ -52,6 +53,7 @@ func installedSettings() map[string]any {
 		"SessionStart": []any{map[string]any{"hooks": []any{
 			handler("echo start"),
 			handler(startCmd + " # " + managedMarker),
+			handler(centerCmd + " # " + managedMarker),
 		}}},
 		"PostToolUse": []any{map[string]any{
 			"matcher": claudePostToolUseMatcher,
@@ -79,7 +81,7 @@ func installedSettings() map[string]any {
 
 func TestMergeClaudeHookRefreshesStaleBinaryPath(t *testing.T) {
 	settings := installedSettings()
-	merged, changed, err := mergeClaudeHook(settings, newStartCmd, newHandoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, newStartCmd, newCenterCmd, newHandoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want a refresh", changed, err)
 	}
@@ -119,7 +121,9 @@ func TestMergeClaudeHookRefreshesStaleBinaryPath(t *testing.T) {
 	}
 	start := merged["hooks"].(map[string]any)["SessionStart"].([]any)
 	startHandlers := start[0].(map[string]any)["hooks"].([]any)
-	if len(startHandlers) != 2 || startHandlers[0].(map[string]any)["command"] != "echo start" {
+	// SessionStart carries two managed handlers now: the plan status banner and
+	// the command center launch. The foreign handler keeps its place in front.
+	if len(startHandlers) != 3 || startHandlers[0].(map[string]any)["command"] != "echo start" {
 		t.Errorf("SessionStart foreign handler lost: %v", startHandlers)
 	}
 
@@ -147,7 +151,7 @@ func TestMergeClaudeHookRefreshesStaleBinaryPath(t *testing.T) {
 func TestMergeClaudeHookRefreshIsIdempotentWhenNothingDiffers(t *testing.T) {
 	settings := installedSettings()
 	// First pass with the same commands already present: nothing differs.
-	merged, changed, err := mergeClaudeHook(settings, startCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
 	if err != nil || changed {
 		t.Fatalf("merge with identical commands = changed %v, err %v; want unchanged", changed, err)
 	}
@@ -175,7 +179,7 @@ func legacySettings() map[string]any {
 func TestMergeClaudeHookAddsTimeoutToEveryManagedHandler(t *testing.T) {
 	// Even a legacy install without any timeout field is refreshed.
 	settings := legacySettings()
-	merged, changed, err := mergeClaudeHook(settings, startCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want timeout refresh", changed, err)
 	}
@@ -293,7 +297,7 @@ func postToolUseMatcher(t *testing.T, settings map[string]any) string {
 }
 
 func TestMergeClaudeHookFreshInstallUsesEditMatcher(t *testing.T) {
-	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v", changed, err)
 	}
@@ -304,7 +308,7 @@ func TestMergeClaudeHookFreshInstallUsesEditMatcher(t *testing.T) {
 		t.Error("manual snippet lacks the new matcher")
 	}
 	// Idempotent.
-	_, changed, err = mergeClaudeHook(merged, startCmd, handoffCmd)
+	_, changed, err = mergeClaudeHook(merged, startCmd, centerCmd, handoffCmd)
 	if err != nil || changed {
 		t.Errorf("second merge = changed %v, err %v; want no change", changed, err)
 	}
@@ -319,7 +323,7 @@ func TestMergeClaudeHookUpgradesOldBashMatcherInPlace(t *testing.T) {
 	if got := postToolUseMatcher(t, settings); got != "Bash" {
 		t.Fatalf("fixture matcher = %q", got)
 	}
-	merged, changed, err := mergeClaudeHook(settings, startCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want matcher refresh", changed, err)
 	}
@@ -340,7 +344,7 @@ func TestMergeClaudeHookUpgradesOldBashMatcherInPlace(t *testing.T) {
 	if _, has := merged["hooks"].(map[string]any)["UserPromptSubmit"].([]any)[0].(map[string]any)["matcher"]; has {
 		t.Error("UserPromptSubmit must not gain a matcher")
 	}
-	_, changed, err = mergeClaudeHook(merged, startCmd, handoffCmd)
+	_, changed, err = mergeClaudeHook(merged, startCmd, centerCmd, handoffCmd)
 	if err != nil || changed {
 		t.Errorf("second merge = changed %v, err %v; want idempotent", changed, err)
 	}
@@ -354,7 +358,7 @@ func TestMergeClaudeHookSharedEntryKeepsForeignMatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	merged, changed, err := mergeClaudeHook(settings, startCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want a split", changed, err)
 	}
@@ -390,7 +394,7 @@ func TestMergeClaudeHookSharedEntryKeepsForeignMatcher(t *testing.T) {
 	}
 
 	before := mustJSON(t, merged)
-	again, changed, err := mergeClaudeHook(merged, startCmd, handoffCmd)
+	again, changed, err := mergeClaudeHook(merged, startCmd, centerCmd, handoffCmd)
 	if err != nil || changed {
 		t.Fatalf("second merge = changed %v, err %v; want idempotent", changed, err)
 	}
@@ -404,5 +408,94 @@ func TestMergeClaudeHookSharedEntryKeepsForeignMatcher(t *testing.T) {
 	}
 	if !reflect.DeepEqual(stripped, original) {
 		t.Errorf("uninstall did not restore the foreign entry:\n got %v\nwant %v", stripped, original)
+	}
+}
+
+// SessionStart carries two managed handlers: the plan-status banner and the
+// command center launch. They are separate handlers because check-state
+// returns early when a plan is unchanged and again when there is none, and the
+// dashboard has to open in both of those cases.
+func TestMergeClaudeHookSessionStartCarriesBothHandlers(t *testing.T) {
+	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, handoffCmd)
+	if err != nil || !changed {
+		t.Fatalf("merge = changed %v err %v", changed, err)
+	}
+	start := merged["hooks"].(map[string]any)["SessionStart"].([]any)
+	if len(start) != 1 {
+		t.Fatalf("SessionStart entries = %d, want one managed entry", len(start))
+	}
+	handlers := start[0].(map[string]any)["hooks"].([]any)
+	if len(handlers) != 2 {
+		t.Fatalf("SessionStart handlers = %v, want two", handlers)
+	}
+	for i, want := range []string{startCmd, centerCmd} {
+		got, _ := handlers[i].(map[string]any)["command"].(string)
+		if got != want+" # "+managedMarker {
+			t.Errorf("handler %d = %q, want %q", i, got, want)
+		}
+		if !entryHasMarker(handlers[i], claudeCommandKey) {
+			t.Errorf("handler %d carries no managed marker", i)
+		}
+	}
+}
+
+// Upgrading an install that predates the command center adds the second
+// handler in place rather than appending a second managed entry.
+func TestMergeClaudeHookUpgradesASingleHandlerInstall(t *testing.T) {
+	handler := func(cmd string) map[string]any {
+		return map[string]any{"type": "command", "command": cmd, "timeout": claudeHookTimeout}
+	}
+	old := roundTrip(t, map[string]any{"hooks": map[string]any{
+		"SessionStart": []any{map[string]any{"hooks": []any{
+			handler(startCmd + " # " + managedMarker),
+		}}},
+	}})
+	merged, changed, err := mergeClaudeHook(old, startCmd, centerCmd, handoffCmd)
+	if err != nil || !changed {
+		t.Fatalf("upgrade = changed %v err %v", changed, err)
+	}
+	if got := managedCount(t, merged, "SessionStart"); got != 1 {
+		t.Errorf("managed SessionStart entries = %d, want 1", got)
+	}
+	start := merged["hooks"].(map[string]any)["SessionStart"].([]any)
+	if handlers := start[0].(map[string]any)["hooks"].([]any); len(handlers) != 2 {
+		t.Errorf("handlers after upgrade = %v, want two", handlers)
+	}
+
+	// And it settles: a second pass changes nothing.
+	again, changed, err := mergeClaudeHook(roundTrip(t, merged), startCmd, centerCmd, handoffCmd)
+	if err != nil {
+		t.Fatalf("second pass: %v", err)
+	}
+	if changed {
+		t.Error("the upgrade is not idempotent")
+	}
+	_ = again
+}
+
+// Uninstall iterates claudeHookEvents, so the command center handler is
+// stripped with the rest and leaves no managed residue behind.
+func TestSplitManagedHookRemovesBothSessionStartHandlers(t *testing.T) {
+	merged, _, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, handoffCmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stripped, ours, err := splitManagedHook(raw)
+	if err != nil || !ours {
+		t.Fatalf("split = ours %v err %v", ours, err)
+	}
+	encoded, err := json.Marshal(stripped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte(managedMarker)) {
+		t.Errorf("managed residue after uninstall: %s", encoded)
+	}
+	if bytes.Contains(encoded, []byte("center ensure")) {
+		t.Errorf("the command center handler survived uninstall: %s", encoded)
 	}
 }

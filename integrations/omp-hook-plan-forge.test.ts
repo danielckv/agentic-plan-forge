@@ -506,8 +506,12 @@ test("pi.exec receives timeout + signal; a hung child is aborted and the race ti
     await fast.handlers.get("session_start")![0]({}, new FakeCtx());
     assert.equal(handles.length, 1);
     assert.ok(cleared.includes(handles[0]), "race timer cleared after exec settles");
-    assert.equal(fast.execOptions[0]?.timeout, 12345);
-    assert.ok(fast.execOptions[0]?.signal instanceof AbortSignal);
+    // session_start also fires `center ensure` on its own budget, so find the
+    // check-state call rather than assuming it is the first exec.
+    const checkState = fast.execCalls.findIndex((a) => a[0] === "hook" && a[1] === "check-state");
+    assert.ok(checkState >= 0, "check-state was not invoked");
+    assert.equal(fast.execOptions[checkState]?.timeout, 12345);
+    assert.ok(fast.execOptions[checkState]?.signal instanceof AbortSignal);
   } finally {
     globalThis.setTimeout = realSet;
     globalThis.clearTimeout = realClear;
@@ -517,8 +521,10 @@ test("pi.exec receives timeout + signal; a hung child is aborted and the race ti
   const hung = new FakePi(() => new Promise<never>(() => {}));
   createHook(hung, { ...makeDeps(), execTimeoutMs: 20 });
   await hung.handlers.get("session_start")![0]({}, new FakeCtx());
-  assert.equal(hung.execOptions[0]?.timeout, 20);
-  assert.equal(hung.execOptions[0]?.signal?.aborted, true, "hung child aborted on timeout");
+  const hungIdx = hung.execCalls.findIndex((a) => a[0] === "hook" && a[1] === "check-state");
+  assert.ok(hungIdx >= 0, "check-state was not invoked");
+  assert.equal(hung.execOptions[hungIdx]?.timeout, 20);
+  assert.equal(hung.execOptions[hungIdx]?.signal?.aborted, true, "hung child aborted on timeout");
 });
 
 test("board sync: overlapping ticks are skipped while a pull is in flight", async () => {
@@ -849,4 +855,43 @@ test("handoff prompt carries the board report/discover/Coordinator instructions"
   assert.match(prompt, /board discover --title/);
   assert.match(prompt, /`Coordinator:` line/);
   assert.equal(activityCalls(pi).length, 0, "a bash wait is not an edit");
+});
+
+test("session_start: the command center is ensured with the session's repo", async () => {
+  const pi = new FakePi((args) =>
+    args[0] === "center"
+      ? { code: 0, stdout: "", stderr: "" }
+      : { code: 0, stdout: "banner", stderr: "" },
+  );
+  createHook(pi, makeDeps());
+  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
+
+  const ensure = pi.execCalls.find((a) => a[0] === "center");
+  assert.deepEqual(ensure, ["center", "ensure", "--repo", "/repo", "--open"]);
+  // The banner still arrives: the launch runs beside it, not before it.
+  assert.equal(pi.messages.length, 1);
+});
+
+test("session_start: a failing command center never blocks the banner", async () => {
+  const pi = new FakePi((args) => {
+    if (args[0] === "center") return Promise.reject(new Error("no daemon"));
+    return { code: 0, stdout: "banner", stderr: "" };
+  });
+  createHook(pi, makeDeps());
+  // An unhandled rejection here would fail the run, so the assertion is that
+  // this resolves at all.
+  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
+  await new Promise((r) => setImmediate(r));
+  assert.equal(pi.messages.length, 1);
+});
+
+test("session_start: the command center launch is not awaited", async () => {
+  // A launch that never settles must not hold the session start open.
+  const pi = new FakePi((args) => {
+    if (args[0] === "center") return new Promise<never>(() => {});
+    return { code: 0, stdout: "banner", stderr: "" };
+  });
+  createHook(pi, makeDeps());
+  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
+  assert.equal(pi.messages.length, 1, "the banner was blocked by the launch");
 });

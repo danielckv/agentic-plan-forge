@@ -35,6 +35,8 @@ export interface HookDeps {
   waitMaxMs?: number;
   waitFastMs?: number;
   waitRetryDelayMs?: number;
+  /** Budget for the command center launch; tests shrink it. */
+  centerEnsureMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -94,6 +96,7 @@ export const defaultDeps: HookDeps = {
   execTimeoutMs: 60_000,
   syncIntervalMs: 4_000,
   waitTimeout: "50s",
+  centerEnsureMs: 3_000,
 };
 
 const WAIT_MAX_MS = 6 * 60 * 60 * 1000;
@@ -526,6 +529,15 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
 
   pi.on("session_start", async (_event: unknown, ctx: CtxLike) => {
     state.shutdown = false;
+    // Start the command center and open a tab, without awaiting it: the status
+    // banner below can take a moment, and the dashboard must not wait for it.
+    // `center ensure` opens nothing when a tab is already connected, and exits
+    // 0 whatever happens, so a failure here is silent by design.
+    void execPlanForge(
+      pi,
+      ["center", "ensure", "--repo", ctx.cwd, "--open"],
+      deps.centerEnsureMs ?? 3_000,
+    ).catch(() => undefined);
     try {
       const res = await execPlanForge(
         pi,

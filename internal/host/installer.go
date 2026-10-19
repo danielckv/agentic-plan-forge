@@ -112,6 +112,7 @@ type artifact struct {
 	kind    manifestKind
 	content string
 	handoff string
+	center  string
 	patch   *patchRecord
 }
 
@@ -379,7 +380,7 @@ func claudeTargets(scope string) []string {
 	if scope == "project" {
 		return []string{".claude/skills/plan-forge, plan-config, plan-forge-board"}
 	}
-	return []string{"~/.claude/skills/plan-forge, plan-config, plan-forge-board, SessionStart/PostToolUse/UserPromptSubmit hooks"}
+	return []string{"~/.claude/skills/plan-forge, plan-config, plan-forge-board, SessionStart (status + command center)/PostToolUse/UserPromptSubmit hooks"}
 }
 
 func ompTargets(scope string) []string {
@@ -434,12 +435,14 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 	if opts.Scope == "user" {
 		hookCommand := strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", in.bin)
 		handoffCommand := strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)
+		centerCommand := strings.ReplaceAll(claudeCenterCommand, "{{PLAN_FORGE_BIN}}", in.bin)
 		arts = append(arts, artifact{
 			path:    filepath.Join(root, "settings.json"),
 			host:    string(KindClaude),
 			kind:    kindSettings,
 			content: hookCommand,
 			handoff: handoffCommand,
+			center:  centerCommand,
 			patch:   &patchRecord{Anchor: "hooks.SessionStart"},
 		})
 	}
@@ -935,7 +938,7 @@ func (in *Installer) applySettings(art artifact, prev manifestRow, opts InstallO
 	var merged map[string]any
 	var changed bool
 	if art.host == string(KindClaude) {
-		merged, changed, err = mergeClaudeHook(settings, art.content, art.handoff)
+		merged, changed, err = mergeClaudeHook(settings, art.content, art.center, art.handoff)
 	} else {
 		merged, changed, err = mergeAGYHook(settings, art.content)
 	}
