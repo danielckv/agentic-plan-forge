@@ -123,7 +123,7 @@ Windows (PowerShell 5.1 or later):
 Restart your agent afterwards, then type `/plan-forge`. Restarting matters because agents scan their skill directories at
 start-up. If the install directory is not on your `PATH`, the installer prints the exact line to add.
 
-The one-command install fetches the latest published release, which does not yet contain the work added after `0.1.1` and listed under Unreleased in [CHANGELOG.md](CHANGELOG.md); to use that work now, [build from source](#build-from-source) and run `plan-forge install`.
+The one-command install fetches the latest published release, which does not yet contain the work added after `0.1.1` and listed under Unreleased in [CHANGELOG.md](CHANGELOG.md). The window fixes under Unreleased → Fixed are equally absent from `v0.1.1`, so its window still shows the blank-page and handshake failures those entries describe; [build from source](#build-from-source) and run `plan-forge install` until the next tag.
 
 ### What gets installed
 
@@ -136,16 +136,19 @@ installed agents and writes the skills:
 | OMP | `~/.omp/agent/skills/plan-forge/SKILL.md`, `~/.omp/agent/skills/plan-config/SKILL.md`, `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
 
-**OMP and duplicate skills.** Plan Forge marks the Claude copies of its skills `enabled: false`, which oh-my-pi's skill scanners skip, so oh-my-pi never lists the skill twice even when `~/.claude/skills` is in `skills.customDirectories` or a foreign provider is enabled; Claude Code ignores the key. `/plan-forge` in oh-my-pi comes from its own `~/.omp/agent/skills` copy plus the command the hook registers. If another unmarked copy still clashes, `plan-forge install` and `plan-forge doctor` warn with both paths; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
+**Current tree, unreleased.** The `plan-forge-board` skill and the `/plan-forge-board` command in the Claude Code and OMP rows, and the board hook entries listed below, exist only in the current tree; `v0.1.1` installs none of them. [Build from source](#build-from-source) to use the board before the next tag.
+
+**OMP and duplicate skills.** Plan Forge marks the Claude copies of its skills `enabled: false`, which oh-my-pi's skill scanners skip, so those copies stay hidden even when `~/.claude/skills` is in `skills.customDirectories` or a foreign provider is enabled; Claude Code ignores the key. That hiding is the whole guarantee: a copy oh-my-pi reads from any other root can still surface twice, because nothing else deduplicates across roots. `/plan-forge` in oh-my-pi comes from its own `~/.omp/agent/skills` copy plus the command the hook registers; a probe on this machine lists exactly one `skill:plan-forge`. `plan-forge doctor` lists the roots each host reads and flags a duplicate, and `plan-forge install` warns with both paths; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
 
 Hooks are registered where the host supports them:
 
-- Claude Code: `SessionStart` reports a plan that changed since your last session. `PostToolUse` (Bash) moves the agent
+- Claude Code: `SessionStart` reports a plan that changed since your last session. `PostToolUse` (matcher
+  `Bash|Edit|Write|MultiEdit|NotebookEdit`) moves the agent
   into Plan Mode after an approval. `PostToolUse` and `UserPromptSubmit` deliver board edits. All three entries in
   `~/.claude/settings.json` carry a `plan-forge managed` marker, and uninstall removes only those entries.
 - OMP: the hook reports plan status at session start, runs the forge from `/plan-forge`, opens the board from
   `/plan-forge-board`, and pushes board edits into the live session.
-- Antigravity: user-scope installs merge a `SessionStart` plan-status entry, carrying the same `plan-forge managed` marker, into `~/.gemini/config/hooks.json`.
+- Antigravity: user-scope installs merge a `SessionStart` plan-status entry, carrying the same `plan-forge managed` marker, into `~/.gemini/config/hooks.json`; whether Antigravity loads that layout is unverified.
 
 Project-scope installs (`--scope project`) write into the repository instead and are opt-in, because those directories
 are usually machine-local and should not be committed.
@@ -217,6 +220,8 @@ and a shortcut sheet (`?`):
 
 ### Plan Mode handoff and validation
 
+*Current tree, unreleased: the handoff and `plan-forge validate` are not in `v0.1.1`; [build from source](#build-from-source).*
+
 Approving writes the plan, and the window shows each handoff step before it closes.
 
 1. `plan-forge wait` returns the approval with a `validation` result. The validation checks that the plan is approved on this machine, that it has not drifted from the repository, and how many AST targets already exist.
@@ -238,6 +243,8 @@ plan-forge validate --json
 
 ### Plan board
 
+*Current tree, unreleased: `/plan-forge-board`, the live board and the Graph view are not in `v0.1.1`; [build from source](#build-from-source).*
+
 Type `/plan-forge-board` in Claude Code or OMP after a plan is approved. The Plan-Forge window opens on a live board.
 
 - Tasks are laid out as To do, In progress, Done and Drifted, from evidence in the code. Cards move as the agent works.
@@ -247,9 +254,9 @@ Type `/plan-forge-board` in Claude Code or OMP after a plan is approved. The Pla
 - The approved manifest is never modified. Edits live in a machine-local overlay in the Plan-Forge cache.
 - The board header has a `Board | Graph` switch. The Graph view draws the plan as task nodes with dependency edges,
   colored by live state; tasks the plan did not contain use a dashed style.
-- A coordinator moves cards in real time from what the agent actually does — file edits, `board report` calls, and
-  verification receipts — not only from the periodic AST scan. A coordinator panel on the right lists Active now and
-  Up next.
+- A coordinator moves cards in real time from what the agent actually does — file edits and `board report` calls —
+  not only from the periodic AST scan. Verification receipts count as plan evidence through that periodic evidence
+  scan; nothing records them on the board directly. A coordinator panel on the right lists Active now and Up next.
 - The Graph also shows discovered items: tasks and repository paths the agent touched that no planned target covers.
   Each stays proposed until you accept or dismiss it; nothing enters the plan automatically.
 - Host capture is automatic: the Claude `PostToolUse` hook covers `Bash|Edit|Write|MultiEdit|NotebookEdit`, and the

@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mermaid diagrams render again in the built bundle. `gen-validators.mjs` hoisted Ajv's CommonJS `ucs2length` helper as an ES default import. Rolldown resolved that import to the module object, so every validator with a string length bound threw `is not a function`, and drafts never reached the store. The generator now unwraps the CommonJS default, and `web/src/validators.bundle.test.ts` guards the built bundle.
 - `plan-forge uninstall --dry-run` no longer deletes files, and a reinstall after uninstall no longer stops at exit 5 on the stripped `settings.json`. `--force` re-merges `settings.json` instead of overwriting it.
 - The managed Claude hooks refresh a stale binary path: when the Plan-Forge binary moves, the merged hook entries in `~/.claude/settings.json` are updated to the current path instead of pointing at the old one.
-- The managed hooks now carry an explicit 5 s timeout, so a slow or stuck hook call can no longer stall the host.
+- The managed Claude hooks now carry an explicit 5 s timeout (the Antigravity `SessionStart` entry carries 2 s), so a slow or stuck hook call can no longer stall the host.
 
 ### Added
 
@@ -37,7 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Edits are stored in a machine-local overlay and never in the approved manifest.
   - Edits reach the agent through OMP `pi.sendMessage` and through Claude `UserPromptSubmit`/`PostToolUse` hook context. `plan-forge board pull` serves both.
 - A coordinator moves tasks across the board in real time from agent-harness activity — file edits captured by the
-  host hooks, `plan-forge board report` calls, and verification receipts — not only from the periodic AST scan. The
+  host hooks and `plan-forge board report` calls — not only from the periodic AST scan. Verification receipts count
+  as plan evidence through that periodic evidence scan: `plan-forge verify` records nothing on the board. The
   snapshot exposes live columns and an `awaiting_verification` flag, an Up-next queue feeds a `Coordinator:` line
   delivered to the agent when its head changes, and the board window shows a coordinator panel with Active now and
   Up next.
