@@ -303,6 +303,25 @@ All of these are hook-safe: an invalid flag exits 2; any other failure prints no
 - Delivery is at-least-once: `board pull` peeks, renders, and acknowledges only after a successful write.
 - The Windows cross-`go vet` cannot run on this machine (tree-sitter needs cgo); CI covers it.
 
+## Requirements traceability
+
+The table maps each contract to the requirement areas of the catalogue in `docs/requirements/PLAN_FORGE_REQUIREMENTS.md`. The catalogue is the authority for the requirement text, and this file is the authority for the contracts.
+
+| Contract | Subject | Requirement areas |
+|:--|:--|:--|
+| C1 | Validation (`plan-forge validate`) | `REQ-RELEASE`/`REQ-HANDOFF` |
+| C2 | `plan-forge wait` enrichment | `REQ-HANDOFF` |
+| C3 | Board overlay store (`internal/board`) | `REQ-BOARD` |
+| C4 | Board CLI | `REQ-BOARD` |
+| C5 | Board HTTP API and window | `REQ-BOARD` |
+| C6 | Claude Code integration | `REQ-HANDOFF`/`REQ-INSTALL` |
+| C7 | OMP integration (`integrations/omp-hook-plan-forge.ts`) | `REQ-HANDOFF`/`REQ-COORD` |
+| C8 | Web | `REQ-UI` |
+| C9 | Overlay store v2 (`internal/board`) | `REQ-COORD` |
+| C10 | Board CLI additions (`cmd/client/cmd_board.go`) | `REQ-COORD`/`REQ-BOARD` |
+| C11 | HTTP and snapshot additions (`internal/app/board.go`) | `REQ-COORD`/`REQ-BOARD` |
+| C12 | Harness capture and Graph view | `REQ-COORD`/`REQ-GRAPH` |
+
 ## Verify (each slice runs its own; the main session runs all)
 
 - Web: `npm --prefix web run lint && npm --prefix web run typecheck && npm --prefix web test && npm --prefix web run build`

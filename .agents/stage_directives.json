@@ -186,5 +186,64 @@
       "avgMs": 504029,
       "label": "[8m24s, avg: 8m24s]"
     }
+  },
+  {
+    "id": "dir-phxm5ji",
+    "text": "orchestrate all todos in parallel",
+    "stage": "subagents_running",
+    "kind": "instruction",
+    "timestamp": 1792405725154,
+    "sessionOffsetMs": 999923,
+    "lastTriggeredAt": 1792405725154,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "scripts",
+        "commands",
+        "hooks",
+        "internal",
+        "cmd",
+        "web",
+        "docs",
+        "integrations"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      999923
+    ],
+    "timeRange": {
+      "minMs": 999923,
+      "maxMs": 999923,
+      "avgMs": 999923,
+      "label": "[16m40s, avg: 16m40s]"
+    }
+  },
+  {
+    "id": "dir-62b9a99",
+    "text": "git add+commit+push; cleanup workspace, make sure all merge to main, cleanup branches and work-trees to one branch and delete it afterwards;",
+    "stage": "subagents_running",
+    "kind": "instruction",
+    "timestamp": 1792405884340,
+    "sessionOffsetMs": 146196,
+    "lastTriggeredAt": 1792405884340,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "CHANGELOG.md",
+        "README.md",
+        "docs"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      146196
+    ],
+    "timeRange": {
+      "minMs": 146196,
+      "maxMs": 146196,
+      "avgMs": 146196,
+      "label": "[2m26s, avg: 2m26s]"
+    }
   }
 ]

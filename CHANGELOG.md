@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - toasts for transient notices, a keyboard shortcut sheet (`?`), and route and accordion motion that honours `prefers-reduced-motion`
   - on Page 3: scroll-spy contents, a filterable task matrix with expand/collapse all, copy buttons on verification commands, and full-screen diagrams with a source view
   - a layout that holds from 1024×700 up
+- The requirements catalogue and the master-plan audit, added under `docs/requirements/`.
 
 ### Changed
 

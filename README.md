@@ -101,6 +101,9 @@ schedule based on declared parallelism. Estimates are labelled as estimates unle
 Plan Forge never asks for or stores provider API keys. It uses the credentials and configuration your host agent already
 has.
 
+The table above lists runtime prerequisites. The project's own requirements catalogue and the audit of the master plan live in `docs/requirements/`.
+The catalogue carries the owner, the acceptance criteria and the traceability for every requirement.
+
 ## Install
 
 ### One command
@@ -120,6 +123,8 @@ Windows (PowerShell 5.1 or later):
 Restart your agent afterwards, then type `/plan-forge`. Restarting matters because agents scan their skill directories at
 start-up. If the install directory is not on your `PATH`, the installer prints the exact line to add.
 
+The one-command install fetches the latest published release, which does not yet contain the work added after `0.1.1` and listed under Unreleased in [CHANGELOG.md](CHANGELOG.md); to use that work now, [build from source](#build-from-source) and run `plan-forge install`.
+
 ### What gets installed
 
 The installer verifies the release checksum, places the binary, then runs `plan-forge install --host auto`, which detects
@@ -128,8 +133,8 @@ installed agents and writes the skills:
 | Host | Skill files | Slash commands |
 | :--- | :--- | :--- |
 | Claude Code | `~/.claude/skills/plan-forge/SKILL.md`, `~/.claude/skills/plan-config/SKILL.md` and `~/.claude/skills/plan-forge-board/SKILL.md` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
-| OMP | `~/.omp/agent/skills/plan-forge/SKILL.md`, `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
-| Antigravity | `~/.gemini/antigravity-cli/skills/plan-forge/SKILL.md` and `~/.gemini/config/skills/plan-forge/SKILL.md` | `/plan-forge`, `/plan-config` |
+| OMP | `~/.omp/agent/skills/plan-forge/SKILL.md`, `~/.omp/agent/skills/plan-config/SKILL.md`, `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
+| Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
 
 **OMP and duplicate skills.** Plan Forge marks the Claude copies of its skills `enabled: false`, which oh-my-pi's skill scanners skip, so oh-my-pi never lists the skill twice even when `~/.claude/skills` is in `skills.customDirectories` or a foreign provider is enabled; Claude Code ignores the key. `/plan-forge` in oh-my-pi comes from its own `~/.omp/agent/skills` copy plus the command the hook registers. If another unmarked copy still clashes, `plan-forge install` and `plan-forge doctor` warn with both paths; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
 
@@ -140,6 +145,7 @@ Hooks are registered where the host supports them:
   `~/.claude/settings.json` carry a `plan-forge managed` marker, and uninstall removes only those entries.
 - OMP: the hook reports plan status at session start, runs the forge from `/plan-forge`, opens the board from
   `/plan-forge-board`, and pushes board edits into the live session.
+- Antigravity: user-scope installs merge a `SessionStart` plan-status entry, carrying the same `plan-forge managed` marker, into `~/.gemini/config/hooks.json`.
 
 Project-scope installs (`--scope project`) write into the repository instead and are opt-in, because those directories
 are usually machine-local and should not be committed.
@@ -245,7 +251,7 @@ Type `/plan-forge-board` in Claude Code or OMP after a plan is approved. The Pla
   verification receipts — not only from the periodic AST scan. A coordinator panel on the right lists Active now and
   Up next.
 - The Graph also shows discovered items: tasks and repository paths the agent touched that no planned target covers.
-  You accept or dismiss each one; nothing enters the plan automatically.
+  Each stays proposed until you accept or dismiss it; nothing enters the plan automatically.
 - Host capture is automatic: the Claude `PostToolUse` hook covers `Bash|Edit|Write|MultiEdit|NotebookEdit`, and the
   OMP hook covers its edit/write tools.
 
