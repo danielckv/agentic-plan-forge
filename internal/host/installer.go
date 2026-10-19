@@ -985,6 +985,12 @@ func writeExcl(path string, content []byte) error {
 }
 
 // backup stores pre-image content under PlanForgeHome()/backups/<sha256>/.
+//
+// The path is the content hash of the pre-image, so preserving the same
+// content twice names the same file. A second preservation is therefore
+// success, not a conflict: an uninstall or install that runs again over an
+// unchanged settings file keeps the pre-image it already has. Any other
+// existing file is a real conflict and fails closed.
 func backup(raw []byte) error {
 	dir, err := backupPath(sha256Hex(raw))
 	if err != nil {
@@ -993,7 +999,16 @@ func backup(raw []byte) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	return writeExcl(filepath.Join(dir, "pre"), raw)
+	path := filepath.Join(dir, "pre")
+	err = writeExcl(path, raw)
+	if errors.Is(err, os.ErrExist) {
+		existing, readErr := os.ReadFile(path)
+		if readErr == nil && bytes.Equal(existing, raw) {
+			return nil
+		}
+		return err
+	}
+	return err
 }
 
 // applyGitHook appends the managed block to the post-merge hook, creating the

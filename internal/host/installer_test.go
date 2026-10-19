@@ -908,3 +908,55 @@ func TestOMPDuplicateWarningSilentOnceForeignCopiesAreMarked(t *testing.T) {
 		t.Errorf("unmarked copies produced %v, want one warning", lines)
 	}
 }
+
+// TestBackupIsIdempotentForTheSamePreImage covers the upgrade path: the backup
+// path is the content hash of the pre-image, so preserving unchanged content a
+// second time names the same file and must be success, not a conflict.
+func TestBackupIsIdempotentForTheSamePreImage(t *testing.T) {
+	newTestInstaller(t)
+	raw := []byte("{\n  \"hooks\": {}\n}\n")
+	if err := backup(raw); err != nil {
+		t.Fatalf("first backup: %v", err)
+	}
+	if err := backup(raw); err != nil {
+		t.Fatalf("second backup of the same pre-image: %v", err)
+	}
+	dir, err := backupPath(sha256Hex(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := filepath.Join(dir, "pre")
+	got, err := os.ReadFile(pre)
+	if err != nil {
+		t.Fatalf("read preserved pre-image: %v", err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Errorf("preserved content = %q, want %q", got, raw)
+	}
+	if info, err := os.Stat(pre); err != nil {
+		t.Fatal(err)
+	} else if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("backup mode = %o, want 600", perm)
+	}
+	// A tampered or foreign file at that path is still a conflict.
+	writeFile(t, pre, "not the pre-image")
+	if err := backup(raw); err == nil {
+		t.Error("backup accepted a path holding different content")
+	}
+}
+
+// TestUninstallTwiceSucceeds is the real scenario: uninstall leaves the
+// settings file stripped, so the second uninstall preserves the same pre-image
+// it already has. It used to fail with "pre: file exists".
+func TestUninstallTwiceSucceeds(t *testing.T) {
+	in, _, arts := dupFixture(t)
+	opts := InstallOptions{Scope: "user", Host: "all"}
+	if err := in.Apply(arts, opts); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	for attempt := 1; attempt <= 2; attempt++ {
+		if _, err := in.Uninstall(InstallOptions{Host: "claude"}); err != nil {
+			t.Fatalf("uninstall attempt %d: %v", attempt, err)
+		}
+	}
+}
