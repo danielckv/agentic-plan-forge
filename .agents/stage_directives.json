@@ -1,465 +1,54 @@
 [
   {
-    "id": "dir-xubxb0p",
-    "text": "all the changes here are ready and done? i want also to add an option to deploy the rely server to GCP's Run function as a server for sharing plans",
-    "stage": "user_asked_in_between",
-    "kind": "instruction",
-    "timestamp": 1792267045587,
-    "sessionOffsetMs": 37171,
-    "lastTriggeredAt": 1792267045587,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "integrations",
-        "internal"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      37171
-    ],
-    "timeRange": {
-      "minMs": 37171,
-      "maxMs": 37171,
-      "avgMs": 37171,
-      "label": "[37.2s, avg: 37.2s]"
-    }
-  },
-  {
-    "id": "dir-3qaa5yb",
-    "text": "there is another agent that might update something here, keep it part of the current work;",
-    "stage": "user_added_to_queue",
-    "kind": "instruction",
-    "timestamp": 1792267472568,
-    "sessionOffsetMs": 140886,
-    "lastTriggeredAt": 1792267472568,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
-        "integrations"
-      ]
-    },
-    "triggerCount": 2,
-    "historicalOffsets": [
-      140886,
-      297441
-    ],
-    "timeRange": {
-      "minMs": 140886,
-      "maxMs": 297441,
-      "avgMs": 219164,
-      "label": "[2m21s-4m57s, avg: 3m39s]"
-    }
-  },
-  {
-    "id": "dir-3utdz2d",
-    "text": "the script should build via GCP Cloud build the right folder (of course, give the user a selection options)",
-    "stage": "subagents_running",
-    "kind": "instruction",
-    "timestamp": 1792267219679,
-    "sessionOffsetMs": 44552,
-    "lastTriggeredAt": 1792267219679,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "integrations",
-        "internal"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      44552
-    ],
-    "timeRange": {
-      "minMs": 44552,
-      "maxMs": 44552,
-      "avgMs": 44552,
-      "label": "[44.6s, avg: 44.6s]"
-    }
-  },
-  {
-    "id": "dir-tio1qjy",
-    "text": "the script should build via GCP Cloud build the right folder (of course, give the user a selection options)",
+    "id": "dir-oadw5rw",
+    "text": "let's improve the GUI - enhance the UI & UX, make it more fluent, flexible but also nicer; make sure once plan is ready from the forge -> it turn automatically the agent harness's \"/plan\" mode and triggers validation;",
     "stage": "end_of_session",
     "kind": "instruction",
-    "timestamp": 1792267219780,
-    "sessionOffsetMs": 44653,
-    "lastTriggeredAt": 1792267219780,
+    "timestamp": 1792397542548,
+    "sessionOffsetMs": 65519,
+    "lastTriggeredAt": 1792397542548,
     "context": {
       "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "integrations",
-        "internal"
-      ]
+      "paths": []
     },
     "triggerCount": 1,
     "historicalOffsets": [
-      44653
+      65519
     ],
     "timeRange": {
-      "minMs": 44653,
-      "maxMs": 44653,
-      "avgMs": 44653,
-      "label": "[44.7s, avg: 44.7s]"
+      "minMs": 65519,
+      "maxMs": 65519,
+      "avgMs": 65519,
+      "label": "[1m6s, avg: 1m6s]"
     }
   },
   {
-    "id": "dir-m9drxe3",
-    "text": "and use the image in the Cloud Run;",
-    "stage": "subagents_running",
-    "kind": "constraint",
-    "timestamp": 1792267231166,
-    "sessionOffsetMs": 56039,
-    "lastTriggeredAt": 1792267231166,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "integrations",
-        "internal"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      56039
-    ],
-    "timeRange": {
-      "minMs": 56039,
-      "maxMs": 56039,
-      "avgMs": 56039,
-      "label": "[56.0s, avg: 56.0s]"
-    }
-  },
-  {
-    "id": "dir-fl71nm0",
-    "text": "and use the image in the Cloud Run;",
+    "id": "dir-3az9fwe",
+    "text": "also, i want to use the \"board\" '/plan-forge-board' where i can see the tasks dynamically spread, decide whether i should give high priority or update the context e.g. it must use in this case only oh-my-pi and claude internal apis integration for better control;",
     "stage": "user_added_to_queue",
     "kind": "constraint",
-    "timestamp": 1792267470094,
-    "sessionOffsetMs": 294967,
-    "lastTriggeredAt": 1792267470094,
+    "timestamp": 1792397670962,
+    "sessionOffsetMs": 193933,
+    "lastTriggeredAt": 1792397670962,
     "context": {
       "branch": "main",
       "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
-        "integrations"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      294967
-    ],
-    "timeRange": {
-      "minMs": 294967,
-      "maxMs": 294967,
-      "avgMs": 294967,
-      "label": "[4m55s, avg: 4m55s]"
-    }
-  },
-  {
-    "id": "dir-5s5c16a",
-    "text": "there is another agent that might update something here, keep it part of the current work;",
-    "stage": "end_of_session",
-    "kind": "instruction",
-    "timestamp": 1792267472937,
-    "sessionOffsetMs": 297810,
-    "lastTriggeredAt": 1792267472937,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
-        "integrations"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      297810
-    ],
-    "timeRange": {
-      "minMs": 297810,
-      "maxMs": 297810,
-      "avgMs": 297810,
-      "label": "[4m58s, avg: 4m58s]"
-    }
-  },
-  {
-    "id": "dir-gc1z64v",
-    "text": "the other agent finished his work",
-    "stage": "user_added_to_queue",
-    "kind": "instruction",
-    "timestamp": 1792267589907,
-    "sessionOffsetMs": 414780,
-    "lastTriggeredAt": 1792267589907,
-    "context": {
-      "branch": "detached",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
+        "web",
         "integrations",
-        "web"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      414780
-    ],
-    "timeRange": {
-      "minMs": 414780,
-      "maxMs": 414780,
-      "avgMs": 414780,
-      "label": "[6m55s, avg: 6m55s]"
-    }
-  },
-  {
-    "id": "dir-wkj7quu",
-    "text": "the other agent finished his work",
-    "stage": "end_of_session",
-    "kind": "instruction",
-    "timestamp": 1792267628914,
-    "sessionOffsetMs": 453787,
-    "lastTriggeredAt": 1792267628914,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
         "internal",
-        "integrations",
-        "web"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      453787
-    ],
-    "timeRange": {
-      "minMs": 453787,
-      "maxMs": 453787,
-      "avgMs": 453787,
-      "label": "[7m34s, avg: 7m34s]"
-    }
-  },
-  {
-    "id": "dir-403wugg",
-    "text": "yes push and cut v0.1.1",
-    "stage": "user_added_to_queue",
-    "kind": "instruction",
-    "timestamp": 1792267632372,
-    "sessionOffsetMs": 457245,
-    "lastTriggeredAt": 1792267632372,
-    "context": {
-      "branch": "main",
-      "paths": [
         "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
-        "integrations",
-        "web"
+        "scripts"
       ]
     },
     "triggerCount": 1,
     "historicalOffsets": [
-      457245
+      193933
     ],
     "timeRange": {
-      "minMs": 457245,
-      "maxMs": 457245,
-      "avgMs": 457245,
-      "label": "[7m37s, avg: 7m37s]"
-    }
-  },
-  {
-    "id": "dir-jyu7z0a",
-    "text": "make sure that other's agent work is also committed - it's important!!!!",
-    "stage": "user_added_to_queue",
-    "kind": "instruction",
-    "timestamp": 1792267709735,
-    "sessionOffsetMs": 534608,
-    "lastTriggeredAt": 1792267709735,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
-        "integrations",
-        "web"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      534608
-    ],
-    "timeRange": {
-      "minMs": 534608,
-      "maxMs": 534608,
-      "avgMs": 534608,
-      "label": "[8m55s, avg: 8m55s]"
-    }
-  },
-  {
-    "id": "dir-kc8zwgd",
-    "text": "make sure that other's agent work is also committed - it's important!!!!",
-    "stage": "end_of_session",
-    "kind": "instruction",
-    "timestamp": 1792267953249,
-    "sessionOffsetMs": 778122,
-    "lastTriggeredAt": 1792267953249,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
-        "integrations",
-        "web"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      778122
-    ],
-    "timeRange": {
-      "minMs": 778122,
-      "maxMs": 778122,
-      "avgMs": 778122,
-      "label": "[12m58s, avg: 12m58s]"
-    }
-  },
-  {
-    "id": "dir-jz689fi",
-    "text": "make sure all is professional for public repo, and make sure all the branches + work-trees are merged;",
-    "stage": "user_added_to_queue",
-    "kind": "instruction",
-    "timestamp": 1792268218444,
-    "sessionOffsetMs": 1043317,
-    "lastTriggeredAt": 1792268218444,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "cmd",
-        "deploy",
-        "scripts",
-        "docs",
-        "agent:",
-        "README.md",
-        "roles",
-        "CHANGELOG.md",
-        "tests",
-        "internal",
-        "integrations",
-        "web"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      1043317
-    ],
-    "timeRange": {
-      "minMs": 1043317,
-      "maxMs": 1043317,
-      "avgMs": 1043317,
-      "label": "[17m23s, avg: 17m23s]"
-    }
-  },
-  {
-    "id": "dir-0ji9dzs",
-    "text": "continue without watching;",
-    "stage": "user_added_to_queue",
-    "kind": "instruction",
-    "timestamp": 1792270948259,
-    "sessionOffsetMs": 1994658,
-    "lastTriggeredAt": 1792270948259,
-    "context": {
-      "branch": "main",
-      "paths": [
-        "origin",
-        "tests",
-        "docs"
-      ]
-    },
-    "triggerCount": 1,
-    "historicalOffsets": [
-      1994658
-    ],
-    "timeRange": {
-      "minMs": 1994658,
-      "maxMs": 1994658,
-      "avgMs": 1994658,
-      "label": "[33m15s, avg: 33m15s]"
+      "minMs": 193933,
+      "maxMs": 193933,
+      "avgMs": 193933,
+      "label": "[3m14s, avg: 3m14s]"
     }
   }
 ]
