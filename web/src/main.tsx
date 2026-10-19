@@ -1,7 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { BoardApp } from "./board/BoardApp";
 import "./app.css";
+import "./board/board.css";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
@@ -10,6 +12,10 @@ if (!rootEl) {
 
 createRoot(rootEl).render(
   <StrictMode>
-    <App />
+    {location.pathname === "/board" || globalThis.PLAN_FORGE_VIEW === "board" ? (
+      <BoardApp />
+    ) : (
+      <App />
+    )}
   </StrictMode>,
 );
