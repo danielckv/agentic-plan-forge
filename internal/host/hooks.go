@@ -41,8 +41,21 @@ const claudeCenterCommand = `"{{PLAN_FORGE_BIN}}" center ensure --repo "$CLAUDE_
 // forge handoff, the edit tools for board activity capture.
 const claudePostToolUseMatcher = "Bash|Edit|Write|MultiEdit|NotebookEdit"
 
+// claudeGuardCommand is the PreToolUse hook command template: it refuses an
+// edit once when the approved plan changed under a running session.
+const claudeGuardCommand = `"{{PLAN_FORGE_BIN}}" hook claude-guard`
+
+// claudePreToolUseMatcher is the managed PreToolUse matcher.
+//
+// Bash is deliberately absent. Blocking it would block the agent's own
+// `plan-forge validate` run, which is the remedy the deny reason names, and
+// reading a file is not something a stale plan makes unsafe. Letters and "|"
+// only, so Claude Code reads this as an exact-name list rather than an
+// unanchored regular expression.
+const claudePreToolUseMatcher = "Edit|Write|MultiEdit|NotebookEdit"
+
 // claudeHookEvents are the Claude Code settings events plan-forge manages.
-var claudeHookEvents = []string{"SessionStart", "PostToolUse", "UserPromptSubmit"}
+var claudeHookEvents = []string{"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit"}
 
 // claudeHookTimeout is the explicit per-handler timeout (seconds) applied to
 // every managed Claude hook handler.
@@ -63,7 +76,7 @@ func (e *settingsMergeError) Error() string { return e.msg }
 // is idempotent per event. Unrelated keys and foreign entries are never
 // rewritten: unknown keys decode into the generic map and are written back
 // unchanged.
-func mergeClaudeHook(settings map[string]any, sessionStartCommand, centerCommand, handoffCommand string) (map[string]any, bool, error) {
+func mergeClaudeHook(settings map[string]any, sessionStartCommand, centerCommand, guardCommand, handoffCommand string) (map[string]any, bool, error) {
 	var hooks map[string]any
 	switch v := settings["hooks"].(type) {
 	case nil:
@@ -85,6 +98,7 @@ func mergeClaudeHook(settings map[string]any, sessionStartCommand, centerCommand
 	}
 	entries := map[string]map[string]any{
 		"SessionStart":     {"hooks": []any{managed(sessionStartCommand), managed(centerCommand)}},
+		"PreToolUse":       {"matcher": claudePreToolUseMatcher, "hooks": []any{managed(guardCommand)}},
 		"PostToolUse":      {"matcher": claudePostToolUseMatcher, "hooks": []any{managed(handoffCommand)}},
 		"UserPromptSubmit": {"hooks": []any{managed(handoffCommand)}},
 	}
@@ -385,6 +399,17 @@ const manualHookSnippet = `{
           },
           {
             "command": "PLAN_FORGE_BIN center ensure --repo \"$CLAUDE_PROJECT_DIR\" --open",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "command": "PLAN_FORGE_BIN hook claude-guard",
             "timeout": 5
           }
         ]

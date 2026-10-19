@@ -97,6 +97,7 @@ func (in *Installer) claudeHookStatus(home string) HookStatus {
 			strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", in.bin),
 			strings.ReplaceAll(claudeCenterCommand, "{{PLAN_FORGE_BIN}}", in.bin),
 		},
+		"PreToolUse":       {strings.ReplaceAll(claudeGuardCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
 		"PostToolUse":      {strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
 		"UserPromptSubmit": {strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
 	}

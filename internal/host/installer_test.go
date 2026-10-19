@@ -302,6 +302,10 @@ func foreignSettings() map[string]any {
 		"env":         map[string]any{"FOO": "bar"},
 		"hooks": map[string]any{
 			"SessionStart": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "echo start"}}}},
+			"PreToolUse": []any{map[string]any{
+				"matcher": "Read",
+				"hooks":   []any{map[string]any{"type": "command", "command": "echo reading"}},
+			}},
 			"PostToolUse": []any{map[string]any{
 				"matcher": "Write",
 				"hooks":   []any{map[string]any{"type": "command", "command": "echo wrote"}},
@@ -342,11 +346,12 @@ func managedCount(t *testing.T, settings map[string]any, event string) int {
 const (
 	startCmd   = `"/opt/plan forge/plan-forge" hook check-state --repo "$CLAUDE_PROJECT_DIR" --format claude`
 	centerCmd  = `"/opt/plan forge/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR" --open`
+	guardCmd   = `"/opt/plan forge/plan-forge" hook claude-guard`
 	handoffCmd = `"/opt/plan forge/plan-forge" hook claude`
 )
 
 func TestMergeClaudeHookAddsAllThreeEvents(t *testing.T) {
-	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v", changed, err)
 	}
@@ -378,7 +383,7 @@ func TestMergeClaudeHookAddsAllThreeEvents(t *testing.T) {
 }
 
 func TestMergeClaudeHookIsIdempotent(t *testing.T) {
-	first, changed, err := mergeClaudeHook(roundTrip(t, foreignSettings()), startCmd, centerCmd, handoffCmd)
+	first, changed, err := mergeClaudeHook(roundTrip(t, foreignSettings()), startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("first merge = changed %v, err %v", changed, err)
 	}
@@ -390,7 +395,7 @@ func TestMergeClaudeHookIsIdempotent(t *testing.T) {
 	if err := json.Unmarshal(encoded, &reparsed); err != nil {
 		t.Fatal(err)
 	}
-	second, changed, err := mergeClaudeHook(reparsed, startCmd, centerCmd, handoffCmd)
+	second, changed, err := mergeClaudeHook(reparsed, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || changed {
 		t.Fatalf("second merge = changed %v, err %v; want unchanged", changed, err)
 	}
@@ -412,7 +417,7 @@ func TestMergeClaudeHookUpgradesSessionStartOnlyInstall(t *testing.T) {
 	old := map[string]any{"hooks": map[string]any{"SessionStart": []any{map[string]any{
 		"hooks": []any{map[string]any{"type": "command", "command": startCmd + " # " + managedMarker}},
 	}}}}
-	merged, changed, err := mergeClaudeHook(old, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(old, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v", changed, err)
 	}
@@ -425,7 +430,7 @@ func TestMergeClaudeHookUpgradesSessionStartOnlyInstall(t *testing.T) {
 
 func TestMergeClaudeHookPreservesForeignEntries(t *testing.T) {
 	original := foreignSettings()
-	merged, _, err := mergeClaudeHook(roundTrip(t, original), startCmd, centerCmd, handoffCmd)
+	merged, _, err := mergeClaudeHook(roundTrip(t, original), startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,7 +506,7 @@ func TestMergeClaudeHookRefusesForeignShapes(t *testing.T) {
 	}
 	for name, settings := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
+			_, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, guardCmd, handoffCmd)
 			var mergeErr *settingsMergeError
 			if !errors.As(err, &mergeErr) || changed {
 				t.Fatalf("merge = changed %v, err %v; want settingsMergeError", changed, err)

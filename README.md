@@ -149,8 +149,15 @@ Hooks are registered where the host supports them:
 - Claude Code: `SessionStart` carries two handlers — one reports a plan that changed since your last session, the
   other makes sure the command center is running and opens a tab. `PostToolUse` (matcher
   `Bash|Edit|Write|MultiEdit|NotebookEdit`) moves the agent
-  into Plan Mode after an approval and reports the tool call. `PostToolUse` and `UserPromptSubmit` deliver board edits.
+  into Plan Mode after an approval and reports the tool call. `PreToolUse` (matcher `Edit|Write|MultiEdit|NotebookEdit`)
+  refuses an edit once when the approved plan changed under a running session, and refuses an edit aimed at the approved
+  plan itself. `PostToolUse` and `UserPromptSubmit` deliver board edits.
   Every entry in `~/.claude/settings.json` carries a `plan-forge managed` marker, and uninstall removes only those.
+
+  The guard blocks at most once per change: it records what the session was told, denies once when that changes, and
+  immediately records the new state, so your next tool call proceeds. It never blocks in a repository with no approved
+  plan, and it never runs a repository scan — it reads two files. `Bash` is deliberately outside the matcher, because
+  blocking it would block the `plan-forge validate` run the refusal asks for.
 - OMP: the hook reports plan status at session start, opens the command center beside it, runs the forge from
   `/plan-forge`, opens the board from `/plan-forge-board`, reports tool calls, and pushes board edits into the live
   session.

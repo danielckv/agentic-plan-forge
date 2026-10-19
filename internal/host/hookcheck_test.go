@@ -18,6 +18,7 @@ func installClaudeSettings(t *testing.T, in *Installer, home, bin string) {
 	merged, _, err := mergeClaudeHook(map[string]any{},
 		strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", bin),
 		strings.ReplaceAll(claudeCenterCommand, "{{PLAN_FORGE_BIN}}", bin),
+		strings.ReplaceAll(claudeGuardCommand, "{{PLAN_FORGE_BIN}}", bin),
 		strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", bin),
 	)
 	if err != nil {

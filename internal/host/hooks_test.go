@@ -40,6 +40,7 @@ func managedHandler(t *testing.T, settings map[string]any, event string) map[str
 const (
 	newStartCmd   = `"/new/path/plan-forge" hook check-state --repo "$CLAUDE_PROJECT_DIR" --format claude`
 	newCenterCmd  = `"/new/path/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR" --open`
+	newGuardCmd   = `"/new/path/plan-forge" hook claude-guard`
 	newHandoffCmd = `"/new/path/plan-forge" hook claude`
 )
 
@@ -55,6 +56,12 @@ func installedSettings() map[string]any {
 			handler(startCmd + " # " + managedMarker),
 			handler(centerCmd + " # " + managedMarker),
 		}}},
+		"PreToolUse": []any{map[string]any{
+			"matcher": claudePreToolUseMatcher,
+			"hooks": []any{
+				handler(guardCmd + " # " + managedMarker),
+			},
+		}},
 		"PostToolUse": []any{map[string]any{
 			"matcher": claudePostToolUseMatcher,
 			"hooks": []any{
@@ -81,7 +88,7 @@ func installedSettings() map[string]any {
 
 func TestMergeClaudeHookRefreshesStaleBinaryPath(t *testing.T) {
 	settings := installedSettings()
-	merged, changed, err := mergeClaudeHook(settings, newStartCmd, newCenterCmd, newHandoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, newStartCmd, newCenterCmd, newGuardCmd, newHandoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want a refresh", changed, err)
 	}
@@ -151,7 +158,7 @@ func TestMergeClaudeHookRefreshesStaleBinaryPath(t *testing.T) {
 func TestMergeClaudeHookRefreshIsIdempotentWhenNothingDiffers(t *testing.T) {
 	settings := installedSettings()
 	// First pass with the same commands already present: nothing differs.
-	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || changed {
 		t.Fatalf("merge with identical commands = changed %v, err %v; want unchanged", changed, err)
 	}
@@ -179,7 +186,7 @@ func legacySettings() map[string]any {
 func TestMergeClaudeHookAddsTimeoutToEveryManagedHandler(t *testing.T) {
 	// Even a legacy install without any timeout field is refreshed.
 	settings := legacySettings()
-	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want timeout refresh", changed, err)
 	}
@@ -297,7 +304,7 @@ func postToolUseMatcher(t *testing.T, settings map[string]any) string {
 }
 
 func TestMergeClaudeHookFreshInstallUsesEditMatcher(t *testing.T) {
-	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v", changed, err)
 	}
@@ -308,7 +315,7 @@ func TestMergeClaudeHookFreshInstallUsesEditMatcher(t *testing.T) {
 		t.Error("manual snippet lacks the new matcher")
 	}
 	// Idempotent.
-	_, changed, err = mergeClaudeHook(merged, startCmd, centerCmd, handoffCmd)
+	_, changed, err = mergeClaudeHook(merged, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || changed {
 		t.Errorf("second merge = changed %v, err %v; want no change", changed, err)
 	}
@@ -323,7 +330,7 @@ func TestMergeClaudeHookUpgradesOldBashMatcherInPlace(t *testing.T) {
 	if got := postToolUseMatcher(t, settings); got != "Bash" {
 		t.Fatalf("fixture matcher = %q", got)
 	}
-	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want matcher refresh", changed, err)
 	}
@@ -344,7 +351,7 @@ func TestMergeClaudeHookUpgradesOldBashMatcherInPlace(t *testing.T) {
 	if _, has := merged["hooks"].(map[string]any)["UserPromptSubmit"].([]any)[0].(map[string]any)["matcher"]; has {
 		t.Error("UserPromptSubmit must not gain a matcher")
 	}
-	_, changed, err = mergeClaudeHook(merged, startCmd, centerCmd, handoffCmd)
+	_, changed, err = mergeClaudeHook(merged, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || changed {
 		t.Errorf("second merge = changed %v, err %v; want idempotent", changed, err)
 	}
@@ -358,7 +365,7 @@ func TestMergeClaudeHookSharedEntryKeepsForeignMatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v; want a split", changed, err)
 	}
@@ -394,7 +401,7 @@ func TestMergeClaudeHookSharedEntryKeepsForeignMatcher(t *testing.T) {
 	}
 
 	before := mustJSON(t, merged)
-	again, changed, err := mergeClaudeHook(merged, startCmd, centerCmd, handoffCmd)
+	again, changed, err := mergeClaudeHook(merged, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || changed {
 		t.Fatalf("second merge = changed %v, err %v; want idempotent", changed, err)
 	}
@@ -416,7 +423,7 @@ func TestMergeClaudeHookSharedEntryKeepsForeignMatcher(t *testing.T) {
 // returns early when a plan is unchanged and again when there is none, and the
 // dashboard has to open in both of those cases.
 func TestMergeClaudeHookSessionStartCarriesBothHandlers(t *testing.T) {
-	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v err %v", changed, err)
 	}
@@ -450,7 +457,7 @@ func TestMergeClaudeHookUpgradesASingleHandlerInstall(t *testing.T) {
 			handler(startCmd + " # " + managedMarker),
 		}}},
 	}})
-	merged, changed, err := mergeClaudeHook(old, startCmd, centerCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(old, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("upgrade = changed %v err %v", changed, err)
 	}
@@ -463,7 +470,7 @@ func TestMergeClaudeHookUpgradesASingleHandlerInstall(t *testing.T) {
 	}
 
 	// And it settles: a second pass changes nothing.
-	again, changed, err := mergeClaudeHook(roundTrip(t, merged), startCmd, centerCmd, handoffCmd)
+	again, changed, err := mergeClaudeHook(roundTrip(t, merged), startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil {
 		t.Fatalf("second pass: %v", err)
 	}
@@ -476,7 +483,7 @@ func TestMergeClaudeHookUpgradesASingleHandlerInstall(t *testing.T) {
 // Uninstall iterates claudeHookEvents, so the command center handler is
 // stripped with the rest and leaves no managed residue behind.
 func TestSplitManagedHookRemovesBothSessionStartHandlers(t *testing.T) {
-	merged, _, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, handoffCmd)
+	merged, _, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, guardCmd, handoffCmd)
 	if err != nil {
 		t.Fatal(err)
 	}

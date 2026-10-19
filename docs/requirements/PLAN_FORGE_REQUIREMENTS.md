@@ -1071,6 +1071,19 @@ The 5-second and 2-second hook timeouts are limits the host enforces on the proc
 - Status: met
 - Last reviewed: 2026-10-19
 
+### REQ-HANDOFF-008 — Spec-drift guard
+
+- ID: REQ-HANDOFF-008
+- Level: F
+- Statement: When the approved plan changes under a running Claude Code session, the managed `PreToolUse` hook shall refuse the next edit exactly once and state the remedy.
+- Category: Functional
+- Owner: @danielckv
+- Source: `docs/plans/COMMAND_CENTER_PLAN.md` C19; the Claude Code hooks reference for the `PreToolUse` decision contract.
+- Acceptance criteria: `cmd/client/cmd_hook_guard_test.go` (`TestGuardDeniesOncePerDrift` proves one refusal per change and that the next call proceeds; `TestGuardIsSilentWithoutAnApprovedPlan`; `TestGuardAlwaysExitsZero`; `TestGuardDecisionIsDenyAndNeverAllowOrDefer`; `TestGuardBaselineIsPerSession`), `internal/host/hooks_test.go` (the managed entry and its matcher).
+- Traces to: C19; `cmd/client/cmd_hook_guard.go`, `internal/host/hooks.go`
+- Status: met
+- Last reviewed: 2026-10-19
+
 ## LIVE — the command center
 
 ### REQ-LIVE-001 — Visible without a plan
@@ -1153,11 +1166,11 @@ The 5-second and 2-second hook timeouts are limits the host enforces on the proc
 
 ## Category coverage
 
-Counts are taken from the `Category:` fields and sum to 85 requirements.
+Counts are taken from the `Category:` fields and sum to 86 requirements.
 
 | Category | Count | Note |
 | :--- | :--- | :--- |
-| Functional | 40 | Concentrated in GATE, COORD, BOARD, INSTALL and RELEASE; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
+| Functional | 41 | Concentrated in GATE, COORD, BOARD, INSTALL and RELEASE; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
 | Non-functional (security) | 6 | SEC area: REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-005, REQ-SEC-006; plus REQ-LIVE-005. |
 | Non-functional (performance) | 9 | PERF area (REQ-PERF-001 to REQ-PERF-007) plus REQ-GRAPH-005 and REQ-LIVE-006. |
 | Non-functional (usability/accessibility) | 3 | REQ-UI-005, REQ-UI-006, REQ-UI-007. Genuinely thin: the GUI polish was delivered as one slice; further usability requirements await measurable targets from the owner (open question 8). |
@@ -1231,6 +1244,7 @@ Counts are taken from the `Category:` fields and sum to 85 requirements.
 - 2026-10-19 · REQ-INSTALL-008 · the oh-my-pi artifact set drops both `SKILL.md` copies; oh-my-pi is reached through built-in commands only, and an install removes copies an earlier version wrote · evidence: `planOMP` in `internal/host/installer.go` plans `commands/plan-config.md` and the hook factory only; `TestOMPPlansCommandsAndHookButNoSkills`, `TestApplyRemovesSkillsFromAnEarlierOMPInstall`.
 - 2026-10-19 · REQ-INSTALL-002 · Claude Code's managed `SessionStart` carries two handlers, the plan-status banner and the command center launch · evidence: `claudeCenterCommand` in `internal/host/hooks.go`; `TestMergeClaudeHookSessionStartCarriesBothHandlers`, `TestMergeClaudeHookUpgradesASingleHandlerInstall`.
 - 2026-10-19 · REQ-INSTALL-007 · the premise flips: oh-my-pi should list no plan-forge skill at all, so any visible one shadows a built-in command and is reported as a conflict rather than only a cross-root duplicate · evidence: `SkillConflict` and `inspectSurface` in `internal/host/installer.go`; `TestOMPDuplicateWarningRequiresOptIn`.
+- 2026-10-19 · REQ-HANDOFF-008 · new: a managed `PreToolUse` hook refuses an edit once when the approved plan changed under a running session, and refuses an edit aimed at the approved plan itself; it decides through the JSON contract with exit 0 and never emits `allow`, `defer` or a top-level decision · evidence: `cmd/client/cmd_hook_guard.go`, `cmd/client/cmd_hook_guard_test.go`, `claudePreToolUseMatcher` in `internal/host/hooks.go`.
 - 2026-10-19 · REQ-INSTALL-010 · new: `doctor` verifies the managed hooks are installed and point at this binary, which matters because dropping oh-my-pi's skills removed the fallback for `/plan-forge` · evidence: `internal/host/hookcheck.go`, `internal/host/hookcheck_test.go`, `printHookStatuses` in `cmd/client/cmd_doctor.go`.
 - 2026-10-19 · REQ-SEC-004 · acceptance criteria no longer cite `internal/relay/protocol_test.go`; they cite the implementation (`NewEgressGuard`, `Contains`, `Redact`, `RedactJSON`) and state that no egress test exists; status `met` → `partly met`; open question 9 added · evidence: traceability verification — `protocol_test.go` covers envelope encode/decode, counters, bounds and the timeout clamp, and no test in the tree references the egress guard.
 - 2026-10-19 · REQ-PERF-002 · acceptance criteria no longer cite `internal/ast/symbols_test.go`; they cite `DefaultParseTimeout`, `DefaultScanTimeout` and the `min(4, runtime.GOMAXPROCS(0))` worker cap in `internal/ast/scanner.go` and state the bound is defined but not directly tested; status `met` → `partly met`; open question 10 added · evidence: traceability verification — `symbols_test.go` has no worker-count, parse-timeout, scan-timeout or `timed_out` assertion.
@@ -1265,6 +1279,7 @@ Counts are taken from the `Category:` fields and sum to 85 requirements.
 
 | REQ | Contract | Implementing files | Tests |
 | :--- | :--- | :--- | :--- |
+| REQ-HANDOFF-008 | C19 | `cmd/client/cmd_hook_guard.go`, `internal/host/hooks.go` | `cmd/client/cmd_hook_guard_test.go`, `internal/host/hooks_test.go` |
 | REQ-LIVE-001 | C13, C16 | `internal/livestore/livestore.go`, `internal/center/center.go` | `internal/livestore/livestore_test.go`, `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
 | REQ-LIVE-002 | C14, C15 | `internal/center/hub.go`, `internal/app/center.go` | `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
 | REQ-LIVE-003 | C18 | `internal/app/centersprint.go`, `web/src/center/LivePage.tsx` | `internal/board/coordinator_test.go`, `internal/center/center_test.go` |
