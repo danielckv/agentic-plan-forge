@@ -220,6 +220,13 @@ func CheckState(ctx context.Context, repo string) (PlanStatus, error) {
 // hash checks (StatusUnknown): nothing it says is trusted. A scan that does not
 // finish yields ErrStatusUnknown.
 func CheckStateWith(ctx context.Context, repo string, opts CheckOptions) (PlanStatus, error) {
+	return checkStateWith(ctx, repo, opts, &checkEvidence{})
+}
+
+// checkStateWith is CheckStateWith that also records what it read in seen, so a
+// caller can derive more from the same artifacts, graph and receipts instead of
+// scanning again.
+func checkStateWith(ctx context.Context, repo string, opts CheckOptions, seen *checkEvidence) (PlanStatus, error) {
 	real, err := realRepo(repo)
 	if err != nil {
 		return PlanStatus{}, err
@@ -228,6 +235,7 @@ func CheckStateWith(ctx context.Context, repo string, opts CheckOptions) (PlanSt
 	if err != nil {
 		return PlanStatus{}, err
 	}
+	seen.art = art
 	if !art.present {
 		return PlanStatus{Repo: real}, nil
 	}
@@ -262,10 +270,11 @@ func CheckStateWith(ctx context.Context, repo string, opts CheckOptions) (PlanSt
 	if timeout <= 0 {
 		timeout = DefaultScanTimeout
 	}
-	g, err := scanBounded(ctx, real, timeout)
+	g, err := scanGraph(ctx, real, timeout)
 	if err != nil {
 		return PlanStatus{}, err
 	}
+	seen.g = g
 
 	ev := evaluateStructure(real, g, m.Targets)
 	st.Verified, st.Total = ev.verified, ev.total
@@ -273,6 +282,7 @@ func CheckStateWith(ctx context.Context, repo string, opts CheckOptions) (PlanSt
 	st.Pending = append(st.Pending, ev.pending...)
 
 	receipts, _ := storage.ReadReceipts(real)
+	seen.receipts = receipts
 	bh := evaluateBehavior(m, receipts, g.WorktreeHash)
 	st.Drift = append(st.Drift, bh.drift...)
 	st.Pending = append(st.Pending, bh.pending...)
