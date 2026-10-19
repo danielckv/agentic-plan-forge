@@ -311,5 +311,38 @@
       "avgMs": 491734,
       "label": "[7m3s-9m21s, avg: 8m12s]"
     }
+  },
+  {
+    "id": "dir-oqzuj1w",
+    "text": "push it and cut the release so the one-command install actually ships this work",
+    "stage": "user_added_to_queue",
+    "kind": "instruction",
+    "timestamp": 1792408401068,
+    "sessionOffsetMs": 958393,
+    "lastTriggeredAt": 1792408401068,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "internal",
+        "integrations",
+        "cmd",
+        "docs",
+        "agent:",
+        "web",
+        "scripts",
+        "CHANGELOG.md",
+        "README.md"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      958393
+    ],
+    "timeRange": {
+      "minMs": 958393,
+      "maxMs": 958393,
+      "avgMs": 958393,
+      "label": "[15m58s, avg: 15m58s]"
+    }
   }
 ]

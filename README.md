@@ -123,7 +123,7 @@ Windows (PowerShell 5.1 or later):
 Restart your agent afterwards, then type `/plan-forge`. Restarting matters because agents scan their skill directories at
 start-up. If the install directory is not on your `PATH`, the installer prints the exact line to add.
 
-The one-command install fetches the latest published release, which does not yet contain the work added after `0.1.1` and listed under Unreleased in [CHANGELOG.md](CHANGELOG.md). The window fixes under Unreleased → Fixed are equally absent from `v0.1.1`, so its window still shows the blank-page and handshake failures those entries describe; [build from source](#build-from-source) and run `plan-forge install` until the next tag.
+The one-command install fetches the latest published release, `v0.1.2` or later. Every feature in this README, including the plan-mode handoff, `plan-forge validate`, the board, the coordinator and the Graph view, ships in `v0.1.2`. Earlier releases did not: `v0.1.1` still had the blank-window and handshake failures that `v0.1.2` fixes. [Build from source](#build-from-source) remains the path for unreleased changes.
 
 ### What gets installed
 
@@ -136,7 +136,7 @@ installed agents and writes the skills:
 | OMP | `~/.omp/agent/skills/plan-forge/SKILL.md`, `~/.omp/agent/skills/plan-config/SKILL.md`, `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
 
-**Current tree, unreleased.** The `plan-forge-board` skill and the `/plan-forge-board` command in the Claude Code and OMP rows, and the board hook entries listed below, exist only in the current tree; `v0.1.1` installs none of them. [Build from source](#build-from-source) to use the board before the next tag.
+Every row above ships in `v0.1.2` and later. `v0.1.1` installed none of the `plan-forge-board` artifacts or the board hook entries.
 
 **OMP and duplicate skills.** Plan Forge marks the Claude copies of its skills `enabled: false`, which oh-my-pi's skill scanners skip, so those copies stay hidden even when `~/.claude/skills` is in `skills.customDirectories` or a foreign provider is enabled; Claude Code ignores the key. That hiding is the whole guarantee: a copy oh-my-pi reads from any other root can still surface twice, because nothing else deduplicates across roots. `/plan-forge` in oh-my-pi comes from its own `~/.omp/agent/skills` copy plus the command the hook registers; a probe on this machine lists exactly one `skill:plan-forge`. `plan-forge doctor` lists the roots each host reads and flags a duplicate, and `plan-forge install` warns with both paths; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
 
@@ -220,7 +220,7 @@ and a shortcut sheet (`?`):
 
 ### Plan Mode handoff and validation
 
-*Current tree, unreleased: the handoff and `plan-forge validate` are not in `v0.1.1`; [build from source](#build-from-source).*
+*Ships in `v0.1.2` and later; `v0.1.1` has neither the handoff nor `plan-forge validate`.*
 
 Approving writes the plan, and the window shows each handoff step before it closes.
 
@@ -243,7 +243,7 @@ plan-forge validate --json
 
 ### Plan board
 
-*Current tree, unreleased: `/plan-forge-board`, the live board and the Graph view are not in `v0.1.1`; [build from source](#build-from-source).*
+*Ships in `v0.1.2` and later; `v0.1.1` has no `/plan-forge-board`, board or Graph view.*
 
 Type `/plan-forge-board` in Claude Code or OMP after a plan is approved. The Plan-Forge window opens on a live board.
 
