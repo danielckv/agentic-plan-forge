@@ -546,3 +546,64 @@ func (s *Store) writeFile(data []byte) error {
 	}
 	return nil
 }
+
+// MaxRepos bounds how many repository documents a single snapshot carries, so
+// a machine with a long history of repositories cannot make one response
+// unbounded.
+const MaxRepos = 32
+
+// LoadAll returns the documents under dir, most recently written first and at
+// most MaxRepos of them. A document that fails to parse is skipped rather than
+// failing the whole snapshot: one corrupt file must not blind the reader to
+// every other repository.
+func LoadAll(dir string) ([]Doc, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	type aged struct {
+		path string
+		mod  time.Time
+	}
+	var files []aged
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, aged{filepath.Join(dir, e.Name()), info.ModTime()})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].mod.After(files[j].mod) })
+	if len(files) > MaxRepos {
+		files = files[:MaxRepos]
+	}
+	out := make([]Doc, 0, len(files))
+	for _, f := range files {
+		raw, err := os.ReadFile(f.path)
+		if err != nil {
+			continue
+		}
+		var d Doc
+		if json.Unmarshal(raw, &d) != nil || d.Version != Version {
+			continue
+		}
+		d.normalize()
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// Dir is the directory Open uses under the machine's cache.
+func Dir() (string, error) {
+	cache, err := config.EnsureCache()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cache, "live"), nil
+}
