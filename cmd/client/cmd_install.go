@@ -91,7 +91,7 @@ func runInstall(ctx context.Context, args []string) int {
 
 // printInstallBlock prints the exact installer output rows.
 func printInstallBlock(reports []host.HostReport, scope string) {
-	fmt.Printf("Plan-Forge v%s — installing agent skills (%s scope)\n", version, scope)
+	fmt.Printf("Plan-Forge %s — installing agent skills (%s scope)\n", versionDisplay(), scope)
 	for _, r := range reports {
 		name := padRight(r.Host, 8)
 		if !r.Found {
