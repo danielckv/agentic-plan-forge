@@ -261,7 +261,7 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 
 - ID: REQ-UI-009
 - Level: B
-- Statement: The product shall meet a measurable usability outcome for executive-grade presentation — a task-completion or SUS target the owner has yet to set (open question 6) — so the interface is suitable for planning real products in research and commercial contexts.
+- Statement: The product shall meet a measurable usability outcome for executive-grade presentation — a task-completion or SUS target the owner has yet to set (open question 8) — so the interface is suitable for planning real products in research and commercial contexts.
 - Category: Business
 - Owner: @danielckv
 - Source: User request this session (2026-10-19): "a more fluent, flexible and nicer GUI".
@@ -280,7 +280,7 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Category: User
 - Owner: @danielckv
 - Source: User request this session (2026-10-19): "once the plan is ready from the forge the agent harness switches to its `/plan` mode automatically and validation is triggered".
-- Acceptance criteria: `cmd/client/cmd_hook_test.go` (Claude Code path), `integrations/omp-hook-plan-forge.test.ts` (oh-my-pi path, including the `/plan` prefill fallback); no automatic mechanism exists for Antigravity (open question 10).
+- Acceptance criteria: `cmd/client/cmd_hook_test.go` (Claude Code path), `integrations/omp-hook-plan-forge.test.ts` (oh-my-pi path, including the `/plan` prefill fallback); no automatic mechanism exists for Antigravity (open question 12).
 - Traces to: C6, C7; `cmd/client/cmd_hook.go`, `integrations/omp-hook-plan-forge.ts`
 - Status: partly met
 - Last reviewed: 2026-10-19
@@ -730,9 +730,22 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Category: Interface
 - Owner: @danielckv
 - Source: Verified `plan-forge install --host auto --yes` run on this machine (2026-10-19); `internal/host/installer.go`; `internal/host/hooks.go`.
-- Acceptance criteria: `internal/host/installer_test.go`, `internal/host/hooks_test.go`; every managed entry carries the `plan-forge managed` marker. The Antigravity hook file shape is unverified (open question 3).
+- Acceptance criteria: `internal/host/installer_test.go`, `internal/host/hooks_test.go`; every managed entry carries the `plan-forge managed` marker. The Antigravity hook file shape is unverified (open question 5).
 - Traces to: C6; `internal/host/installer.go`, `internal/host/hooks.go`, `integrations/`
 - Status: partly met
+- Last reviewed: 2026-10-19
+
+### REQ-INSTALL-010 — Managed hook verification
+
+- ID: REQ-INSTALL-010
+- Level: F
+- Statement: `plan-forge doctor` shall report, per host, whether the managed hooks are installed and whether they name the running binary, with a remedy for every state that is not installed.
+- Category: Functional
+- Owner: @danielckv
+- Source: Consequence of the oh-my-pi command-only surface (REQ-INSTALL-008): with no skill copies, a missing hook removes `/plan-forge` and `/plan-forge-board` rather than degrading them; `docs/plans/COMMAND_CENTER_PLAN.md` C21.
+- Acceptance criteria: `internal/host/hookcheck_test.go` (installed, stale, modified, missing and unreadable per host; the oh-my-pi remedy names the commands that are lost; the Antigravity remedy routes through uninstall because `mergeAGYHook` cannot refresh a stale path).
+- Traces to: C21; `internal/host/hookcheck.go`, `cmd/client/cmd_doctor.go`
+- Status: met
 - Last reviewed: 2026-10-19
 
 ## RELEASE — gates and artifacts
@@ -1058,22 +1071,102 @@ The 5-second and 2-second hook timeouts are limits the host enforces on the proc
 - Status: met
 - Last reviewed: 2026-10-19
 
+## LIVE — the command center
+
+### REQ-LIVE-001 — Visible without a plan
+
+- ID: REQ-LIVE-001
+- Level: S
+- Statement: The command center shall record and show a harness session in a repository that has no approved plan.
+- Category: Functional
+- Owner: @danielckv
+- Source: User request this session (2026-10-19): telemetry that works "even if Plan Forge hasn't run"; `docs/plans/COMMAND_CENTER_PLAN.md` C13, C16.
+- Acceptance criteria: `internal/livestore/livestore_test.go` (upsert, bounds, eviction, concurrent writers lose no update), `internal/center/center_test.go` (`TestIngestRecordsAndRejects`), `web/e2e/center.spec.ts` ("a launched tab renders a session recorded without a plan").
+- Traces to: C13, C16; `internal/livestore/livestore.go`, `internal/center/center.go`
+- Status: met
+- Last reviewed: 2026-10-19
+
+### REQ-LIVE-002 — One long-lived surface, many tabs
+
+- ID: REQ-LIVE-002
+- Level: F
+- Statement: The command center shall serve several browser tabs from one loopback daemon and push each recorded event to every connected tab.
+- Category: Interface
+- Owner: @danielckv
+- Source: User decision (2026-10-19): a persistent fixed-port browser tab in place of the per-session window; `docs/plans/COMMAND_CENTER_PLAN.md` C14, C15.
+- Acceptance criteria: `internal/center/center_test.go` (`TestOneRecordReachesEveryOpenTab`, `TestTheHubRefusesMoreThanItsCap`, `TestASlowClientIsDroppedWithAnOverflowFrame`), `web/e2e/center.spec.ts` ("one record reaches two open tabs").
+- Traces to: C14, C15; `internal/center/hub.go`, `internal/app/center.go`
+- Status: met
+- Last reviewed: 2026-10-19
+
+### REQ-LIVE-003 — The coordinator states what begins next
+
+- ID: REQ-LIVE-003
+- Level: S
+- Statement: The command center shall present the coordinator's active and up-next queues for a repository with an approved plan, derived from the same evaluation the board window uses.
+- Category: Functional
+- Owner: @danielckv
+- Source: User request this session (2026-10-19): "use coordinator that in live, decides which task should begin after the main agent harness gets more insights on new tasks"; `docs/plans/COMMAND_CENTER_PLAN.md` C18.
+- Acceptance criteria: `internal/board/coordinator_test.go` (the ranking itself), `internal/center/center_test.go` (the sprint endpoint omits a repository with no approved plan); the view is rendered by `web/src/center/LivePage.tsx`.
+- Traces to: C18; `internal/app/centersprint.go`, `web/src/center/LivePage.tsx`
+- Status: partly met
+- Last reviewed: 2026-10-19
+
+### REQ-LIVE-004 — No egress and no tracker
+
+- ID: REQ-LIVE-004
+- Level: B
+- Statement: The command center shall make no outbound network request and shall integrate with no external issue tracker.
+- Category: Constraint
+- Owner: @danielckv
+- Source: User decision (2026-10-19): external trackers dropped in favour of REQ-BOARD-004 and REQ-SEC-004; `docs/plans/COMMAND_CENTER_PLAN.md` User decisions.
+- Acceptance criteria: `web/e2e/center.spec.ts` ("the command center makes no external request") fails on any request to an origin other than the daemon's own.
+- Traces to: C15, C17; `internal/center/center.go`, `web/src/center/`
+- Status: met
+- Last reviewed: 2026-10-19
+
+### REQ-LIVE-005 — A tab is authorised, and opened once
+
+- ID: REQ-LIVE-005
+- Level: F
+- Statement: The command center shall issue a session token only to a tab redeeming a single-use launch ticket, and shall open a browser tab only when no tab is already connected.
+- Category: Non-functional (security)
+- Owner: @danielckv
+- Source: `docs/plans/COMMAND_CENTER_PLAN.md` C15, C20; the residual risks a fixed port introduces are recorded there.
+- Acceptance criteria: `internal/center/center_test.go` (`TestAuthMatrix`, `TestATicketIsSingleUse`, `TestAnExpiredTicketIsRefused`, `TestForeignHostIsRefused`), `web/e2e/center.spec.ts` ("a tab opened by hand parks instead of silently failing").
+- Traces to: C15, C20; `internal/center/auth.go`, `internal/app/center.go`
+- Status: met
+- Last reviewed: 2026-10-19
+
+### REQ-LIVE-006 — Bounded, and never in the way
+
+- ID: REQ-LIVE-006
+- Level: F
+- Statement: The command center's hook-side commands shall stay within the host hook budget and shall exit 0 whatever happens.
+- Category: Non-functional (performance)
+- Owner: @danielckv
+- Source: `docs/plans/COMMAND_CENTER_PLAN.md` C16, C20; REQ-PERF-001 is the governing bound.
+- Acceptance criteria: `integrations/omp-hook-plan-forge.test.ts` ("the command center launch is not awaited", "a failing command center never blocks the banner"); `CenterEnsureBound` and `centerReportBound` in `internal/app/center.go` and `cmd/client/cmd_center.go`.
+- Traces to: C16, C20; `internal/app/center.go`, `cmd/client/cmd_center.go`
+- Status: partly met
+- Last reviewed: 2026-10-19
+
 ## Category coverage
 
-Counts are taken from the `Category:` fields and sum to 78 requirements.
+Counts are taken from the `Category:` fields and sum to 85 requirements.
 
 | Category | Count | Note |
 | :--- | :--- | :--- |
-| Functional | 37 | Concentrated in GATE, COORD, BOARD, INSTALL and RELEASE; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
-| Non-functional (security) | 5 | SEC area: REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-005, REQ-SEC-006. |
-| Non-functional (performance) | 8 | PERF area (REQ-PERF-001 to REQ-PERF-007) plus REQ-GRAPH-005. |
-| Non-functional (usability/accessibility) | 3 | REQ-UI-005, REQ-UI-006, REQ-UI-007. Genuinely thin: the GUI polish was delivered as one slice; further usability requirements await measurable targets from the owner (open question 6). |
+| Functional | 40 | Concentrated in GATE, COORD, BOARD, INSTALL and RELEASE; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
+| Non-functional (security) | 6 | SEC area: REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-005, REQ-SEC-006; plus REQ-LIVE-005. |
+| Non-functional (performance) | 9 | PERF area (REQ-PERF-001 to REQ-PERF-007) plus REQ-GRAPH-005 and REQ-LIVE-006. |
+| Non-functional (usability/accessibility) | 3 | REQ-UI-005, REQ-UI-006, REQ-UI-007. Genuinely thin: the GUI polish was delivered as one slice; further usability requirements await measurable targets from the owner (open question 8). |
 | Business | 2 | REQ-GATE-001, REQ-UI-009. |
-| User | 6 | The S-level capability statements. |
-| Interface | 8 | REQ-HANDOFF-002, REQ-HANDOFF-003, REQ-BOARD-004, REQ-BOARD-007, REQ-SEC-003, REQ-INSTALL-002, REQ-INSTALL-008, REQ-INSTALL-009. The relay wire protocol is specified in the system plan as a design contract and is not restated here; the bridge authentication contract is restated as REQ-SEC-003. |
+| User | 6 | The S-level capability statements. REQ-LIVE-001 and REQ-LIVE-003 are S-level and counted under Functional by their Category field. |
+| Interface | 9 | REQ-HANDOFF-002, REQ-HANDOFF-003, REQ-BOARD-004, REQ-BOARD-007, REQ-SEC-003, REQ-INSTALL-002, REQ-INSTALL-008, REQ-INSTALL-009, REQ-LIVE-002. The relay wire protocol is specified in the system plan as a design contract and is not restated here; the bridge authentication contract is restated as REQ-SEC-003. |
 | Data | 2 | REQ-GATE-005, REQ-BOARD-003. Genuinely thin: other persisted shapes (session state, artifacts) are covered inside functional requirements on approval and storage. |
 | Regulatory | 0 | Genuinely empty: the product is an open-source local tool with no identified regulatory obligation; security posture lives under Non-functional (security). |
-| Constraint | 7 | Ingestion bounds, Product Manager isolation, SHA pinning, platform and toolchain pins: REQ-GATE-003, REQ-GATE-004, REQ-RELEASE-005, REQ-COMPAT-001 to REQ-COMPAT-004. |
+| Constraint | 8 | Ingestion bounds, Product Manager isolation, SHA pinning, platform and toolchain pins, and the command center no-egress rule: REQ-GATE-003, REQ-GATE-004, REQ-RELEASE-005, REQ-COMPAT-001 to REQ-COMPAT-004, REQ-LIVE-004. |
 | Reliability | 0 | Dismissed as a separate category: journaled commit and crash recovery are stated under REQ-GATE-009 and atomic overlay writes under REQ-BOARD-003; no standalone reliability target has been set. |
 | Scalability | 0 | Genuinely empty: Plan-Forge is a single-user local tool; the only scale bound is the graph node budget under Non-functional (performance) (REQ-PERF-005). |
 | Maintainability | 0 | Genuinely empty: upheld through repository gates (lint, typecheck, CI under REQ-RELEASE-001) rather than stated as product requirements. |
@@ -1119,28 +1212,35 @@ Counts are taken from the `Category:` fields and sum to 78 requirements.
 ## Open questions
 
 1. Release gap versus the one-command install. The one-command install fetches the latest published release, which is `v0.1.1` and predates every feature in the HANDOFF, BOARD, COORD, GRAPH and UI areas of this catalogue (confirmed: `git ls-tree v0.1.1 cmd/client/` has no `cmd_board.go` or `cmd_validate.go`). Whether the README's one-command install is expected to deliver those features, and when a tag carrying them is cut, is undecided. Blocking: release timing. Answerable by: @danielckv.
-2. oh-my-pi dual surface. OMP exposes both `skill:plan-forge` and the hook-registered `/plan-forge` command for the same feature (the registered command replaced the markdown command per C7, but the skill remains installed). Whether both should exist, or the skill should be dropped, is undecided. Blocking: product decision on the OMP surface. Answerable by: @danielckv.
-3. Antigravity hook file shape. `internal/host/hooks.go` writes events at the top level of `~/.gemini/config/hooks.json` (`{"SessionStart":[...]}`), while `integrations/agy-locations.md` documents the nested form (`{"plan-forge":{"SessionStart":[...]}}`); the installed file on this machine uses the flat form. Whether Antigravity reads the flat form — and therefore whether the plan-status hook fires at all — is unverified; this is why REQ-INSTALL-009 is partly met. Settled by reading Antigravity's hook documentation or observing the session-start banner. Answerable by: whoever can inspect the Antigravity CLI hooks loader (owner: @danielckv).
-4. Antigravity wait timeout. The `{{WAIT_TIMEOUT}}` template value for AGY is 50 s "until its limit is verified" per the system plan; the actual AGY tool-call limit has not been confirmed. Blocking: AGY documentation or empirical check. Answerable by: @danielckv.
-5. Windows cross-`go vet`. The Windows cross-`go vet` cannot run on this machine because tree-sitter needs cgo; CI covers it. Whether local pre-push verification of the Windows build is required is undecided. Blocking: none for correctness (CI gate exists); a local verification option needs a Windows runner or container. Answerable by: @danielckv.
-6. Subjective polish measure. REQ-UI-009 is verified only by objective proxies (component set shipped, gates green); a measurable usability target (task-completion study, SUS score) has not been set, so REQ-UI-009 is partly met. Blocking: a target from the owner. Answerable by: @danielckv.
-7. Egress check untested. `internal/relay/client_conn.go` implements the egress guard (`NewEgressGuard`, `Contains`, `Redact`, `RedactJSON`) and `internal/app/remote.go` applies it, but no test in the tree exercises it, so REQ-SEC-004 is partly met. Blocking: a test that feeds absolute paths and credential-shaped content through `Redact` and `RedactJSON` and asserts none reaches the wire. Answerable by: @danielckv.
-8. Scan bound untested. The worker cap, the 2-second parse timeout and the 120-second scan budget are defined in `internal/ast/scanner.go` but no test asserts them or the `timed_out` partial result, so REQ-PERF-002 is partly met. Blocking: a scan test with a shortened timeout asserting `coverage.timed_out` and a partial graph. Answerable by: @danielckv.
-9. Reserved `verify` activity source. `SourceVerify` is a valid activity source in `internal/board/discovery.go` but nothing emits it: `plan-forge verify` (`cmd/client/cmd_verify.go`) writes a receipt and records no board activity, so a verification run moves a card only after the next 5-second evidence re-scan. Whether `verify` should emit that activity, or the value should be removed, is undecided; no requirement depends on it. Blocking: a product decision on real-time verification feedback. Answerable by: @danielckv.
-10. Antigravity automatic plan-mode entry. REQ-HANDOFF-001 delivers automatic plan-mode entry and validation for Claude Code and oh-my-pi only; Antigravity receives the plan-mode hint text (REQ-HANDOFF-006) and the user enters plan mode themselves, so REQ-HANDOFF-001 is partly met. Whether an automatic Antigravity mechanism exists, or the hint is the accepted ceiling, is undecided. Blocking: Antigravity API surface for session mode control. Answerable by: @danielckv.
-11. Remaining compound requirements. The 2026-10-19 audit counted 31 compound requirements; six were split in this pass (REQ-INSTALL-002, REQ-SEC-003, REQ-GATE-007, REQ-PERF-004, REQ-HANDOFF-005, REQ-RELEASE-001). The remaining 25 stay compound until a follow-up pass: REQ-GATE-005, REQ-GATE-006, REQ-GATE-008, REQ-GATE-010, REQ-UI-001, REQ-UI-002, REQ-UI-003, REQ-UI-006, REQ-UI-008, REQ-HANDOFF-001, REQ-HANDOFF-004, REQ-BOARD-001, REQ-BOARD-003, REQ-BOARD-005, REQ-BOARD-007, REQ-COORD-003, REQ-GRAPH-002, REQ-GRAPH-004, REQ-GRAPH-005, REQ-INSTALL-001, REQ-INSTALL-004, REQ-INSTALL-005, REQ-INSTALL-006, REQ-RELEASE-004, REQ-SEC-005. Blocking: a scheduled editorial pass; none is functionally wrong, each just carries more than one intent. Answerable by: @danielckv.
+2. oh-my-pi dual surface. **Settled 2026-10-19:** the skill is dropped and oh-my-pi is command-only (REQ-INSTALL-008). One consequence is open in its place: a skill can be matched from its description and a registered command cannot, so a prose request no longer reaches Plan Forge in oh-my-pi. Whether that is worth a session-start hint line — which would make every session chattier — is undecided. Answerable by: @danielckv.
+3. Command center sprint titles. REQ-LIVE-003 is partly met: `PlanManifest` carries `TaskDAG` but no epic or story titles, which survive approval only as headings in `synthesized_spec.md`, so `/sprint` groups by identifier rather than by title. Whether to parse those headings back out of the spec, or to persist them in the manifest, is undecided. Answerable by: @danielckv.
+4. Command center hook budget. REQ-LIVE-006 is partly met: `CenterEnsureBound` and `centerReportBound` are declared and the oh-my-pi side is covered by tests that prove the launch is not awaited, but no test asserts the Claude-side wall-clock bound the way REQ-PERF-001 does for `hook claude`. Answerable by: @danielckv.
+5. Antigravity hook file shape. `internal/host/hooks.go` writes events at the top level of `~/.gemini/config/hooks.json` (`{"SessionStart":[...]}`), while `integrations/agy-locations.md` documents the nested form (`{"plan-forge":{"SessionStart":[...]}}`); the installed file on this machine uses the flat form. Whether Antigravity reads the flat form — and therefore whether the plan-status hook fires at all — is unverified; this is why REQ-INSTALL-009 is partly met. Settled by reading Antigravity's hook documentation or observing the session-start banner. Answerable by: whoever can inspect the Antigravity CLI hooks loader (owner: @danielckv).
+6. Antigravity wait timeout. The `{{WAIT_TIMEOUT}}` template value for AGY is 50 s "until its limit is verified" per the system plan; the actual AGY tool-call limit has not been confirmed. Blocking: AGY documentation or empirical check. Answerable by: @danielckv.
+7. Windows cross-`go vet`. The Windows cross-`go vet` cannot run on this machine because tree-sitter needs cgo; CI covers it. Whether local pre-push verification of the Windows build is required is undecided. Blocking: none for correctness (CI gate exists); a local verification option needs a Windows runner or container. Answerable by: @danielckv.
+8. Subjective polish measure. REQ-UI-009 is verified only by objective proxies (component set shipped, gates green); a measurable usability target (task-completion study, SUS score) has not been set, so REQ-UI-009 is partly met. Blocking: a target from the owner. Answerable by: @danielckv.
+9. Egress check untested. `internal/relay/client_conn.go` implements the egress guard (`NewEgressGuard`, `Contains`, `Redact`, `RedactJSON`) and `internal/app/remote.go` applies it, but no test in the tree exercises it, so REQ-SEC-004 is partly met. Blocking: a test that feeds absolute paths and credential-shaped content through `Redact` and `RedactJSON` and asserts none reaches the wire. Answerable by: @danielckv.
+10. Scan bound untested. The worker cap, the 2-second parse timeout and the 120-second scan budget are defined in `internal/ast/scanner.go` but no test asserts them or the `timed_out` partial result, so REQ-PERF-002 is partly met. Blocking: a scan test with a shortened timeout asserting `coverage.timed_out` and a partial graph. Answerable by: @danielckv.
+11. Reserved `verify` activity source. `SourceVerify` is a valid activity source in `internal/board/discovery.go` but nothing emits it: `plan-forge verify` (`cmd/client/cmd_verify.go`) writes a receipt and records no board activity, so a verification run moves a card only after the next 5-second evidence re-scan. Whether `verify` should emit that activity, or the value should be removed, is undecided; no requirement depends on it. Blocking: a product decision on real-time verification feedback. Answerable by: @danielckv.
+12. Antigravity automatic plan-mode entry. REQ-HANDOFF-001 delivers automatic plan-mode entry and validation for Claude Code and oh-my-pi only; Antigravity receives the plan-mode hint text (REQ-HANDOFF-006) and the user enters plan mode themselves, so REQ-HANDOFF-001 is partly met. Whether an automatic Antigravity mechanism exists, or the hint is the accepted ceiling, is undecided. Blocking: Antigravity API surface for session mode control. Answerable by: @danielckv.
+13. Remaining compound requirements. The 2026-10-19 audit counted 31 compound requirements; six were split in this pass (REQ-INSTALL-002, REQ-SEC-003, REQ-GATE-007, REQ-PERF-004, REQ-HANDOFF-005, REQ-RELEASE-001). The remaining 25 stay compound until a follow-up pass: REQ-GATE-005, REQ-GATE-006, REQ-GATE-008, REQ-GATE-010, REQ-UI-001, REQ-UI-002, REQ-UI-003, REQ-UI-006, REQ-UI-008, REQ-HANDOFF-001, REQ-HANDOFF-004, REQ-BOARD-001, REQ-BOARD-003, REQ-BOARD-005, REQ-BOARD-007, REQ-COORD-003, REQ-GRAPH-002, REQ-GRAPH-004, REQ-GRAPH-005, REQ-INSTALL-001, REQ-INSTALL-004, REQ-INSTALL-005, REQ-INSTALL-006, REQ-RELEASE-004, REQ-SEC-005. Blocking: a scheduled editorial pass; none is functionally wrong, each just carries more than one intent. Answerable by: @danielckv.
 
 ## Review log
 
-- 2026-10-19 · REQ-SEC-004 · acceptance criteria no longer cite `internal/relay/protocol_test.go`; they cite the implementation (`NewEgressGuard`, `Contains`, `Redact`, `RedactJSON`) and state that no egress test exists; status `met` → `partly met`; open question 7 added · evidence: traceability verification — `protocol_test.go` covers envelope encode/decode, counters, bounds and the timeout clamp, and no test in the tree references the egress guard.
-- 2026-10-19 · REQ-PERF-002 · acceptance criteria no longer cite `internal/ast/symbols_test.go`; they cite `DefaultParseTimeout`, `DefaultScanTimeout` and the `min(4, runtime.GOMAXPROCS(0))` worker cap in `internal/ast/scanner.go` and state the bound is defined but not directly tested; status `met` → `partly met`; open question 8 added · evidence: traceability verification — `symbols_test.go` has no worker-count, parse-timeout, scan-timeout or `timed_out` assertion.
+- 2026-10-19 · REQ-LIVE-001..006 · new area added for the command center: a loopback daemon that records harness sessions with or without an approved plan, serves several tabs, and surfaces the coordinator's up-next queue · evidence: `internal/livestore/`, `internal/center/`, `internal/app/center.go`, `web/src/center/`, `web/e2e/center.spec.ts`.
+- 2026-10-19 · REQ-INSTALL-008 · the oh-my-pi artifact set drops both `SKILL.md` copies; oh-my-pi is reached through built-in commands only, and an install removes copies an earlier version wrote · evidence: `planOMP` in `internal/host/installer.go` plans `commands/plan-config.md` and the hook factory only; `TestOMPPlansCommandsAndHookButNoSkills`, `TestApplyRemovesSkillsFromAnEarlierOMPInstall`.
+- 2026-10-19 · REQ-INSTALL-002 · Claude Code's managed `SessionStart` carries two handlers, the plan-status banner and the command center launch · evidence: `claudeCenterCommand` in `internal/host/hooks.go`; `TestMergeClaudeHookSessionStartCarriesBothHandlers`, `TestMergeClaudeHookUpgradesASingleHandlerInstall`.
+- 2026-10-19 · REQ-INSTALL-007 · the premise flips: oh-my-pi should list no plan-forge skill at all, so any visible one shadows a built-in command and is reported as a conflict rather than only a cross-root duplicate · evidence: `SkillConflict` and `inspectSurface` in `internal/host/installer.go`; `TestOMPDuplicateWarningRequiresOptIn`.
+- 2026-10-19 · REQ-INSTALL-010 · new: `doctor` verifies the managed hooks are installed and point at this binary, which matters because dropping oh-my-pi's skills removed the fallback for `/plan-forge` · evidence: `internal/host/hookcheck.go`, `internal/host/hookcheck_test.go`, `printHookStatuses` in `cmd/client/cmd_doctor.go`.
+- 2026-10-19 · REQ-SEC-004 · acceptance criteria no longer cite `internal/relay/protocol_test.go`; they cite the implementation (`NewEgressGuard`, `Contains`, `Redact`, `RedactJSON`) and state that no egress test exists; status `met` → `partly met`; open question 9 added · evidence: traceability verification — `protocol_test.go` covers envelope encode/decode, counters, bounds and the timeout clamp, and no test in the tree references the egress guard.
+- 2026-10-19 · REQ-PERF-002 · acceptance criteria no longer cite `internal/ast/symbols_test.go`; they cite `DefaultParseTimeout`, `DefaultScanTimeout` and the `min(4, runtime.GOMAXPROCS(0))` worker cap in `internal/ast/scanner.go` and state the bound is defined but not directly tested; status `met` → `partly met`; open question 10 added · evidence: traceability verification — `symbols_test.go` has no worker-count, parse-timeout, scan-timeout or `timed_out` assertion.
 - 2026-10-19 · REQ-RELEASE-002 · the `CGO_ENABLED=0 go build -tags server ./cmd/relay` build moved from CI job `go-server` to `release.yml` job `relay`, which also asserts the closure; `go-server` is cited only for vet, test and the closure assertion · evidence: `ci.yml` `go-server` runs vet, test and the closure assertion only; the build is in `release.yml` job `relay`.
 - 2026-10-19 · REQ-RELEASE-004 · the claim that `relay-image` runs only on version tags is replaced: `relay-image` runs on every push event and publishes `:main` and `:sha-<7>` for branch pushes; only `publish` is tag-gated; statement narrowed to release archives · evidence: `release.yml` `relay-image` has `if: github.event_name == 'push'`, `publish` has `if: startsWith(github.ref, 'refs/tags/v')`.
 - 2026-10-19 · REQ-RELEASE-001 · job names corrected to `actionlint`, `markdownlint`, `editorconfig`, `links`, `go-shared`, `go-server`, `web`, `web-e2e`, `go-client` and `deploy-script`; `shellcheck` is a step inside `deploy-script`, not a job · evidence: job keys in `.github/workflows/ci.yml`.
 - 2026-10-19 · REQ-COORD-001 · statement now names the coordinator's real-time inputs — harness file edits and `board report` calls — and says verification receipts count as plan evidence only through the periodic evidence re-scan · evidence: `cmd/client/cmd_verify.go` records nothing on the board, and receipts reach the board through `boardEvidenceEvery = 5 * time.Second` in `internal/app/board.go`.
-- 2026-10-19 · REQ-COORD-002 · statement and acceptance criteria now cover `board report` calls (source `report`) and document `SourceVerify` as a reserved source with no producer today; open question 9 added · evidence: `SourceVerify` is defined in `internal/board/discovery.go` and referenced only by `validSource` and a test, and nothing in `cmd/client` or `internal/app` emits it.
-- 2026-10-19 · REQ-HANDOFF-001 · statement scoped to the hosts with a supported mechanism (Claude Code via REQ-HANDOFF-002; oh-my-pi via REQ-HANDOFF-003 with the `/plan` prefill fallback); Antigravity named as hint-only per REQ-HANDOFF-006; status `met` → `partly met`; open question 10 added · evidence: REQ-HANDOFF-006 states the Antigravity handoff is the hint text only, and REQ-HANDOFF-003 carries the prefill fallback.
-- 2026-10-19 · REQ-UI-009 · restated as a measurable usability outcome with the target pending; status `met` → `partly met`; open question 6 updated · evidence: the previous acceptance named no measurable target and left the judgement with the owner, contradicting `met`.
+- 2026-10-19 · REQ-COORD-002 · statement and acceptance criteria now cover `board report` calls (source `report`) and document `SourceVerify` as a reserved source with no producer today; open question 11 added · evidence: `SourceVerify` is defined in `internal/board/discovery.go` and referenced only by `validSource` and a test, and nothing in `cmd/client` or `internal/app` emits it.
+- 2026-10-19 · REQ-HANDOFF-001 · statement scoped to the hosts with a supported mechanism (Claude Code via REQ-HANDOFF-002; oh-my-pi via REQ-HANDOFF-003 with the `/plan` prefill fallback); Antigravity named as hint-only per REQ-HANDOFF-006; status `met` → `partly met`; open question 12 added · evidence: REQ-HANDOFF-006 states the Antigravity handoff is the hint text only, and REQ-HANDOFF-003 carries the prefill fallback.
+- 2026-10-19 · REQ-UI-009 · restated as a measurable usability outcome with the target pending; status `met` → `partly met`; open question 8 updated · evidence: the previous acceptance named no measurable target and left the judgement with the owner, contradicting `met`.
 - 2026-10-19 · REQ-BOARD-002 · renamed Evidence column; the pre-Wave-4 blocked rule removed; REQ-COORD-003 now governs live-column and blocked precedence and the snapshot `column` (C11) · evidence: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C11 and `internal/board/coordinator.go`.
 - 2026-10-19 · REQ-BOARD-004 · the 4-second timer clause replaced by a cross-reference (authority: REQ-PERF-007); acceptance gained `internal/board/delta_test.go` · evidence: the timer figure was duplicated in REQ-PERF-004; `delta_test.go` covers the delta text.
 - 2026-10-19 · REQ-BOARD-005 · the 2-second clause replaced by a cross-reference to REQ-PERF-001 · evidence: REQ-PERF-001 owns the hook time bound (C6, C10).
@@ -1149,7 +1249,7 @@ Counts are taken from the `Category:` fields and sum to 78 requirements.
 - 2026-10-19 · REQ-GATE-007 · split: the no-waiver rule moved to REQ-GATE-011 · evidence: the catalogue standard of one intent per requirement; `internal/avatars/avatars_test.go` shows an open HIGH critique blocks synthesis.
 - 2026-10-19 · REQ-GRAPH-003 · claim narrowed: `.git/` and `docs/plans/.plan/` are never recorded as path nodes; acceptance cites `internal/board/discovery_test.go` where `MapPaths` is actually tested · evidence: `forbiddenPrefixes` in `internal/board/discovery.go`; `TestMapPaths` in `internal/board/discovery_test.go`.
 - 2026-10-19 · REQ-GRAPH-005 · the 150-node figure replaced by a cross-reference (authority: REQ-PERF-005) · evidence: the figure was duplicated in both requirements.
-- 2026-10-19 · REQ-INSTALL-002 · split into per-host artifact sets: REQ-INSTALL-002 (Claude Code), REQ-INSTALL-008 (oh-my-pi) and REQ-INSTALL-009 (Antigravity); category `Functional` → `Interface`; status `partly met` → `met` for the Claude Code set while REQ-INSTALL-009 carries the partly-met Antigravity hook question · evidence: the verified install run covers the Claude Code and oh-my-pi sets; open question 3 concerns only the Antigravity hook file shape.
+- 2026-10-19 · REQ-INSTALL-002 · split into per-host artifact sets: REQ-INSTALL-002 (Claude Code), REQ-INSTALL-008 (oh-my-pi) and REQ-INSTALL-009 (Antigravity); category `Functional` → `Interface`; status `partly met` → `met` for the Claude Code set while REQ-INSTALL-009 carries the partly-met Antigravity hook question · evidence: the verified install run covers the Claude Code and oh-my-pi sets; open question 5 concerns only the Antigravity hook file shape.
 - 2026-10-19 · REQ-INSTALL-007 · retitled "No duplicate skill visible to oh-my-pi"; premise corrected — only the Claude Code copies carry `enabled: false`, the oh-my-pi and Antigravity copies stay unmarked · evidence: the `enabled: false` comment block in `internal/host/installer.go` ("OMP's native copies and the AGY copies are NOT marked").
 - 2026-10-19 · REQ-RELEASE-001 · split: the web-gate blocking intent moved to REQ-RELEASE-006, which states the actual `needs` chain · evidence: `.github/workflows/ci.yml` `go-client` and `.github/workflows/release.yml` `client` declare `needs: web`; `package` declares `needs: [client, relay]` and `publish`/`relay-image` declare `needs: package`.
 - 2026-10-19 · REQ-RELEASE-002 and REQ-COMPAT-002 · the dependency-closure enumeration moved to REQ-COMPAT-002 as the single authority; REQ-RELEASE-002 cross-references it · evidence: both requirements stated the closure rule.
@@ -1165,6 +1265,13 @@ Counts are taken from the `Category:` fields and sum to 78 requirements.
 
 | REQ | Contract | Implementing files | Tests |
 | :--- | :--- | :--- | :--- |
+| REQ-LIVE-001 | C13, C16 | `internal/livestore/livestore.go`, `internal/center/center.go` | `internal/livestore/livestore_test.go`, `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
+| REQ-LIVE-002 | C14, C15 | `internal/center/hub.go`, `internal/app/center.go` | `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
+| REQ-LIVE-003 | C18 | `internal/app/centersprint.go`, `web/src/center/LivePage.tsx` | `internal/board/coordinator_test.go`, `internal/center/center_test.go` |
+| REQ-LIVE-004 | C15, C17 | `internal/center/center.go`, `web/src/center/` | `web/e2e/center.spec.ts` |
+| REQ-LIVE-005 | C15, C20 | `internal/center/auth.go`, `internal/app/center.go` | `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
+| REQ-LIVE-006 | C16, C20 | `internal/app/center.go`, `cmd/client/cmd_center.go` | `integrations/omp-hook-plan-forge.test.ts` |
+| REQ-INSTALL-010 | C21 | `internal/host/hookcheck.go`, `cmd/client/cmd_doctor.go` | `internal/host/hookcheck_test.go` |
 | REQ-GATE-001 | — | `internal/app/`, `web/src/pages/` | `web/e2e/bridge.spec.ts` |
 | REQ-GATE-002 | — | `internal/ingestion/ingest.go`, `internal/ingestion/normalizer.go` | `internal/ingestion/ingest_test.go`, `internal/ingestion/normalizer_test.go`, `internal/ingestion/fixtures_test.go` |
 | REQ-GATE-003 | — | `internal/ingestion/bounds.go` | `internal/ingestion/fixtures_test.go` |
