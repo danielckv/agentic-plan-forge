@@ -144,6 +144,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.2"
+          cache: true
       - name: Set up Node 24
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -154,7 +159,19 @@ jobs:
         run: npm --prefix web ci
       - name: Install Chromium for Playwright
         run: npm --prefix web exec -- playwright install --with-deps chromium
+      # The command center suite drives the real daemon, not a stand-in: the
+      # fanout, the ticket handshake and the Origin rules are the whole point,
+      # and a stand-in would prove none of them. Without PLAN_FORGE_BIN that
+      # suite skips, so the binary is built here.
+      - name: Build the client for the command center suite
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          npm --prefix web run build
+          go build -tags client -o "$RUNNER_TEMP/plan-forge" ./cmd/client
       - name: Boot the embedded bundle behind the bridge CSP and handshake
+        env:
+          PLAN_FORGE_BIN: ${{ runner.temp }}/plan-forge
         run: npm --prefix web run test:e2e
       - name: Upload Playwright report
         if: failure()
