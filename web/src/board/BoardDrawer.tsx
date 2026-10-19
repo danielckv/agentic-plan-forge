@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 
+import { trapTab } from "../ui/focusTrap";
 import type { BoardPriority, BoardTask } from "./types";
 
 interface BoardDrawerProps {
@@ -39,12 +40,25 @@ export function BoardDrawer({
 }: BoardDrawerProps): React.ReactElement {
   const [draft, setDraft] = useState("");
   const closeButton = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
   const characterCount = Array.from(draft).length;
 
   useEffect(() => {
     setDraft("");
     closeButton.current?.focus();
   }, [task.id]);
+
+  // Keep Tab inside the drawer, as Dialog does. The board behind it is inert,
+  // so a document-level capture also catches Tab when focus has fallen to body.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const drawer = drawerRef.current;
+      if (event.key !== "Tab" || drawer === null) return;
+      trapTab(drawer, event, document.activeElement);
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, []);
 
   const submitNote = (): void => {
     const note = draft.trim();
@@ -58,10 +72,12 @@ export function BoardDrawer({
   return (
     <div className="pf-board-drawer-layer" onMouseDown={onClose}>
       <aside
+        ref={drawerRef}
         className="pf-board-drawer"
         role="dialog"
         aria-modal="true"
         aria-labelledby="pf-board-drawer-title"
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="pf-board-drawer-header">
@@ -99,6 +115,7 @@ export function BoardDrawer({
                   key={priority.value}
                   type="button"
                   data-active={task.priority === priority.value}
+                  aria-pressed={task.priority === priority.value}
                   onClick={() => onPriority(priority.value)}
                   title={`${priority.label} priority (${priority.keyHint})`}
                 >
@@ -208,6 +225,8 @@ export function BoardDrawer({
                       type="button"
                       className="pf-btn pf-btn-danger pf-board-note-delete"
                       onClick={() => onDeleteNote(note.id)}
+                      disabled={note.id.startsWith("optimistic-")}
+                      title={note.id.startsWith("optimistic-") ? "Saving this note…" : undefined}
                       aria-label={`Delete note ${note.id}`}
                     >
                       <Trash2 size={14} aria-hidden="true" />

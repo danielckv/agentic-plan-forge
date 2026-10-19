@@ -57,15 +57,25 @@ export interface DeliveryChip {
   label: string;
 }
 
+/** Host label from a consumer id prefix (`claude:…`, `omp:…`). */
+export function consumerHostLabel(consumerID: string): string {
+  const separator = consumerID.indexOf(":");
+  const prefix = separator < 0 ? "" : consumerID.slice(0, separator);
+  if (prefix === "claude") return "Claude Code";
+  if (prefix === "omp") return "oh-my-pi";
+  return prefix === "" ? "the agent" : prefix;
+}
+
 export function deriveDeliveryChip(snapshot: BoardSnapshot): DeliveryChip {
-  const delivered = snapshot.consumers.some(
-    (consumer) => consumer.delivered_revision >= snapshot.revision,
+  const consumer = snapshot.consumers.find(
+    (candidate) => candidate.delivered_revision >= snapshot.revision,
   );
   return {
-    delivered,
-    label: delivered
-      ? `Delivered to Claude Code · rev ${String(snapshot.revision)}`
-      : "Waiting for the agent's next step",
+    delivered: consumer !== undefined,
+    label:
+      consumer === undefined
+        ? "Waiting for the agent's next step"
+        : `Delivered to ${consumerHostLabel(consumer.id)} · rev ${String(snapshot.revision)}`,
   };
 }
 

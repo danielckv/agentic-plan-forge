@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { actionRequestBody, createBoardStore } from "./boardStore";
+import { actionRequestBody, AUTH_FAILED_MESSAGE, createBoardStore } from "./boardStore";
 import type { BoardMutation } from "./boardStore";
 import {
+  consumerHostLabel,
   deriveDeliveryChip,
   EMPTY_FILTERS,
   filterBoardTasks,
@@ -11,7 +12,16 @@ import {
 import type { BoardSnapshot, BoardTask } from "./types";
 import { validateBoardSnapshot } from "./types";
 
-const TASKS: BoardTask[] = [
+type LegacyTask = Omit<BoardTask, "live" | "awaiting_verification" | "discovered">;
+
+const withC11 = (task: LegacyTask): BoardTask => ({
+  ...task,
+  live: { state: "", by: "", source: "", detail: "", at: "" },
+  awaiting_verification: false,
+  discovered: false,
+});
+
+const TASKS: BoardTask[] = ([
   {
     id: "T-1",
     epic_id: "E-1",
@@ -80,7 +90,7 @@ const TASKS: BoardTask[] = [
     agent_estimate: { likely: 12, basis: "grounded edit" },
     notes: [],
   },
-];
+] as LegacyTask[]).map(withC11);
 
 const GOOD_SNAPSHOT: BoardSnapshot = {
   repo: "agentic-plan-forge",
@@ -96,6 +106,8 @@ const GOOD_SNAPSHOT: BoardSnapshot = {
   drift: [],
   tasks: TASKS,
   consumers: [{ id: "claude:test", delivered_revision: 6, seen_at: "2026-10-19T12:00:00Z" }],
+  discoveries: [],
+  coordinator: { active: [], next_up: [], updated_at: "" },
 };
 
 function jsonResponse(value: unknown, status = 200): Response {
@@ -164,6 +176,18 @@ describe("board task derivations", () => {
       label: "Delivered to Claude Code · rev 7",
     });
   });
+
+  it("names the delivering host from the consumer id prefix", () => {
+    const delivered = (id: string) =>
+      deriveDeliveryChip({
+        ...GOOD_SNAPSHOT,
+        consumers: [{ id, delivered_revision: 7, seen_at: "2026-10-19T12:00:00Z" }],
+      }).label;
+    expect(delivered("omp:session-1")).toBe("Delivered to oh-my-pi · rev 7");
+    expect(delivered("claude:abc")).toBe("Delivered to Claude Code · rev 7");
+    expect(delivered("opaque")).toBe("Delivered to the agent · rev 7");
+    expect(consumerHostLabel("agy:1")).toBe("agy");
+  });
 });
 
 describe("board mutations", () => {
@@ -224,5 +248,149 @@ describe("board mutations", () => {
   it("rejects accidental multi-action values before issuing a request", () => {
     const invalid = { priority: "high", note: "also a note" } as unknown as BoardMutation;
     expect(() => actionRequestBody("T-1", invalid)).toThrow("exactly one action");
+  });
+});
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("concurrent board mutations", () => {
+  it("rebuilds from the server when a failed mutation cannot roll back cleanly", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const apiFetchMock = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/api/board") return jsonResponse(GOOD_SNAPSHOT);
+      const body = JSON.parse(String(init?.body)) as { id: string };
+      return body.id === "T-1" ? first.promise : second.promise;
+    });
+    const store = createBoardStore({ apiFetch: apiFetchMock });
+    store.acceptSnapshot(GOOD_SNAPSHOT);
+
+    const firstMutation = store.mutate("T-1", { priority: "high" });
+    const secondMutation = store.mutate("T-2", { priority: "normal" });
+    expect(store.getState().snapshot?.tasks[0]?.priority).toBe("high");
+    expect(store.getState().snapshot?.tasks[1]?.priority).toBe("normal");
+
+    // The first request fails while the second is still in flight: the
+    // snapshot is no longer the one the first mutation produced.
+    first.reject(new Error("boom"));
+    await expect(firstMutation).resolves.toBe(false);
+    expect(store.getState().snapshot?.tasks[0]?.priority).toBe("normal");
+    expect(store.getState().toast?.message).toContain("boom");
+
+    second.resolve(jsonResponse({
+      ...GOOD_SNAPSHOT,
+      revision: 8,
+      tasks: GOOD_SNAPSHOT.tasks.map((task) =>
+        task.id === "T-2" ? { ...task, priority: "normal" } : task,
+      ),
+    }));
+    await expect(secondMutation).resolves.toBe(true);
+    const tasks = store.getState().snapshot?.tasks ?? [];
+    expect(tasks.find((task) => task.id === "T-1")?.priority).toBe("normal");
+    expect(tasks.find((task) => task.id === "T-2")?.priority).toBe("normal");
+    expect(store.getState().pendingActions).toBe(0);
+  });
+});
+
+class FakeSocket {
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: ((event: { code: number }) => void) | null = null;
+  sent: string[] = [];
+  send(data: string): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    /* closing is driven explicitly by each test */
+  }
+}
+
+function socketHarness(token: string | null) {
+  const sockets: FakeSocket[] = [];
+  const delays: number[] = [];
+  let scheduled: (() => void) | null = null;
+  const store = createBoardStore({
+    bootstrap: () => Promise.resolve(token),
+    apiFetch: () => Promise.resolve(jsonResponse(GOOD_SNAPSHOT)),
+    socketURL: () => "ws://127.0.0.1/ws",
+    createSocket: () => {
+      const socket = new FakeSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+    schedule: (callback, delay) => {
+      delays.push(delay);
+      scheduled = callback;
+      return 1;
+    },
+    cancel: () => undefined,
+  });
+  return {
+    store,
+    sockets,
+    delays,
+    runScheduled: () => {
+      const callback = scheduled;
+      scheduled = null;
+      callback?.();
+    },
+  };
+}
+
+describe("board socket lifecycle", () => {
+  it("opens immediately without an auth frame when there is no token (preview)", async () => {
+    const harness = socketHarness(null);
+    harness.store.start();
+    await vi.waitFor(() => expect(harness.sockets).toHaveLength(1));
+
+    // One failed connection pushes the backoff up...
+    harness.sockets[0]!.onopen?.();
+    expect(harness.sockets[0]!.sent).toEqual([]);
+    expect(harness.store.getState().connection).toBe("open");
+    harness.sockets[0]!.onclose?.({ code: 1006 });
+    expect(harness.delays).toEqual([1000]);
+
+    // ...and a token-less open resets it, so the next drop starts over.
+    harness.runScheduled();
+    harness.sockets[1]!.onopen?.();
+    harness.sockets[1]!.onmessage?.({
+      data: JSON.stringify({ type: "board.snapshot", snapshot: { ...GOOD_SNAPSHOT, revision: 9 } }),
+    });
+    expect(harness.store.getState().snapshot?.revision).toBe(9);
+    harness.sockets[1]!.onclose?.({ code: 1006 });
+    expect(harness.delays).toEqual([1000, 1000]);
+    harness.store.stop();
+  });
+
+  it("does not reconnect after close code 4403 and reports an auth failure", async () => {
+    const harness = socketHarness("token");
+    harness.store.start();
+    await vi.waitFor(() => expect(harness.sockets).toHaveLength(1));
+    harness.sockets[0]!.onopen?.();
+    expect(harness.sockets[0]!.sent).toHaveLength(1);
+
+    harness.sockets[0]!.onclose?.({ code: 4403 });
+    expect(harness.delays).toEqual([]);
+    const state = harness.store.getState();
+    expect(state.connection).toBe("offline");
+    expect(state.lastError).toBe(AUTH_FAILED_MESSAGE);
+    expect(state.authFailed).toBe(true);
+    expect(AUTH_FAILED_MESSAGE).toBe("authentication failed — reopen from the plan-forge CLI");
+    harness.store.stop();
   });
 });

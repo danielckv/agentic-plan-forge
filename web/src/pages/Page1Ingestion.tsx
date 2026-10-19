@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { EditorView } from "@codemirror/view";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { EditorView, placeholder } from "@codemirror/view";
 import { EditorState, type Extension } from "@codemirror/state";
 import { editorBase } from "../codemirror/keymap";
 import { markdown } from "@codemirror/lang-markdown";
@@ -7,6 +7,7 @@ import {
   ArrowRight,
   CloudUpload,
   FileText,
+  FolderOpen,
   GitBranch,
   LoaderCircle,
   ScanText,
@@ -17,20 +18,26 @@ import {
 import { apiFetch } from "../protocol/bridge";
 import { useSync, submitEdit, freezeRequest, exportRecovery } from "../store/syncStore";
 import type { RecoveryItem, StatusView, SyncState } from "../store/syncStore";
+import { SkeletonChip, SkeletonLines } from "../ui/Skeleton";
 
 /**
  * Page 1 — Ingestion & normalization.
  *
  * Left pane: dropzone (.docx/.pdf/.md, max 25 MiB each, 5 files; owner/
- * executor only), a raw-text composer ("Add to interpretation" sends through
- * ingestion), status pills (AST scan, doc health, OCR). Right pane: the
- * single shared `prd` CodeMirror document with tabs for the latest
- * NormalizedPRD ("Product PRD" and "Technical appendix", read-only) and
- * ambiguity chips. Footer: Confirm Context & Launch Avatars (owner only).
+ * executor only; drag-drop or the Browse button), a raw-text composer ("Add to
+ * interpretation" sends through ingestion), status pills (AST scan, doc
+ * health, OCR). Right pane: the single shared `prd` CodeMirror document with
+ * tabs for the latest NormalizedPRD ("Product PRD" and "Technical appendix",
+ * read-only) and ambiguity chips. Footer: Confirm Context & Launch Avatars
+ * (owner only).
+ *
+ * Pending content shows skeletons: the pills until the first `/api/status`
+ * answer, the editor until the authority's first snapshot.
  */
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_UPLOAD_FILES = 5;
+const UPLOAD_ACCEPT = ".docx,.pdf,.md,.markdown";
 
 const OCR_INSTALL_GUIDANCE: Record<string, string> = {
   Darwin: "brew install poppler tesseract",
@@ -64,16 +71,31 @@ export function Page1Ingestion(): React.ReactElement {
   const [secrets] = useState<string[]>([]);
   const [dismissedSecrets, setDismissedSecrets] = useState<string[]>([]);
   const [tab, setTab] = useState<"product" | "appendix">("product");
+  const [dragOver, setDragOver] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   // Sending the PRD to the local generation host is what the page is for;
   // the box states that plainly and starts checked, so confirming the
   // context is one click. Unchecking it still blocks the launch.
   const [hostAck, setHostAck] = useState(true);
 
-  const onDrop = useCallback(
-    async (e: React.DragEvent<HTMLElement>): Promise<void> => {
-      e.preventDefault();
+  // A file dropped anywhere but the dropzone would make the browser navigate
+  // to it and take the planning window with it. Swallow stray file drops.
+  useEffect(() => {
+    const swallow = (e: DragEvent): void => {
+      if (e.dataTransfer?.types.includes("Files") === true) e.preventDefault();
+    };
+    window.addEventListener("dragover", swallow);
+    window.addEventListener("drop", swallow);
+    return () => {
+      window.removeEventListener("dragover", swallow);
+      window.removeEventListener("drop", swallow);
+    };
+  }, []);
+
+  const uploadFiles = useCallback(
+    async (list: File[]): Promise<void> => {
       if (sync.role !== "owner") return; // only the owner/executor uploads
-      const files = Array.from(e.dataTransfer.files).slice(0, MAX_UPLOAD_FILES);
+      const files = list.slice(0, MAX_UPLOAD_FILES);
       for (const f of files) {
         if (f.size > MAX_UPLOAD_BYTES) {
           setUpload({ inFlight: false, fileName: f.name, error: "file too large (max 25 MiB)", warnings: [] });
@@ -112,6 +134,12 @@ export function Page1Ingestion(): React.ReactElement {
     [sync.role],
   );
 
+  const onDrop = (e: React.DragEvent<HTMLElement>): void => {
+    e.preventDefault();
+    setDragOver(false);
+    void uploadFiles(Array.from(e.dataTransfer.files));
+  };
+
   const addToInterpretation = useCallback((): void => {
     if (composerText.trim().length === 0) return;
     // Composer text flows through ingestion as INGEST_APPEND (source:
@@ -134,28 +162,39 @@ export function Page1Ingestion(): React.ReactElement {
     freezeRequest();
   }, [secrets.length, dismissedSecrets.length]);
 
+  const isOwner = sync.role === "owner";
+  const awaitingSnapshot = sync.role === null;
+
   return (
     <div className="pf-page">
       <div className="pf-page-body">
         <div className="pf-container grid grid-cols-1 gap-6 py-7 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           {/* Left column: sources + local context */}
-          <section className="flex flex-col gap-5">
-            <div>
-              <h1 className="pf-title">Ingestion &amp; normalization</h1>
-              <p className="pf-caption mt-1">
+          <section className="flex min-w-0 flex-col gap-5" aria-labelledby="p1-title">
+            <header className="pf-page-header">
+              <h1 id="p1-title" className="pf-title">
+                Ingestion &amp; normalization
+              </h1>
+              <p className="pf-caption">
                 Add source documents or raw notes. Plan Forge separates product
                 requirements from technical context before any avatar sees them.
               </p>
-            </div>
+            </header>
 
             <div className="pf-card pf-card-pad">
               <p className="pf-label mb-3">Source documents</p>
               <div
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => void onDrop(e)}
+                onDragEnter={() => isOwner && setDragOver(true)}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
+                }}
+                onDrop={onDrop}
                 className="pf-dropzone"
+                data-over={dragOver}
+                data-busy={upload.inFlight}
               >
-                {sync.role !== "owner" ? (
+                {!isOwner ? (
                   <>
                     <span className="pf-dropzone-icon">
                       <ShieldAlert size={19} />
@@ -179,8 +218,30 @@ export function Page1Ingestion(): React.ReactElement {
                       Drop .docx, .pdf or .md files here
                     </p>
                     <p className="pf-caption">Up to 5 files · 25 MiB each</p>
+                    <button
+                      type="button"
+                      className="pf-btn pf-btn-secondary pf-btn-sm mt-1"
+                      onClick={() => fileInput.current?.click()}
+                    >
+                      <FolderOpen size={13} />
+                      Browse files
+                    </button>
                   </>
                 )}
+                <input
+                  ref={fileInput}
+                  type="file"
+                  className="pf-sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  multiple
+                  accept={UPLOAD_ACCEPT}
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files ?? []);
+                    e.target.value = ""; // picking the same file twice must still fire
+                    void uploadFiles(picked);
+                  }}
+                />
               </div>
               {upload.error !== null && (
                 <div className="pf-notice pf-notice--danger mt-3" role="alert">
@@ -197,14 +258,17 @@ export function Page1Ingestion(): React.ReactElement {
             </div>
 
             <div className="pf-card pf-card-pad">
-              <p className="pf-label mb-3">Raw notes</p>
+              <label htmlFor="p1-notes" className="pf-label mb-3 block">
+                Raw notes
+              </label>
               <textarea
+                id="p1-notes"
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
                 placeholder="Epics, ideas, requirements — pasted meeting notes or a rough brief work well."
                 className="pf-textarea min-h-28"
               />
-              <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <p className="pf-caption">Notes are appended to the interpretation on the right.</p>
                 <button
                   type="button"
@@ -220,11 +284,19 @@ export function Page1Ingestion(): React.ReactElement {
 
             <div className="pf-card pf-card-pad">
               <p className="pf-label mb-3">Repository grounding</p>
-              <div className="flex flex-wrap gap-2">
-                <Pill kind="ast" pills={pills} />
-                <Pill kind="docHealth" pills={pills} />
-                <Pill kind="ocr" pills={pills} />
-              </div>
+              {sync.statusLoaded ? (
+                <div className="flex flex-wrap gap-2">
+                  <Pill kind="ast" pills={pills} />
+                  <Pill kind="docHealth" pills={pills} />
+                  <Pill kind="ocr" pills={pills} />
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2" aria-busy="true" aria-label="Reading repository status">
+                  <SkeletonChip width={188} />
+                  <SkeletonChip width={104} />
+                  <SkeletonChip width={92} />
+                </div>
+              )}
               {pills.ocr === "missing" && (
                 <p className="pf-caption mt-3">
                   OCR tools missing:{" "}
@@ -237,15 +309,15 @@ export function Page1Ingestion(): React.ReactElement {
           </section>
 
           {/* Right column: live interpretation */}
-          <section className="flex min-h-0 flex-col gap-4">
-            <div className="flex items-end justify-between gap-3">
+          <section className="flex min-h-0 min-w-0 flex-col gap-4" aria-label="Interpretation">
+            <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="pf-section-title">Interpretation</h2>
                 <p className="pf-caption mt-0.5">
                   Editable shared PRD — changes sync to every collaborator.
                 </p>
               </div>
-              <div className="pf-tabs">
+              <div className="pf-tabs" role="group" aria-label="Interpretation view">
                 <TabButton label="Product PRD" active={tab === "product"} onClick={() => setTab("product")} />
                 <TabButton label="Technical appendix" active={tab === "appendix"} onClick={() => setTab("appendix")} />
               </div>
@@ -259,7 +331,14 @@ export function Page1Ingestion(): React.ReactElement {
                 </span>
                 <span className="pf-caption ml-auto">doc v{sync.docVersion}</span>
               </div>
-              <PrdEditor sync={sync} />
+              {awaitingSnapshot ? (
+                <div className="pf-editor-pending" aria-busy="true" aria-label="Waiting for the session to load the document">
+                  <SkeletonLines lines={5} />
+                  <p className="pf-caption">Waiting for the session authority…</p>
+                </div>
+              ) : (
+                <PrdEditor sync={sync} />
+              )}
             </div>
 
             {ambiguities.length > 0 && (
@@ -316,12 +395,12 @@ export function Page1Ingestion(): React.ReactElement {
 
       {/* Footer: generation-host line + primary CTA */}
       <footer className="pf-footer-bar">
-        <label className="flex items-center gap-2.5 text-[13px]" style={{ color: "var(--pf-ink-2)" }}>
+        <label className="pf-check-label">
           <input
             type="checkbox"
             checked={hostAck}
             onChange={(e) => setHostAck(e.target.checked)}
-            className="h-4 w-4 accent-[#0052cc]"
+            className="pf-checkbox"
           />
           Product requirements will be sent to the generation host through its local CLI
         </label>
@@ -359,8 +438,8 @@ function Pill(props: { kind: "ast" | "docHealth" | "ocr"; pills: StatusPills }):
   const Icon = kind === "ast" ? GitBranch : kind === "docHealth" ? FileText : ScanText;
   const tone = scanning ? "pf-chip--accent pf-chip--live" : healthy ? "pf-chip--ok" : "pf-chip--warn";
   return (
-    <span className={`pf-chip ${tone}`}>
-      <Icon size={12} />
+    <span className={`pf-chip pf-chip--wrap ${tone}`}>
+      <Icon size={12} className="shrink-0" />
       <span className="pf-dot" />
       {label}
     </span>
@@ -370,7 +449,7 @@ function Pill(props: { kind: "ast" | "docHealth" | "ocr"; pills: StatusPills }):
 function TabButton(props: { label: string; active: boolean; onClick: () => void }): React.ReactElement {
   const { label, active, onClick } = props;
   return (
-    <button type="button" className="pf-tab" data-active={active} onClick={onClick}>
+    <button type="button" className="pf-tab" data-active={active} aria-pressed={active} onClick={onClick}>
       {label}
     </button>
   );
@@ -419,7 +498,13 @@ function PrdEditor(props: { sync: SyncState }): React.ReactElement {
     }
     const state = EditorState.create({
       doc: sync.docText,
-      extensions: [markdown(), editorBase, editorHooks()] as Extension[],
+      extensions: [
+        markdown(),
+        editorBase,
+        editorHooks(),
+        EditorView.lineWrapping,
+        placeholder("Nothing to interpret yet — drop a document or paste notes on the left."),
+      ] as Extension[],
     });
     setView(new EditorView({ state, parent: node }));
   }, [sync.docText]);

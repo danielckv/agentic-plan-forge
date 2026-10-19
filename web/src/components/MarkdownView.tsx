@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Children, isValidElement, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -41,6 +41,15 @@ export function MarkdownView({ markdown, onOpenUrl, className }: MarkdownViewPro
           return <MermaidSvg source={text} />;
         }
         return <code className={cls}>{children}</code>;
+      },
+      // A mermaid block is a diagram card, not preformatted text: drop the
+      // wrapping <pre> so the card is not styled (or laid out) as code.
+      pre(props: React.ComponentPropsWithoutRef<"pre">): React.ReactElement {
+        const only = Children.toArray(props.children)[0];
+        if (isValidElement<{ className?: string }>(only) && only.props.className === "language-mermaid") {
+          return <>{props.children}</>;
+        }
+        return <pre>{props.children}</pre>;
       },
       // Links render inert with the visible URL; a click asks first.
       a(props: React.ComponentPropsWithoutRef<"a">): React.ReactElement {

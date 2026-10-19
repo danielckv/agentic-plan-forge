@@ -41,11 +41,22 @@ const EXPORTS = {
  * `ajv-formats/dist/index.js`), and its `code.esm` option only changes the
  * export syntax, not these references. A bare `require` in an ES module
  * reaches the browser unresolved, so each distinct reference becomes one
- * hoisted named import with a stable identifier.
+ * hoisted import with a stable identifier.
+ *
+ * `.default` needs care. Ajv's runtime helpers are CJS modules that set
+ * `exports.default = fn` next to `__esModule`. This package is `type: module`,
+ * so the bundler (Rolldown) treats the importer with Node ESM semantics, where
+ * the `default` import of a CJS module is the whole `module.exports` object,
+ * not `exports.default`. A named `{ default as x }` import therefore hands the
+ * validators `{ default, __esModule }` instead of `ucs2length`, and the first
+ * `minLength` check throws `x is not a function`. The `default` reference is
+ * imported as the module default and unwrapped when it still carries the
+ * `__esModule` envelope, which is correct under both interop conventions.
  */
 function hoistRequires(body) {
   const seen = new Map();
   const imports = [];
+  const unwraps = [];
   const rewritten = body.replace(
     /require\("([^"\\]+)"\)\.([A-Za-z_$][\w$]*)/g,
     (_match, moduleId, exportName) => {
@@ -54,7 +65,12 @@ function hoistRequires(body) {
       if (ident === undefined) {
         ident = `__ajv${seen.size}_${exportName.replace(/[^\w$]/g, "")}`;
         seen.set(key, ident);
-        imports.push(`import { ${exportName} as ${ident} } from ${JSON.stringify(moduleId)};`);
+        if (exportName === "default") {
+          imports.push(`import ${ident}_module from ${JSON.stringify(moduleId)};`);
+          unwraps.push(`const ${ident} = __ajvUnwrapDefault(${ident}_module);`);
+        } else {
+          imports.push(`import { ${exportName} as ${ident} } from ${JSON.stringify(moduleId)};`);
+        }
       }
       return ident;
     },
@@ -62,7 +78,12 @@ function hoistRequires(body) {
   if (/\brequire\s*\(/.test(rewritten)) {
     throw new Error("generated validators still reference require(); the Ajv emit shape changed");
   }
-  return `${imports.join("\n")}\n${rewritten}`;
+  const helper =
+    unwraps.length === 0
+      ? ""
+      : 'const __ajvUnwrapDefault = (m) => (m !== null && typeof m === "object" && m.__esModule === true ? m.default : m);\n' +
+        `${unwraps.join("\n")}\n`;
+  return `${imports.join("\n")}\n${helper}${rewritten}`;
 }
 
 // Options mirror the former in-browser instance exactly: a generated validator

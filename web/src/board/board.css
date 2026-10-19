@@ -995,3 +995,1213 @@
     transition: none;
   }
 }
+
+/* ---------- Wave 4: view switch, coordinator panel, live cards ---------- */
+
+.pf-board-body {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex: 1;
+}
+
+.pf-board-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.pf-board-viewswitch {
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  border: 1px solid var(--pf-border-strong);
+  border-radius: 8px;
+  background: var(--pf-inset);
+}
+
+.pf-board-viewswitch button {
+  height: 28px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--pf-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.pf-board-viewswitch button:hover {
+  color: var(--pf-ink);
+}
+
+.pf-board-viewswitch button.is-selected {
+  color: var(--pf-ink);
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+}
+
+.pf-board-viewswitch button:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+.pf-board-viewswitch-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--pf-bright-ink);
+  background: var(--pf-warn-bright);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pf-board-viewswitch kbd {
+  margin: 0 6px 0 4px;
+  padding: 0 5px;
+  border: 1px solid var(--pf-border-strong);
+  border-radius: 4px;
+  color: var(--pf-faint);
+  background: var(--pf-panel);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.pf-board-card.is-active {
+  border-color: var(--pf-accent);
+  animation: pf-board-card-pulse 1.8s ease-in-out infinite;
+}
+
+.pf-board-card.is-discovered {
+  border-style: dashed;
+}
+
+@keyframes pf-board-card-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--pf-accent) 45%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--pf-accent) 16%, transparent);
+  }
+}
+
+.pf-board-badge--awaiting {
+  gap: 3px;
+  color: var(--pf-warn);
+  background: var(--pf-warn-soft);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pf-board-card-live {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pf-accent);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pf-board-card-live .pf-dot,
+.pf-coord-live .pf-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--pf-accent);
+  animation: pf-pulse 1.6s ease-in-out infinite;
+}
+
+.pf-board-card-live .pf-mono {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--pf-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+/* Coordinator panel */
+
+.pf-coord {
+  width: 300px;
+  min-height: 0;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  border-left: 1px solid var(--pf-border);
+  background: var(--pf-panel);
+}
+
+.pf-coord.is-collapsed {
+  width: 46px;
+}
+
+.pf-coord-rail {
+  width: 100%;
+  height: 100%;
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  color: var(--pf-muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pf-coord-rail:hover {
+  color: var(--pf-ink);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-coord-rail:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: -2px;
+}
+
+.pf-coord-rail-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pf-coord-rail-counts {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-coord-rail-counts span {
+  min-width: 22px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--pf-muted);
+  background: var(--pf-inset);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.pf-coord-rail-counts .is-live {
+  color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+}
+
+.pf-coord-rail-counts .is-review {
+  color: var(--pf-warn);
+  background: var(--pf-warn-soft);
+}
+
+.pf-coord-head {
+  min-height: 62px;
+  padding: 12px 10px 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  border-bottom: 1px solid var(--pf-border);
+}
+
+.pf-coord-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--pf-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pf-coord-head h2 svg {
+  color: var(--pf-accent);
+}
+
+.pf-coord-head p {
+  margin: 3px 0 0 21px;
+  color: var(--pf-muted);
+  font-size: 11px;
+}
+
+.pf-coord-scroll {
+  min-height: 0;
+  padding: 4px 12px 16px;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.pf-coord-scroll section {
+  padding-top: 14px;
+}
+
+.pf-coord-scroll h3 {
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--pf-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.pf-coord-count {
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--pf-muted);
+  background: var(--pf-inset);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.pf-coord-scroll ul,
+.pf-coord-scroll ol {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+}
+
+.pf-coord-empty {
+  margin: 0;
+  padding: 10px 11px;
+  border: 1px dashed var(--pf-border-strong);
+  border-radius: var(--pf-radius-card);
+  color: var(--pf-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.pf-coord-item {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  color: var(--pf-ink);
+  background: var(--pf-panel);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.pf-coord-item:hover {
+  border-color: var(--pf-border-strong);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-coord-item:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+.pf-coord-item.is-active {
+  border-color: var(--pf-accent-border);
+  background: var(--pf-accent-soft);
+}
+
+.pf-coord-item.is-head {
+  border-color: var(--pf-ok-border);
+  background: var(--pf-ok-soft);
+}
+
+.pf-coord-item-top {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pf-coord-id {
+  color: var(--pf-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pf-coord-rank {
+  width: 17px;
+  height: 17px;
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--pf-muted);
+  background: var(--pf-inset);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.pf-coord-item.is-head .pf-coord-rank {
+  color: var(--pf-bright-ink);
+  background: var(--pf-ok);
+}
+
+.pf-coord-live {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--pf-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pf-coord-ago {
+  margin-left: auto;
+  color: var(--pf-muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.pf-coord-item-top .pf-board-priority {
+  margin-left: auto;
+}
+
+.pf-coord-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pf-coord-detail {
+  overflow: hidden;
+  color: var(--pf-muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-coord-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.pf-coord-hint.is-ok {
+  color: var(--pf-ok);
+}
+
+.pf-coord-hint.is-blocked {
+  color: var(--pf-warn);
+}
+
+.pf-coord-found {
+  padding: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid var(--pf-warn-border);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-warn-soft);
+}
+
+.pf-coord-found p {
+  margin: 0;
+  display: flex;
+  gap: 7px;
+  color: var(--pf-ink-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pf-coord-found p svg {
+  margin-top: 2px;
+  flex: none;
+  color: var(--pf-warn);
+}
+
+/* ---------- Graph view ---------- */
+
+.pf-graph {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background-color: var(--pf-bg);
+  background-image: radial-gradient(var(--pf-border) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.pf-graph-viewport {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.pf-graph-viewport[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.pf-graph-viewport:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--pf-accent);
+}
+
+.pf-graph-svg {
+  display: block;
+}
+
+.pf-graph-toolbar,
+.pf-graph-controls,
+.pf-graph-legend {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  font-size: 12px;
+}
+
+.pf-graph-toolbar {
+  top: 12px;
+  left: 12px;
+  padding: 6px 12px;
+  gap: 16px;
+}
+
+.pf-graph-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--pf-ink-2);
+  cursor: pointer;
+}
+
+.pf-graph-toggle input {
+  margin: 0;
+  accent-color: var(--pf-accent);
+}
+
+.pf-graph-toggle em {
+  margin-left: 3px;
+  color: var(--pf-muted);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.pf-graph-toolbar-note {
+  color: var(--pf-muted);
+  font-size: 11px;
+}
+
+.pf-graph-controls {
+  right: 12px;
+  bottom: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.pf-graph-zoom {
+  min-width: 44px;
+  color: var(--pf-ink-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+
+.pf-graph-legend {
+  left: 12px;
+  bottom: 12px;
+  padding: 7px 12px;
+  gap: 13px;
+  color: var(--pf-muted);
+  font-size: 11px;
+}
+
+.pf-graph-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pf-graph-swatch {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--pf-border-strong);
+  border-radius: 3px;
+  background: var(--pf-panel);
+}
+
+.pf-graph-swatch--in_progress {
+  border-color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+}
+
+.pf-graph-swatch--done {
+  border-color: var(--pf-ok-bright);
+  background: var(--pf-ok-soft);
+}
+
+.pf-graph-swatch--drifted {
+  border-color: var(--pf-danger-bright);
+  background: var(--pf-danger-soft);
+}
+
+.pf-graph-swatch--proposed {
+  border-style: dashed;
+  border-color: var(--pf-warn-bright);
+  background: var(--pf-warn-soft);
+}
+
+.pf-graph-swatch--dismissed {
+  border-style: dashed;
+  border-color: var(--pf-faint);
+  background: transparent;
+}
+
+.pf-graph-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--pf-faint);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* Edges */
+
+.pf-graph-edge {
+  fill: none;
+  stroke: var(--pf-border-strong);
+  stroke-width: 1.5;
+  transition: stroke 160ms ease, opacity 160ms ease, d 420ms var(--pf-ease);
+  animation: pf-graph-fade-in 380ms ease both;
+}
+
+.pf-graph-edge--discovered {
+  stroke: var(--pf-warn-bright);
+  stroke-dasharray: 5 4;
+}
+
+.pf-graph-edge--path {
+  stroke: var(--pf-faint);
+  stroke-dasharray: 2 4;
+  stroke-width: 1.2;
+}
+
+.pf-graph-edge--cycle {
+  stroke: var(--pf-danger-bright);
+  stroke-dasharray: 6 4;
+}
+
+.pf-graph-edge.is-hl {
+  stroke: var(--pf-accent);
+  stroke-width: 2.4;
+}
+
+.pf-graph-edge.is-dim {
+  opacity: 0.14;
+}
+
+.pf-graph-arrow {
+  fill: var(--pf-border-strong);
+}
+
+.pf-graph-arrow--discovered {
+  fill: var(--pf-warn-bright);
+}
+
+.pf-graph-arrow--path {
+  fill: var(--pf-faint);
+}
+
+.pf-graph-arrow--cycle {
+  fill: var(--pf-danger-bright);
+}
+
+.pf-graph-arrow--hl {
+  fill: var(--pf-accent);
+}
+
+/* Nodes */
+
+.pf-graph-node {
+  cursor: pointer;
+  outline: none;
+  transition: transform 420ms var(--pf-ease), opacity 160ms ease;
+}
+
+.pf-graph-node--group {
+  cursor: default;
+}
+
+.pf-graph-body {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pf-graph-pop 340ms var(--pf-ease) both;
+}
+
+@keyframes pf-graph-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pf-graph-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.pf-graph-bg {
+  fill: var(--pf-panel);
+  stroke: var(--pf-border-strong);
+  stroke-width: 1.25;
+  transition: fill 320ms ease, stroke 320ms ease;
+}
+
+/* Elevation without `filter`: one offset translucent rect per node, because a
+filter re-rasterizes every node on each pan frame and a plain shape does not. */
+.pf-graph-shadow {
+  fill: rgb(16 16 20 / 0.12);
+  pointer-events: none;
+}
+
+:root[data-theme="dark"] .pf-graph-shadow {
+  fill: rgb(0 0 0 / 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pf-graph-shadow {
+    fill: rgb(0 0 0 / 0.35);
+  }
+}
+
+.pf-graph-stripe {
+  fill: var(--pf-faint);
+  transition: fill 320ms ease;
+}
+
+.pf-graph-node--in_progress .pf-graph-bg {
+  fill: var(--pf-accent-soft);
+  stroke: var(--pf-accent);
+}
+
+.pf-graph-node--in_progress .pf-graph-stripe {
+  fill: var(--pf-accent);
+}
+
+.pf-graph-node--done .pf-graph-bg {
+  fill: var(--pf-ok-soft);
+  stroke: var(--pf-ok-bright);
+}
+
+.pf-graph-node--done .pf-graph-stripe {
+  fill: var(--pf-ok-bright);
+}
+
+.pf-graph-node--drifted .pf-graph-bg {
+  fill: var(--pf-danger-soft);
+  stroke: var(--pf-danger-bright);
+}
+
+.pf-graph-node--drifted .pf-graph-stripe {
+  fill: var(--pf-danger-bright);
+}
+
+.pf-graph-node--found .pf-graph-bg,
+.pf-graph-node--ghost .pf-graph-bg,
+.pf-graph-node--path .pf-graph-bg,
+.pf-graph-node--group .pf-graph-bg {
+  stroke-dasharray: 5 4;
+}
+
+.pf-graph-node--ghost .pf-graph-bg,
+.pf-graph-node--group .pf-graph-bg,
+.pf-graph-node--path .pf-graph-bg {
+  fill: var(--pf-panel-subtle);
+}
+
+.pf-graph-node--proposed .pf-graph-bg {
+  fill: var(--pf-warn-soft);
+  stroke: var(--pf-warn-bright);
+}
+
+.pf-graph-node--proposed .pf-graph-stripe,
+.pf-graph-node--proposed .pf-graph-path-dot {
+  fill: var(--pf-warn-bright);
+}
+
+.pf-graph-node--accepted .pf-graph-bg {
+  stroke: var(--pf-ok-bright);
+}
+
+.pf-graph-node--accepted .pf-graph-stripe,
+.pf-graph-node--accepted .pf-graph-path-dot {
+  fill: var(--pf-ok-bright);
+}
+
+.pf-graph-node--dismissed {
+  opacity: 0.55;
+}
+
+.pf-graph-node--dismissed .pf-graph-shadow {
+  display: none;
+}
+
+.pf-graph-node--dismissed .pf-graph-bg {
+  fill: transparent;
+  stroke: var(--pf-faint);
+}
+
+.pf-graph-node--dismissed .pf-graph-title,
+.pf-graph-node--dismissed .pf-graph-path-text {
+  text-decoration: line-through;
+}
+
+.pf-graph-node--group .pf-graph-bg {
+  stroke: var(--pf-faint);
+}
+
+.pf-graph-node.is-dim {
+  opacity: 0.22;
+}
+
+.pf-graph-node.is-hl .pf-graph-bg {
+  stroke: var(--pf-accent);
+  stroke-width: 2;
+}
+
+.pf-graph-node:hover .pf-graph-bg,
+.pf-graph-node:focus-visible .pf-graph-bg,
+.pf-graph-node.is-selected .pf-graph-bg {
+  stroke: var(--pf-accent);
+  stroke-width: 2.4;
+}
+
+.pf-graph-ring {
+  fill: none;
+  stroke: var(--pf-accent);
+  stroke-width: 2.5;
+  pointer-events: none;
+  animation: pf-graph-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pf-graph-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    stroke-width: 2;
+  }
+
+  50% {
+    opacity: 0.95;
+    stroke-width: 3.6;
+  }
+}
+
+.pf-graph-id {
+  fill: var(--pf-accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.pf-graph-title {
+  fill: var(--pf-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pf-graph-foot {
+  fill: var(--pf-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.pf-graph-foot.is-live {
+  fill: var(--pf-accent);
+}
+
+.pf-graph-pill {
+  fill: var(--pf-inset);
+}
+
+.pf-graph-pill--high {
+  fill: var(--pf-danger-soft);
+}
+
+.pf-graph-pill--high + .pf-graph-pill-text {
+  fill: var(--pf-danger);
+}
+
+.pf-graph-pill--found {
+  fill: var(--pf-accent-soft);
+}
+
+.pf-graph-pill--found + .pf-graph-pill-text {
+  fill: var(--pf-accent);
+}
+
+.pf-graph-pill--proposed {
+  fill: var(--pf-warn-soft);
+  stroke: var(--pf-warn-border);
+}
+
+.pf-graph-pill--proposed + .pf-graph-pill-text {
+  fill: var(--pf-warn);
+}
+
+.pf-graph-pill--accepted {
+  fill: var(--pf-ok-soft);
+}
+
+.pf-graph-pill--accepted + .pf-graph-pill-text {
+  fill: var(--pf-ok);
+}
+
+.pf-graph-pill--dismissed + .pf-graph-pill-text {
+  fill: var(--pf-muted);
+}
+
+.pf-graph-pill-text {
+  fill: var(--pf-ink-2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.pf-graph-marker {
+  color: var(--pf-warn);
+}
+
+.pf-graph-marker svg {
+  color: inherit;
+  overflow: visible;
+}
+
+.pf-graph-path-dot {
+  fill: var(--pf-faint);
+}
+
+.pf-graph-path-text {
+  fill: var(--pf-ink-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+}
+
+.pf-graph-group-title {
+  fill: var(--pf-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pf-graph-group-sub {
+  fill: var(--pf-muted);
+  font-size: 10.5px;
+}
+
+/* Discovery panel */
+
+.pf-graph-panel {
+  width: 330px;
+  max-height: calc(100% - 24px);
+  padding: 14px;
+  position: absolute;
+  z-index: 6;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--pf-border-strong);
+  border-radius: 8px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-lg);
+  outline: none;
+  animation: pf-board-fade-in 140ms ease both;
+}
+
+.pf-graph-panel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pf-graph-panel-head > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-graph-panel-icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--pf-warn);
+  background: var(--pf-warn-soft);
+}
+
+.pf-graph-panel-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--pf-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pf-graph-panel-head h3 {
+  margin: 3px 0 0;
+  color: var(--pf-ink);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.pf-graph-status {
+  text-transform: capitalize;
+}
+
+.pf-graph-status--proposed {
+  color: var(--pf-warn);
+  background: var(--pf-warn-soft);
+}
+
+.pf-graph-status--accepted {
+  color: var(--pf-ok);
+  background: var(--pf-ok-soft);
+}
+
+.pf-graph-status--dismissed {
+  color: var(--pf-muted);
+  background: var(--pf-inset);
+}
+
+.pf-graph-panel-meta {
+  margin: 0;
+  display: flex;
+  gap: 22px;
+}
+
+.pf-graph-panel-meta dt {
+  color: var(--pf-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pf-graph-panel-meta dd {
+  margin: 3px 0 0;
+  color: var(--pf-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pf-graph-panel-meta dd span {
+  color: var(--pf-muted);
+  font-weight: 500;
+}
+
+.pf-graph-link {
+  padding: 0;
+  border: 0;
+  color: var(--pf-accent);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pf-graph-link:hover {
+  text-decoration: underline;
+}
+
+.pf-graph-panel h4 {
+  margin: 0 0 5px;
+  color: var(--pf-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pf-graph-panel-reason {
+  margin: 0;
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pf-graph-panel-paths {
+  max-height: 104px;
+  margin: 0;
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-inset);
+  list-style: none;
+}
+
+.pf-graph-panel-paths li {
+  overflow: hidden;
+  color: var(--pf-ink-2);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-graph-panel-actions {
+  padding-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--pf-border);
+}
+
+.pf-graph-panel-actions > .pf-btn {
+  margin-left: auto;
+}
+
+.pf-graph-accept {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 5px;
+}
+
+.pf-graph-accept > span {
+  margin-right: 2px;
+  color: var(--pf-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pf-graph-accept .pf-btn {
+  border: 1px solid var(--pf-border-strong);
+  color: var(--pf-ink-2);
+  background: var(--pf-panel);
+}
+
+.pf-graph-accept-high:not(:disabled):hover {
+  color: var(--pf-danger);
+  background: var(--pf-danger-soft);
+}
+
+.pf-graph-accept-normal:not(:disabled):hover {
+  background: var(--pf-inset);
+}
+
+.pf-graph-accept-low:not(:disabled):hover {
+  color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+}
+
+.pf-graph-panel-resolved {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--pf-border);
+  color: var(--pf-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .pf-coord {
+    width: 248px;
+  }
+
+  .pf-board-viewswitch kbd {
+    display: none;
+  }
+
+  .pf-graph-legend {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-graph-node,
+  .pf-graph-bg,
+  .pf-graph-stripe,
+  .pf-graph-edge {
+    transition: none;
+  }
+
+  .pf-graph-body,
+  .pf-graph-ring,
+  .pf-graph-edge,
+  .pf-graph-panel,
+  .pf-board-card.is-active,
+  .pf-board-card-live .pf-dot,
+  .pf-coord-live .pf-dot {
+    animation: none;
+  }
+
+  .pf-graph-ring {
+    opacity: 0.9;
+  }
+}

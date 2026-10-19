@@ -12,6 +12,7 @@ import {
   CircleDot,
   FolderGit2,
   LayoutDashboard,
+  Network,
   RotateCw,
   Search,
   Wifi,
@@ -21,7 +22,8 @@ import {
 
 import { BoardCard } from "./BoardCard";
 import { BoardDrawer } from "./BoardDrawer";
-import { boardStore, useBoardState } from "./boardStore";
+import { CoordinatorPanel } from "./CoordinatorPanel";
+import { AUTH_FAILED_MESSAGE, boardStore, useBoardState } from "./boardStore";
 import type { BoardConnection } from "./boardStore";
 import {
   boardHostLabel,
@@ -31,6 +33,16 @@ import {
   sortBoardTasks,
 } from "./boardUtils";
 import type { BoardFilters } from "./boardUtils";
+import { deriveCoordinatorView, nextReviewRequest } from "./coordinator";
+import type { ReviewRequest } from "./coordinator";
+import { GraphView } from "./graph/GraphView";
+import {
+  readCoordinatorOpen,
+  readViewMode,
+  writeCoordinatorOpen,
+  writeViewMode,
+} from "./viewMode";
+import type { BoardViewMode } from "./viewMode";
 import type { BoardColumn, BoardPriority, BoardTask } from "./types";
 
 const COLUMNS: Array<{ id: BoardColumn; label: string; description: string }> = [
@@ -64,15 +76,29 @@ function readableStatus(status: string): string {
   return status.toLocaleLowerCase().replaceAll("_", " ");
 }
 
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 export function BoardApp(): React.ReactElement {
   const board = useBoardState();
   const [filters, setFilters] = useState<BoardFilters>({ ...EMPTY_FILTERS });
   const [selectedTaskID, setSelectedTaskID] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<BoardViewMode>(readViewMode);
+  const [reviewRequest, setReviewRequest] = useState<ReviewRequest | null>(null);
+  const reviewSeq = useRef(0);
+  const [coordinatorOpen, setCoordinatorOpen] = useState<boolean>(readCoordinatorOpen);
+  // Relative times ("12s ago") need a clock; one coarse tick keeps them honest.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const nodeElements = useRef(new Map<string, SVGGElement>());
   const searchInput = useRef<HTMLInputElement>(null);
   const cardElements = useRef(new Map<string, HTMLButtonElement>());
   const previousRects = useRef(new Map<string, DOMRect>());
   const previousColumns = useRef(new Map<string, BoardColumn>());
-  const returnFocus = useRef<HTMLButtonElement | null>(null);
+  const returnFocusTask = useRef<string | null>(null);
   const pendingFocusTask = useRef<string | null>(null);
 
   useEffect(() => {
@@ -86,19 +112,46 @@ export function BoardApp(): React.ReactElement {
     return () => window.clearTimeout(timer);
   }, [board.toast]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 10_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const changeView = useCallback((mode: BoardViewMode) => {
+    setViewMode(mode);
+    setReviewRequest(null);
+    writeViewMode(mode);
+  }, []);
+
+  const toggleCoordinator = useCallback(() => {
+    setCoordinatorOpen((open) => {
+      writeCoordinatorOpen(!open);
+      return !open;
+    });
+  }, []);
+
+  const registerNode = useCallback((taskID: string, element: SVGGElement | null) => {
+    if (element === null) nodeElements.current.delete(taskID);
+    else nodeElements.current.set(taskID, element);
+  }, []);
+
   const registerCard = useCallback((taskID: string, element: HTMLButtonElement | null) => {
     if (element === null) cardElements.current.delete(taskID);
     else cardElements.current.set(taskID, element);
   }, []);
 
   const closeDrawer = useCallback(() => {
-    const trigger = returnFocus.current;
+    const taskID = returnFocusTask.current;
     setSelectedTaskID(null);
-    window.requestAnimationFrame(() => trigger?.focus());
+    // Resolve the card at focus time: a column move remounts it, so an element
+    // captured when the drawer opened may be detached by now.
+    window.requestAnimationFrame(() => {
+      if (taskID !== null) (cardElements.current.get(taskID) ?? nodeElements.current.get(taskID))?.focus();
+    });
   }, []);
 
-  const openTask = useCallback((taskID: string, trigger: HTMLButtonElement) => {
-    returnFocus.current = trigger;
+  const openTask = useCallback((taskID: string) => {
+    returnFocusTask.current = taskID;
     setSelectedTaskID(taskID);
   }, []);
 
@@ -114,7 +167,7 @@ export function BoardApp(): React.ReactElement {
       currentColumns.set(task.id, task.column);
       const oldRect = previousRects.current.get(task.id);
       const oldColumn = previousColumns.current.get(task.id);
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const reduceMotion = prefersReducedMotion();
       if (
         !reduceMotion &&
         oldRect !== undefined &&
@@ -146,10 +199,20 @@ export function BoardApp(): React.ReactElement {
     const element = cardElements.current.get(taskID);
     if (element === undefined) return;
     pendingFocusTask.current = null;
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
     element.focus();
-    returnFocus.current = element;
+    returnFocusTask.current = taskID;
   }, [filteredTasks, selectedTaskID]);
+
+  // A task that leaves the snapshot (plan changed under the drawer) must not
+  // stay selected: it would swallow the board shortcuts with no drawer shown.
+  if (
+    selectedTaskID !== null &&
+    board.snapshot !== null &&
+    !board.snapshot.tasks.some((task) => task.id === selectedTaskID)
+  ) {
+    setSelectedTaskID(null);
+  }
 
   const selectedTask =
     selectedTaskID === null
@@ -170,11 +233,28 @@ export function BoardApp(): React.ReactElement {
         return;
       }
       if (event.key === "/" && !editing) {
+        // The board behind an open drawer is inert: nothing to search.
+        if (selectedTaskID !== null) return;
+        if (viewMode !== "board") return;
         event.preventDefault();
         searchInput.current?.focus();
         return;
       }
-      if (selectedTaskID === null || editing || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.key.toLocaleLowerCase() === "g" &&
+        !editing &&
+        selectedTaskID === null &&
+        !event.repeat &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        changeView(viewMode === "board" ? "graph" : "board");
+        return;
+      }
+      if (selectedTaskID === null || editing || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
       const priorityByKey: Record<string, BoardPriority | undefined> = {
         h: "high",
         n: "normal",
@@ -188,7 +268,7 @@ export function BoardApp(): React.ReactElement {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeDrawer, selectedTaskID]);
+  }, [changeView, closeDrawer, selectedTaskID, viewMode]);
 
   const connection = CONNECTION_META[board.connection];
 
@@ -229,6 +309,7 @@ export function BoardApp(): React.ReactElement {
   const epicOptions = uniqueValues(snapshot.tasks, "epic_id");
   const workstreamOptions = uniqueValues(snapshot.tasks, "workstream_id");
   const manifestOrder = snapshot.tasks.map((task) => task.id);
+  const coordinatorView = deriveCoordinatorView(snapshot, nowMs);
   const filtersActive =
     filters.search !== "" ||
     filters.epic !== "all" ||
@@ -238,6 +319,8 @@ export function BoardApp(): React.ReactElement {
 
   return (
     <main className="pf-page pf-board">
+      {/* Everything behind the drawer is inert while it is open (focus and AT). */}
+      <div style={{ display: "contents" }} inert={selectedTask !== undefined}>
       <header className="pf-board-header">
         <div className="pf-board-brand">
           <div className="pf-brand-mark"><LayoutDashboard size={17} aria-hidden="true" /></div>
@@ -256,6 +339,31 @@ export function BoardApp(): React.ReactElement {
               <span>Revision {snapshot.revision}</span>
             </div>
           </div>
+        </div>
+
+        <div className="pf-board-viewswitch" role="group" aria-label="Board view">
+          <button
+            type="button"
+            className={viewMode === "board" ? "is-selected" : ""}
+            aria-pressed={viewMode === "board"}
+            onClick={() => changeView("board")}
+          >
+            <LayoutDashboard size={14} aria-hidden="true" /> Board
+          </button>
+          <button
+            type="button"
+            className={viewMode === "graph" ? "is-selected" : ""}
+            aria-pressed={viewMode === "graph"}
+            onClick={() => changeView("graph")}
+          >
+            <Network size={14} aria-hidden="true" /> Graph
+            {coordinatorView.proposed.length > 0 ? (
+              <span className="pf-board-viewswitch-count" title="Discoveries awaiting review">
+                {coordinatorView.proposed.length}
+              </span>
+            ) : null}
+          </button>
+          <kbd title="Press g to switch views">g</kbd>
         </div>
 
         <div className="pf-board-header-status">
@@ -285,14 +393,18 @@ export function BoardApp(): React.ReactElement {
           </div>
         </div>
       </header>
+      <div className="pf-board-body">
+      <div className="pf-board-main">
 
       {board.connection !== "open" ? (
         <div className={`pf-board-connection-banner ${board.connection === "offline" ? "is-offline" : ""}`}>
           {board.connection === "offline" ? <WifiOff size={14} aria-hidden="true" /> : <RotateCw className="pf-spin" size={14} aria-hidden="true" />}
           <span>
-            {board.connection === "offline"
-              ? "Board offline — showing the last received snapshot."
-              : "Reconnecting to live plan updates…"}
+            {board.authFailed
+              ? `Board offline — ${AUTH_FAILED_MESSAGE}.`
+              : board.connection === "offline"
+                ? "Board offline — showing the last received snapshot."
+                : "Reconnecting to live plan updates…"}
           </span>
         </div>
       ) : null}
@@ -317,6 +429,8 @@ export function BoardApp(): React.ReactElement {
         </section>
       ) : null}
 
+      {viewMode === "board" ? (
+      <>
       <section className="pf-board-filters" aria-label="Board filters">
         <label className="pf-board-search">
           <span className="pf-board-sr-only">Search tasks</span>
@@ -432,6 +546,33 @@ export function BoardApp(): React.ReactElement {
           })}
         </section>
       )}
+      </>
+      ) : (
+        <GraphView
+          snapshot={snapshot}
+          pending={board.pendingActions > 0}
+          nowMs={nowMs}
+          onOpenTask={openTask}
+          registerNode={registerNode}
+          focusDiscovery={reviewRequest}
+        />
+      )}
+      </div>
+      <CoordinatorPanel
+        view={coordinatorView}
+        open={coordinatorOpen}
+        onToggle={toggleCoordinator}
+        onOpenTask={openTask}
+        onReviewDiscoveries={() => {
+          const first = coordinatorView.proposed[0];
+          changeView("graph");
+          if (first !== undefined) {
+            setReviewRequest(nextReviewRequest(reviewSeq, first.id));
+          }
+        }}
+      />
+      </div>
+      </div>
 
       {selectedTask !== undefined ? (
         <BoardDrawer

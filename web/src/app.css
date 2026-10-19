@@ -4,9 +4,15 @@
  * Plan Forge design system — Cursor language
  * Low-chroma neutral greys, one blue accent, hairline borders, small
  * radii, status lozenges. Light and dark are the same system with one
- * token block each; every surface, line and ink reads from a variable,
- * so `prefers-color-scheme` is the only switch. System font stack only
- * — nothing fetched.
+ * token block each; every surface, line and ink reads from a variable.
+ *
+ * Theme precedence, lowest to highest:
+ *   1. :root                                  light tokens
+ *   2. prefers-color-scheme: dark             dark tokens, unless the user
+ *                                             pinned light (data-theme="light")
+ *   3. :root[data-theme="dark"|"light"]       the Theme selector's choice
+ * "System" removes data-theme, leaving the OS in charge. System font stack
+ * only — nothing fetched.
  * ------------------------------------------------------------------ */
 
 :root {
@@ -20,6 +26,7 @@
   --pf-sidebar: #f7f7f8;
   --pf-sidebar-hover: #ededee;
   --pf-sidebar-active: #e7eefb;
+  --pf-sidebar-active-ink: #0a55b0;
   --pf-sidebar-ink: #62626a;
   --pf-sidebar-ink-strong: #1b1b1f;
   --pf-sidebar-border: #e4e4e7;
@@ -59,25 +66,103 @@
   --pf-danger-soft: #fdeded;
   --pf-danger-border: #f6c5c5;
 
-  /* ink that sits on a bright status fill (banners) */
+  /* ink that sits on a bright status fill */
   --pf-bright-ink: #ffffff;
 
   /* elevation */
   --pf-shadow-sm: 0 1px 2px rgb(16 16 20 / 0.06);
   --pf-shadow-md: 0 6px 16px -6px rgb(16 16 20 / 0.18), 0 0 0 1px rgb(16 16 20 / 0.04);
+  --pf-shadow-lg: 0 24px 56px -16px rgb(16 16 20 / 0.32), 0 0 0 1px rgb(16 16 20 / 0.06);
 
   /* radii */
   --pf-radius-card: 6px;
   --pf-radius-ctl: 5px;
+
+  /* modal scrim */
+  --pf-scrim: rgb(14 14 18 / 0.5);
+
+  /* motion: one curve, three durations (route, accordion, chip) */
+  --pf-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --pf-dur-fast: 120ms;
+  --pf-dur: 180ms;
+  --pf-dur-slow: 220ms;
+
+  /* layout */
+  --pf-gutter: 32px;
+  --pf-sidebar-w: 232px;
+  --pf-rail-w: 56px;
 }
 
 /*
- * Dark follows the OS. Surfaces step up in lightness as they come forward
- * (bg -> panel -> inset), lines stay hairline, and the status colors move to
- * their lighter variants so they keep contrast on a dark fill.
+ * Dark tokens. They appear twice, byte for byte: once for the OS preference
+ * (unless the user pinned light), once for an explicit data-theme="dark".
+ * Surfaces step up in lightness as they come forward (bg -> panel -> inset),
+ * lines stay hairline, and status colors move to their lighter variants so
+ * they keep contrast on a dark fill.
  */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* surfaces */
+  --pf-bg: #141416;
+  --pf-panel: #1a1a1d;
+  --pf-panel-subtle: #1f1f23;
+  --pf-inset: #26262b;
+  --pf-sidebar: #151517;
+  --pf-sidebar-hover: #242429;
+  --pf-sidebar-active: #1d2a3d;
+  --pf-sidebar-active-ink: #85b8ff;
+  --pf-sidebar-ink: #9a9aa2;
+  --pf-sidebar-ink-strong: #ececef;
+  --pf-sidebar-border: #2a2a30;
+
+  /* ink */
+  --pf-ink: #ececef;
+  --pf-ink-2: #b6b6be;
+  --pf-muted: #8a8a94;
+  --pf-faint: #6b6b75;
+
+  /* lines */
+  --pf-border: #2a2a30;
+  --pf-border-strong: #3a3a42;
+
+  /* accent */
+  --pf-accent: #58a6ff;
+  --pf-accent-hover: #79b8ff;
+  --pf-accent-soft: #15243a;
+  --pf-accent-border: #2b4a73;
+  --pf-accent-ink: #0c1420;
+
+  /* special marker */
+  --pf-epic: #a78bfa;
+  --pf-epic-soft: #241d3a;
+
+  /* semantic status */
+  --pf-ok: #4ade80;
+  --pf-ok-bright: #34d399;
+  --pf-ok-soft: #10281e;
+  --pf-ok-border: #1f5240;
+  --pf-warn: #fbbf24;
+  --pf-warn-bright: #f59e0b;
+  --pf-warn-soft: #2a2110;
+  --pf-warn-border: #5a4418;
+  --pf-danger: #f87171;
+  --pf-danger-bright: #ef4444;
+  --pf-danger-soft: #2d1616;
+  --pf-danger-border: #5c2828;
+
+  --pf-bright-ink: #15151a;
+
+  /* elevation */
+  --pf-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --pf-shadow-md: 0 8px 20px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.05);
+  --pf-shadow-lg: 0 28px 64px -16px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.07);
+
+  --pf-scrim: rgb(0 0 0 / 0.62);
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
 
     /* surfaces */
@@ -88,6 +173,7 @@
     --pf-sidebar: #151517;
     --pf-sidebar-hover: #242429;
     --pf-sidebar-active: #1d2a3d;
+    --pf-sidebar-active-ink: #85b8ff;
     --pf-sidebar-ink: #9a9aa2;
     --pf-sidebar-ink-strong: #ececef;
     --pf-sidebar-border: #2a2a30;
@@ -132,6 +218,16 @@
     /* elevation */
     --pf-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
     --pf-shadow-md: 0 8px 20px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.05);
+    --pf-shadow-lg: 0 28px 64px -16px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.07);
+
+    --pf-scrim: rgb(0 0 0 / 0.62);
+  }
+}
+
+/* Below 1100px the sidebar is a rail and the gutters tighten. */
+@media (max-width: 1099.98px) {
+  :root {
+    --pf-gutter: 24px;
   }
 }
 
@@ -139,6 +235,13 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* A fixed-viewport app: regions scroll inside it, the document never does. */
+html,
+body {
+  overflow: hidden;
+  overflow: clip;
 }
 
 body {
@@ -162,6 +265,42 @@ body {
 
 ::selection {
   background: var(--pf-accent-soft);
+}
+
+/* ---------- focus ---------- */
+
+/*
+ * Every interactive control shows a ring for keyboard focus and nothing for
+ * mouse focus. `:where` keeps this at zero specificity so component rules can
+ * adjust offset or shape without fighting it.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
+/* Controls flush against a clipping edge ring inward so the ring is not cut. */
+.pf-accordion-trigger:focus-visible,
+.pf-avatar-card-head:focus-visible,
+.pf-nav-item:focus-visible,
+.pf-rail-btn:focus-visible,
+.pf-segment:focus-visible,
+.pf-tab:focus-visible,
+.pf-search-clear:focus-visible,
+.pf-toast-close:focus-visible {
+  outline-offset: -2px;
+}
+
+.pf-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---------- typography ---------- */
@@ -200,7 +339,69 @@ body {
   color: var(--pf-muted);
 }
 
+.pf-kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 5px;
+  border: 1px solid var(--pf-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--pf-panel);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--pf-ink-2);
+}
+
 /* ---------- layout primitives ---------- */
+
+.pf-app {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  overflow: clip;
+}
+
+.pf-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pf-main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /*
+   * `clip`, not `hidden`: a hidden box can still be scrolled by script and by
+   * focus or scrollIntoView, which would slide the whole page region under the
+   * top bar. A clipped box cannot scroll at all.
+   */
+  overflow: hidden;
+  overflow: clip;
+}
+
+/* Route change: the incoming page fades and slides up 6px in 200 ms. */
+.pf-route {
+  height: 100%;
+  animation: pf-route-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+@keyframes pf-route-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
 .pf-page {
   height: 100%;
@@ -212,14 +413,21 @@ body {
 .pf-page-body {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
+}
+
+.pf-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .pf-container {
   width: 100%;
   max-width: 1180px;
   margin-inline: auto;
-  padding-inline: 32px;
+  padding-inline: var(--pf-gutter);
 }
 
 .pf-card {
@@ -236,29 +444,105 @@ body {
 .pf-footer-bar {
   border-top: 1px solid var(--pf-border);
   background: var(--pf-panel);
-  padding: 10px 32px;
+  padding: 10px var(--pf-gutter);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
 }
 
-/* ---------- sidebar (Jira left rail) ---------- */
+.pf-footer-note {
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: 4px;
+}
+
+.pf-check-label {
+  display: flex;
+  flex: 1 1 320px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--pf-ink-2);
+}
+
+.pf-checkbox {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--pf-accent);
+}
+
+/* Secondary bar under the global top bar (Page 2 cycle + run state). */
+.pf-subbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 10px var(--pf-gutter);
+  background: var(--pf-panel);
+  border-bottom: 1px solid var(--pf-border);
+}
+
+.pf-subbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---------- sidebar (left rail) ---------- */
 
 .pf-sidebar {
-  width: 232px;
+  width: var(--pf-sidebar-w);
   flex: none;
   display: flex;
   flex-direction: column;
   background: var(--pf-sidebar);
   color: var(--pf-sidebar-ink);
+  border-right: 1px solid var(--pf-sidebar-border);
+  overflow: hidden;
+  transition: width var(--pf-dur-slow) var(--pf-ease);
+}
+
+.pf-sidebar[data-collapsed="true"] {
+  width: var(--pf-rail-w);
 }
 
 .pf-sidebar-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 16px 14px;
+  min-height: 61px;
+  padding: 16px 14px 14px;
   border-bottom: 1px solid var(--pf-sidebar-border);
+}
+
+.pf-sidebar-brand-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.pf-sidebar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pf-sidebar-ink-strong);
+}
+
+.pf-sidebar-project {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--pf-sidebar-ink);
+  white-space: nowrap;
 }
 
 .pf-brand-mark {
@@ -279,11 +563,18 @@ body {
   padding: 12px 8px;
 }
 
+.pf-sidebar-heading {
+  padding: 4px 10px 8px;
+  color: var(--pf-sidebar-ink);
+  white-space: nowrap;
+}
+
 .pf-nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
+  min-height: 34px;
   padding: 7px 10px;
   border: none;
   border-radius: var(--pf-radius-ctl);
@@ -293,7 +584,15 @@ body {
   font-weight: 500;
   color: var(--pf-sidebar-ink);
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color var(--pf-dur-fast) ease,
+    color var(--pf-dur-fast) ease;
+}
+
+.pf-nav-item > svg {
+  flex: none;
 }
 
 .pf-nav-item:hover:not(:disabled) {
@@ -303,7 +602,7 @@ body {
 
 .pf-nav-item[data-active="true"] {
   background: var(--pf-sidebar-active);
-  color: #85b8ff;
+  color: var(--pf-sidebar-active-ink);
 }
 
 .pf-nav-item:disabled {
@@ -311,19 +610,174 @@ body {
   cursor: not-allowed;
 }
 
-/* ---------- top bar (Jira global bar area) ---------- */
+.pf-sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding: 12px 8px 10px;
+  border-top: 1px solid var(--pf-sidebar-border);
+}
+
+.pf-sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 10px;
+  font-size: 12px;
+  color: var(--pf-sidebar-ink);
+  white-space: nowrap;
+}
+
+.pf-sidebar-status > svg {
+  flex: none;
+}
+
+.pf-sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pf-sidebar-border);
+}
+
+.pf-rail-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding-inline: 10px;
+  border: none;
+  border-radius: var(--pf-radius-ctl);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--pf-sidebar-ink);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--pf-dur-fast) ease,
+    color var(--pf-dur-fast) ease;
+}
+
+.pf-rail-btn > svg {
+  flex: none;
+}
+
+.pf-rail-btn:hover {
+  background: var(--pf-sidebar-hover);
+  color: var(--pf-sidebar-ink-strong);
+}
+
+.pf-rail-btn .pf-kbd {
+  margin-left: auto;
+}
+
+/* Theme: segmented control while expanded. */
+.pf-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-sidebar-hover);
+}
+
+.pf-segment {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding-inline: 4px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pf-sidebar-ink);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--pf-dur-fast) ease,
+    color var(--pf-dur-fast) ease,
+    box-shadow var(--pf-dur-fast) ease;
+}
+
+.pf-segment:hover {
+  color: var(--pf-sidebar-ink-strong);
+}
+
+.pf-segment[aria-pressed="true"] {
+  background: var(--pf-panel);
+  color: var(--pf-ink);
+  box-shadow: var(--pf-shadow-sm);
+}
+
+/* Collapsed rail: icons only, centered; labels leave the layout. */
+.pf-sidebar[data-collapsed="true"] .pf-sidebar-brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.pf-sidebar[data-collapsed="true"] .pf-sidebar-brand-text,
+.pf-sidebar[data-collapsed="true"] .pf-nav-label,
+.pf-sidebar[data-collapsed="true"] .pf-sidebar-heading {
+  display: none;
+}
+
+.pf-sidebar[data-collapsed="true"] .pf-nav-item,
+.pf-sidebar[data-collapsed="true"] .pf-rail-btn,
+.pf-sidebar[data-collapsed="true"] .pf-sidebar-status {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* ---------- top bar ---------- */
 
 .pf-topbar {
   display: flex;
   align-items: center;
   gap: 14px;
-  height: 52px;
-  padding-inline: 24px;
+  min-height: 52px;
+  padding-inline: var(--pf-gutter);
   background: var(--pf-panel);
   border-bottom: 1px solid var(--pf-border);
   flex: none;
+  min-width: 0;
 }
 
+.pf-topbar-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 220px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-topbar-divider {
+  width: 1px;
+  height: 20px;
+  flex: none;
+  background: var(--pf-border-strong);
+}
+
+.pf-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex: none;
+}
+
+/* Existing breadcrumb classes stay for any caller still using them. */
 .pf-breadcrumb {
   display: flex;
   align-items: center;
@@ -337,6 +791,120 @@ body {
   font-weight: 600;
 }
 
+/* ---------- phase stepper (top bar) ---------- */
+
+.pf-phase-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pf-phase {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-phase-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--pf-muted);
+  white-space: nowrap;
+  transition: color var(--pf-dur) ease;
+}
+
+.pf-phase-step + .pf-phase-step::before {
+  content: "";
+  width: 22px;
+  height: 2px;
+  margin-inline: 10px;
+  border-radius: 2px;
+  background: var(--pf-border-strong);
+  transition: background-color var(--pf-dur-slow) var(--pf-ease);
+}
+
+/* The connector into a step fills once the session has reached that step. */
+.pf-phase-step[data-state="done"]::before,
+.pf-phase-step[data-state="current"]::before {
+  background: var(--pf-ok-bright);
+}
+
+.pf-phase-index {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 999px;
+  border: 2px solid var(--pf-border-strong);
+  background: var(--pf-panel);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--pf-muted);
+  transition:
+    background-color var(--pf-dur) ease,
+    border-color var(--pf-dur) ease,
+    color var(--pf-dur) ease,
+    box-shadow var(--pf-dur) ease;
+}
+
+.pf-phase-step[data-state="done"] {
+  color: var(--pf-ink-2);
+}
+
+.pf-phase-step[data-state="done"] .pf-phase-index {
+  border-color: var(--pf-ok-bright);
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+}
+
+.pf-phase-step[data-state="current"] {
+  color: var(--pf-accent);
+  font-weight: 600;
+}
+
+.pf-phase-step[data-state="current"] .pf-phase-index {
+  border-color: var(--pf-accent);
+  background: var(--pf-accent);
+  color: var(--pf-accent-ink);
+  box-shadow: 0 0 0 3px var(--pf-accent-soft);
+}
+
+/* Approved: the last step is current and finished, so it reads green. */
+.pf-phase-step[data-complete="true"] {
+  color: var(--pf-ok);
+}
+
+.pf-phase-step[data-complete="true"] .pf-phase-index {
+  border-color: var(--pf-ok-bright);
+  background: var(--pf-ok-bright);
+  color: var(--pf-bright-ink);
+  box-shadow: 0 0 0 3px var(--pf-ok-soft);
+}
+
+/* Narrow: only the current step keeps a visible label (others stay readable to AT). */
+@media (max-width: 1099.98px) {
+  .pf-phase-step:not([data-state="current"]) .pf-phase-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .pf-phase-step + .pf-phase-step::before {
+    width: 14px;
+    margin-inline: 6px;
+  }
+}
+
 /* ---------- lozenges, chips, badges (Atlassian lozenge style) ---------- */
 
 .pf-chip {
@@ -344,6 +912,7 @@ body {
   align-items: center;
   gap: 5px;
   height: 20px;
+  max-width: 100%;
   padding-inline: 6px;
   border-radius: var(--pf-radius-ctl);
   background: var(--pf-inset);
@@ -354,6 +923,19 @@ body {
   text-transform: uppercase;
   color: var(--pf-ink-2);
   white-space: nowrap;
+  transition:
+    background-color var(--pf-dur) ease,
+    color var(--pf-dur) ease,
+    border-color var(--pf-dur) ease;
+}
+
+/* Long values (the AST scan detail) wrap instead of overflowing a narrow card. */
+.pf-chip--wrap {
+  height: auto;
+  min-height: 20px;
+  padding-block: 2px;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .pf-dot {
@@ -362,6 +944,7 @@ body {
   border-radius: 999px;
   background: var(--pf-faint);
   flex: none;
+  transition: background-color var(--pf-dur) ease;
 }
 
 .pf-chip--ok { color: var(--pf-ok); background: var(--pf-ok-soft); }
@@ -374,6 +957,22 @@ body {
 .pf-chip--accent .pf-dot { background: var(--pf-accent-hover); }
 .pf-chip--epic { color: var(--pf-epic); background: var(--pf-epic-soft); }
 .pf-chip--live .pf-dot { animation: pf-pulse 1.6s ease-in-out infinite; }
+
+/* A chip that changed state is a new element: it pops in rather than snapping. */
+.pf-chip--swap {
+  animation: pf-chip-swap 240ms var(--pf-ease) backwards;
+}
+
+@keyframes pf-chip-swap {
+  from {
+    opacity: 0.35;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
 @keyframes pf-pulse {
   0%, 100% { opacity: 1; }
@@ -388,6 +987,7 @@ body {
 }
 
 .pf-skeleton {
+  display: block;
   height: 9px;
   border-radius: 999px;
   background: linear-gradient(
@@ -400,15 +1000,32 @@ body {
   animation: pf-shimmer 1.4s ease-in-out infinite;
 }
 
+.pf-skeleton--chip {
+  height: 20px;
+  border-radius: var(--pf-radius-ctl);
+}
+
+.pf-skeleton--heading {
+  width: 38%;
+  height: 12px;
+  margin-bottom: 14px;
+}
+
+.pf-skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.pf-skeleton-card {
+  display: flex;
+  flex-direction: column;
+}
+
 @keyframes pf-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pf-chip--live .pf-dot,
-  .pf-spin,
-  .pf-skeleton { animation: none; }
 }
 
 /* Severity badges (critic issues, subtasks) */
@@ -422,6 +1039,9 @@ body {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  transition:
+    background-color var(--pf-dur) ease,
+    color var(--pf-dur) ease;
 }
 
 .pf-badge--critical { color: var(--pf-danger); background: var(--pf-danger-soft); }
@@ -429,7 +1049,7 @@ body {
 .pf-badge--medium { color: var(--pf-ink-2); background: var(--pf-inset); }
 .pf-badge--recommended { color: var(--pf-accent); background: var(--pf-accent-soft); }
 
-/* ---------- buttons (Jira: primary blue, secondary neutral) ---------- */
+/* ---------- buttons (primary blue, secondary neutral) ---------- */
 
 .pf-btn {
   display: inline-flex;
@@ -493,6 +1113,15 @@ body {
   font-size: 12px;
 }
 
+.pf-btn-icon {
+  width: 26px;
+  padding-inline: 0;
+}
+
+.pf-copy[data-copied="true"] {
+  color: var(--pf-ok);
+}
+
 /* ---------- forms ---------- */
 
 .pf-textarea {
@@ -517,6 +1146,65 @@ body {
   background: var(--pf-panel);
   border-color: var(--pf-accent);
 }
+
+.pf-textarea:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+/* Search field (Jira matrix filter) */
+.pf-search {
+  position: relative;
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  min-width: 0;
+}
+
+.pf-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--pf-faint);
+  pointer-events: none;
+}
+
+.pf-search-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 34px 0 30px;
+  border: 1px solid var(--pf-border-strong);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel-subtle);
+  font: inherit;
+  font-size: 13px;
+  color: var(--pf-ink);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.pf-search-input::placeholder { color: var(--pf-faint); }
+.pf-search-input:hover { background: var(--pf-inset); }
+.pf-search-input:focus { background: var(--pf-panel); border-color: var(--pf-accent); }
+.pf-search-input::-webkit-search-cancel-button { display: none; }
+
+.pf-search-hint,
+.pf-search-clear {
+  position: absolute;
+  right: 6px;
+}
+
+.pf-search-clear {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pf-muted);
+  cursor: pointer;
+}
+
+.pf-search-clear:hover { background: var(--pf-inset); color: var(--pf-ink); }
 
 /* ---------- tabs (Atlassian segmented) ---------- */
 
@@ -566,9 +1254,15 @@ body {
   transition: border-color 150ms ease, background 150ms ease;
 }
 
-.pf-dropzone:hover {
+.pf-dropzone:hover,
+.pf-dropzone[data-over="true"] {
   border-color: var(--pf-accent);
   background: var(--pf-accent-soft);
+}
+
+.pf-dropzone[data-busy="true"] {
+  border-style: solid;
+  border-color: var(--pf-accent-border);
 }
 
 .pf-dropzone-icon {
@@ -582,7 +1276,7 @@ body {
   margin-bottom: 2px;
 }
 
-/* ---------- banners ---------- */
+/* ---------- banners (persistent window states) ---------- */
 
 .pf-banner {
   position: sticky;
@@ -591,11 +1285,226 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 24px;
+  padding: 7px var(--pf-gutter);
   font-size: 12.5px;
   font-weight: 500;
   color: var(--pf-bright-ink);
+  animation: pf-banner-in var(--pf-dur) var(--pf-ease) backwards;
 }
+
+/* Status-tinted rather than bright-filled: AA contrast in both themes. */
+.pf-banner--warn {
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+  border-bottom: 1px solid var(--pf-warn-border);
+}
+
+.pf-banner--danger {
+  background: var(--pf-danger-soft);
+  color: var(--pf-danger);
+  border-bottom: 1px solid var(--pf-danger-border);
+}
+
+@keyframes pf-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- toasts (transient notices, top-right) ---------- */
+
+.pf-toaster {
+  position: fixed;
+  top: 62px;
+  right: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.pf-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-left-width: 3px;
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-md);
+  font-size: 13px;
+  pointer-events: auto;
+  animation: pf-toast-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+.pf-toast[data-leaving="true"] {
+  animation: pf-toast-out 160ms ease-in forwards;
+}
+
+.pf-toast[data-kind="info"] { border-left-color: var(--pf-accent-hover); }
+.pf-toast[data-kind="success"] { border-left-color: var(--pf-ok-bright); }
+.pf-toast[data-kind="warning"] { border-left-color: var(--pf-warn-bright); }
+.pf-toast[data-kind="error"] { border-left-color: var(--pf-danger-bright); }
+
+.pf-toast-icon {
+  display: grid;
+  place-items: center;
+  height: 20px;
+  flex: none;
+}
+
+.pf-toast[data-kind="info"] .pf-toast-icon { color: var(--pf-accent); }
+.pf-toast[data-kind="success"] .pf-toast-icon { color: var(--pf-ok); }
+.pf-toast[data-kind="warning"] .pf-toast-icon { color: var(--pf-warn); }
+.pf-toast[data-kind="error"] .pf-toast-icon { color: var(--pf-danger); }
+
+.pf-toast-body {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  line-height: 20px;
+  color: var(--pf-ink);
+  overflow-wrap: anywhere;
+}
+
+.pf-toast-count {
+  flex: none;
+  height: 20px;
+  padding-inline: 5px;
+  border-radius: 999px;
+  background: var(--pf-inset);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  color: var(--pf-ink-2);
+}
+
+.pf-toast-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pf-muted);
+  cursor: pointer;
+  transition: background-color var(--pf-dur-fast) ease, color var(--pf-dur-fast) ease;
+}
+
+.pf-toast-close:hover { background: var(--pf-inset); color: var(--pf-ink); }
+
+@keyframes pf-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pf-toast-out {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+/* ---------- dialogs (help overlay, expanded diagram) ---------- */
+
+.pf-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--pf-scrim);
+  animation: pf-overlay-in var(--pf-dur) ease backwards;
+}
+
+.pf-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(86vh, 100%);
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-lg);
+  animation: pf-dialog-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+.pf-dialog:focus { outline: none; }
+
+.pf-dialog[data-size="wide"] {
+  width: min(1240px, 100%);
+}
+
+.pf-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--pf-border);
+}
+
+.pf-dialog-body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+@keyframes pf-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pf-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pf-shortcuts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.pf-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pf-border);
+  font-size: 13px;
+  color: var(--pf-ink-2);
+}
+
+.pf-shortcut-row:last-child { border-bottom: none; }
+.pf-shortcut-row dt,
+.pf-shortcut-row dd { margin: 0; }
+.pf-shortcut-row dd { display: flex; flex: none; align-items: center; gap: 4px; }
 
 /* ---------- callouts / notice panels (Atlassian flag style) ---------- */
 
@@ -632,6 +1541,7 @@ body {
 }
 
 .pf-empty-icon {
+  position: relative;
   display: grid;
   place-items: center;
   width: 42px;
@@ -642,7 +1552,33 @@ body {
   margin-bottom: 4px;
 }
 
-/* ---------- stepper (cycle progress) ---------- */
+/* Waiting on something that is coming: a soft ring says "alive", not "empty". */
+.pf-empty-icon[data-busy="true"] {
+  color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+}
+
+.pf-empty-icon[data-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9px;
+  border: 2px solid var(--pf-accent);
+  opacity: 0;
+  animation: pf-halo 2s ease-out infinite;
+}
+
+.pf-empty-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 240px));
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 16px;
+  text-align: left;
+}
+
+/* ---------- stepper (cycle progress, Page 2) ---------- */
 
 .pf-stepper {
   display: flex;
@@ -655,8 +1591,9 @@ body {
   gap: 7px;
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--pf-faint);
+  color: var(--pf-muted);
   white-space: nowrap;
+  transition: color var(--pf-dur) ease;
 }
 
 .pf-step-index {
@@ -669,7 +1606,11 @@ body {
   background: var(--pf-panel);
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--pf-faint);
+  color: var(--pf-muted);
+  transition:
+    background-color var(--pf-dur) ease,
+    border-color var(--pf-dur) ease,
+    color var(--pf-dur) ease;
 }
 
 .pf-step[data-state="active"] { color: var(--pf-accent); font-weight: 600; }
@@ -713,12 +1654,160 @@ body {
 
 .pf-avatar:first-child { margin-left: 0; }
 
+/* ---------- avatar cards (Page 2) ---------- */
+
+.pf-avatar-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  transition: box-shadow var(--pf-dur-slow) ease, border-color var(--pf-dur-slow) ease;
+}
+
+.pf-avatar-card[data-working="true"] {
+  box-shadow: var(--pf-shadow-md);
+}
+
+.pf-avatar-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 16px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--pf-dur-fast) ease;
+}
+
+.pf-avatar-card-head:hover { background: var(--pf-panel-subtle); }
+
+.pf-avatar-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 8px;
+  transition: background-color var(--pf-dur) ease, color var(--pf-dur) ease;
+}
+
+/* A working avatar breathes: a ring grows off its icon and fades. */
+.pf-avatar-icon[data-working="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 11px;
+  border: 2px solid currentColor;
+  opacity: 0;
+  animation: pf-halo 1.8s ease-out infinite;
+}
+
+@keyframes pf-halo {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+.pf-avatar-card-detail {
+  padding: 12px 16px;
+  border-top: 1px solid var(--pf-border);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-draft-output {
+  max-height: 192px;
+  margin: 4px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--pf-border);
+  border-radius: 6px;
+  background: var(--pf-panel);
+  font-size: 11.5px;
+  color: var(--pf-ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pf-critique-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  transition: background-color var(--pf-dur-slow) ease, opacity var(--pf-dur-slow) ease;
+}
+
+/* A severity badge column that lines the summaries up regardless of the label. */
+.pf-critique-row > .pf-badge {
+  min-width: 66px;
+  justify-content: center;
+}
+
+.pf-critique-row[data-resolved="true"] { background: var(--pf-panel-subtle); }
+
+.pf-decision {
+  transition: border-color var(--pf-dur-slow) ease, background-color var(--pf-dur-slow) ease;
+}
+
+.pf-decision[data-state="open"] { border-color: var(--pf-accent-border); }
+.pf-decision[data-state="stale"] {
+  border-color: var(--pf-warn-border);
+  background: var(--pf-warn-soft);
+}
+
+.pf-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--pf-dur) ease,
+    background-color var(--pf-dur) ease,
+    opacity var(--pf-dur-slow) ease,
+    transform var(--pf-dur) var(--pf-ease);
+}
+
+.pf-option[data-recommended="true"] {
+  border-color: var(--pf-accent-border);
+  background: var(--pf-accent-soft);
+}
+
+.pf-option[data-chosen="true"] {
+  border-color: var(--pf-ok-border);
+  background: var(--pf-ok-soft);
+}
+
+.pf-option[data-dim="true"] { opacity: 0.55; }
+
+.pf-option:not(:disabled):hover {
+  border-color: var(--pf-accent);
+  transform: translateY(-1px);
+}
+
+.pf-option:disabled { cursor: not-allowed; }
+
 /* ---------- accordion (Jira table-ish rows) ---------- */
 
 .pf-accordion {
   border: 1px solid var(--pf-border);
   border-radius: var(--pf-radius-card);
   background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
   overflow: hidden;
 }
 
@@ -734,21 +1823,177 @@ body {
   text-align: left;
   cursor: pointer;
   color: var(--pf-ink);
+  transition: background-color var(--pf-dur-fast) ease;
 }
 
 .pf-accordion-trigger:hover { background: var(--pf-panel-subtle); }
 
+.pf-accordion-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-accordion-title--story {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
 .pf-accordion-chevron {
   color: var(--pf-faint);
-  transition: transform 150ms ease;
+  transition: transform var(--pf-dur) var(--pf-ease), color var(--pf-dur) ease;
   flex: none;
 }
 
-.pf-accordion-chevron[data-open="true"] { transform: rotate(90deg); }
+.pf-accordion-chevron[data-open="true"] { transform: rotate(90deg); color: var(--pf-muted); }
 
 .pf-accordion-body {
   border-top: 1px solid var(--pf-border);
   background: var(--pf-panel-subtle);
+}
+
+.pf-story {
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel);
+  overflow: hidden;
+}
+
+.pf-story-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--pf-border);
+}
+
+/*
+ * Animated disclosure: the grid row runs 0fr -> 1fr, so height follows the
+ * content without being measured. Closed content is hidden from sight and
+ * from the tab order (the component also sets `inert`).
+ */
+.pf-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--pf-dur-slow) var(--pf-ease),
+    visibility 0s linear var(--pf-dur-slow);
+}
+
+.pf-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition:
+    grid-template-rows var(--pf-dur-slow) var(--pf-ease),
+    visibility 0s linear 0s;
+}
+
+.pf-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------- Jira matrix toolbar and subtasks ---------- */
+
+.pf-matrix-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.pf-matrix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.pf-subtask {
+  padding: 14px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel-subtle);
+}
+
+.pf-subtask-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.pf-subtask-title {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-subtask-est {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.pf-subtask-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 20px;
+  margin-top: 12px;
+}
+
+.pf-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel);
+  font-size: 11.5px;
+  color: var(--pf-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.pf-command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-command {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel);
+}
+
+.pf-command-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--pf-ink-2);
+  overflow-wrap: anywhere;
 }
 
 /* ---------- TOC (Confluence-style, light) ---------- */
@@ -772,9 +2017,153 @@ body {
   color: var(--pf-muted);
   text-decoration: none;
   border-left: 2px solid transparent;
+  transition:
+    color var(--pf-dur-fast) ease,
+    background-color var(--pf-dur-fast) ease,
+    border-color var(--pf-dur) ease;
 }
 
 .pf-toc-link:hover { color: var(--pf-accent); background: var(--pf-accent-soft); }
+
+.pf-toc-link[data-active="true"] {
+  color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+  border-left-color: var(--pf-accent);
+  font-weight: 600;
+}
+
+/* ---------- document column (Page 3) ---------- */
+
+.pf-doc-wrap {
+  max-width: 860px;
+  margin-inline: auto;
+  padding: 32px var(--pf-gutter) 56px;
+}
+
+.pf-doc-header {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--pf-border);
+}
+
+.pf-doc-section {
+  margin-top: 24px;
+  scroll-margin-top: 16px;
+}
+
+.pf-doc-header + .pf-doc-section,
+.pf-handoff + .pf-doc-section {
+  margin-top: 0;
+}
+
+/* ---------- post-approval handoff panel (Page 3) ---------- */
+
+.pf-handoff {
+  margin-bottom: 24px;
+  padding: 18px 20px;
+  border: 1px solid var(--pf-ok-border);
+  border-left: 3px solid var(--pf-ok-bright);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-ok-soft);
+  box-shadow: var(--pf-shadow-sm);
+  animation: pf-route-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+.pf-handoff-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pf-handoff-badge {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--pf-ok-bright);
+  color: var(--pf-bright-ink);
+}
+
+.pf-handoff-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-handoff-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  font-size: 13.5px;
+  color: var(--pf-muted);
+  transition: color var(--pf-dur) ease;
+}
+
+/* Rail between markers. */
+.pf-handoff-step + .pf-handoff-step::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: -9px;
+  width: 2px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--pf-border-strong);
+}
+
+.pf-handoff-step[data-state="done"] + .pf-handoff-step::before {
+  background: var(--pf-ok-bright);
+}
+
+.pf-handoff-marker {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  border: 2px solid var(--pf-border-strong);
+  background: var(--pf-panel);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pf-muted);
+}
+
+.pf-handoff-step[data-state="done"] { color: var(--pf-ink); font-weight: 600; }
+.pf-handoff-step[data-state="done"] .pf-handoff-marker {
+  border-color: var(--pf-ok-bright);
+  background: var(--pf-ok-bright);
+  color: var(--pf-bright-ink);
+}
+
+.pf-handoff-step[data-state="current"] { color: var(--pf-ink); font-weight: 600; }
+.pf-handoff-step[data-state="current"] .pf-handoff-marker {
+  border-color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+  color: var(--pf-accent);
+}
+
+.pf-handoff-label code {
+  font-weight: 500;
+  color: var(--pf-ink-2);
+}
+
+.pf-handoff-close {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--pf-ok-border);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--pf-ok);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------- rendered document (MarkdownView) ---------- */
 
@@ -803,6 +2192,7 @@ body {
   border: 1px solid var(--pf-border);
   border-radius: 3px;
   padding: 1px 5px;
+  overflow-wrap: anywhere;
 }
 
 .pf-doc pre {
@@ -859,10 +2249,110 @@ body {
 
 .pf-diagram-body { padding: 14px; display: flex; justify-content: center; }
 
+/* A diagram card: title bar with actions, the figure, an optional source drawer. */
+.pf-diagram-card {
+  container: pf-diagram / inline-size;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  overflow: hidden;
+}
+
+/* In a narrow card (an avatar column) the title would collide with the labels. */
+@container pf-diagram (max-width: 420px) {
+  .pf-diagram-actions .pf-btn-label {
+    display: none;
+  }
+
+  .pf-diagram-actions .pf-btn {
+    width: 26px;
+    padding-inline: 0;
+  }
+}
+
+.pf-diagram-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 8px 4px 14px;
+  border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-diagram-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pf-muted);
+}
+
+.pf-diagram-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.pf-diagram-error {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--pf-danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pf-diagram-source {
+  max-height: 280px;
+  margin: 0;
+  padding: 10px 14px;
+  overflow: auto;
+  border-top: 1px solid var(--pf-border);
+  background: var(--pf-inset);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--pf-ink-2);
+}
+
+figure > .pf-diagram-source { border-top: none; }
+
 /* Mermaid diagrams are inserted as sanitized inline SVG; keep them contained. */
+.pf-mermaid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  padding: 14px;
+}
+
 .pf-mermaid svg {
   max-width: 100%;
   height: auto;
+}
+
+.pf-mermaid-stage {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.pf-mermaid--pending { align-items: stretch; min-height: 96px; }
+
+/* Expanded: fill the dialog; Mermaid's inline max-width must not cap it. */
+.pf-mermaid--expanded { padding: 4px; }
+.pf-mermaid--expanded svg {
+  width: 100% !important;
+  max-width: none !important;
+  max-height: calc(86vh - 120px);
 }
 
 /* ---------- CodeMirror surface ---------- */
@@ -875,6 +2365,21 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  transition: border-color var(--pf-dur-fast) ease, box-shadow var(--pf-dur-fast) ease;
+}
+
+/* CodeMirror draws no outline of its own; the wrapper carries the focus ring. */
+.pf-editor-wrap:focus-within {
+  border-color: var(--pf-accent);
+  box-shadow: 0 0 0 2px var(--pf-accent-soft);
+}
+
+.pf-editor-pending {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
 }
 
 .pf-editor-toolbar {
@@ -911,6 +2416,8 @@ body {
   padding: 12px 14px;
 }
 
+.cm-editor .cm-placeholder { color: var(--pf-muted); }
+
 .cm-editor .cm-cursor { border-left-color: var(--pf-accent); }
 .cm-editor.cm-focused { outline: none; }
 .cm-editor .cm-selectionBackground,
@@ -926,3 +2433,31 @@ body {
 .pf-divider { height: 1px; background: var(--pf-border); border: none; }
 
 .pf-scroll-thin { scrollbar-width: thin; scrollbar-color: var(--pf-border-strong) transparent; }
+
+/*
+ * A theme change is not an animation: the prefs store sets data-theming for
+ * ~100 ms around it so surfaces swap together instead of some fading.
+ */
+:root[data-theming],
+:root[data-theming] *,
+:root[data-theming] *::before,
+:root[data-theming] *::after {
+  transition: none !important;
+}
+
+/* ---------- reduced motion ---------- */
+
+/*
+ * Last and !important on purpose: every animation and transition above, and
+ * every Tailwind `animate-*` utility, stops for users who ask the OS for less
+ * motion. State still changes; it just changes at once.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

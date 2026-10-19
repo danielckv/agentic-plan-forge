@@ -1,6 +1,10 @@
 export type BoardColumn = "todo" | "in_progress" | "done" | "drifted";
 export type BoardPriority = "high" | "normal" | "low";
 export type TargetOperation = "add" | "modify" | "remove" | "document";
+/** Harness activity state; the empty string means "no activity recorded". */
+export type LiveState = "active" | "done" | "blocked" | "";
+export type DiscoveryKind = "task" | "path";
+export type DiscoveryStatus = "proposed" | "accepted" | "dismissed";
 
 export interface BoardDriftReason {
   code: string;
@@ -30,6 +34,15 @@ export interface BoardNote {
   text: string;
 }
 
+/** C11 `live`: the latest harness activity recorded for a task. */
+export interface BoardLive {
+  state: LiveState;
+  by: string;
+  source: string;
+  detail: string;
+  at: string;
+}
+
 export interface BoardTask {
   id: string;
   epic_id: string;
@@ -46,6 +59,31 @@ export interface BoardTask {
   human_estimate: BoardEstimate;
   agent_estimate: BoardEstimate;
   notes: BoardNote[];
+  /** C11. Defaults to an empty activity when an older server omits it. */
+  live: BoardLive;
+  /** C11. The harness reported done, evidence has not confirmed it yet. */
+  awaiting_verification: boolean;
+  /** C11. True for accepted discoveries that became board tasks. */
+  discovered: boolean;
+}
+
+export interface BoardDiscovery {
+  id: string;
+  kind: DiscoveryKind;
+  title: string;
+  paths: string[];
+  parent_task_id: string;
+  reason: string;
+  by: string;
+  at: string;
+  status: DiscoveryStatus;
+  priority: BoardPriority;
+}
+
+export interface BoardCoordinator {
+  active: string[];
+  next_up: string[];
+  updated_at: string;
 }
 
 export interface BoardConsumer {
@@ -68,11 +106,29 @@ export interface BoardSnapshot {
   drift: BoardDriftReason[];
   tasks: BoardTask[];
   consumers: BoardConsumer[];
+  /** C11. Defaults to `[]` when an older server omits it. */
+  discoveries: BoardDiscovery[];
+  /** C11. Defaults to an empty coordinator when an older server omits it. */
+  coordinator: BoardCoordinator;
 }
 
 export type SnapshotValidation =
   | { ok: true; value: BoardSnapshot }
   | { ok: false; error: string };
+
+export const EMPTY_LIVE: BoardLive = Object.freeze({
+  state: "",
+  by: "",
+  source: "",
+  detail: "",
+  at: "",
+});
+
+export const EMPTY_COORDINATOR: BoardCoordinator = Object.freeze({
+  active: [],
+  next_up: [],
+  updated_at: "",
+}) as BoardCoordinator;
 
 const COLUMNS: Record<BoardColumn, true> = {
   todo: true,
@@ -90,6 +146,18 @@ const OPERATIONS: Record<TargetOperation, true> = {
   modify: true,
   remove: true,
   document: true,
+};
+const LIVE_STATES: Record<LiveState, true> = {
+  active: true,
+  done: true,
+  blocked: true,
+  "": true,
+};
+const DISCOVERY_KINDS: Record<DiscoveryKind, true> = { task: true, path: true };
+const DISCOVERY_STATUSES: Record<DiscoveryStatus, true> = {
+  proposed: true,
+  accepted: true,
+  dismissed: true,
 };
 
 function isString(value: unknown): value is string {
@@ -114,15 +182,27 @@ function validDrift(value: unknown): value is BoardDriftReason {
   return isString(drift.code) && isString(drift.detail);
 }
 
+/** An empty or missing operation is a server-shaped discovered task; it normalizes to `modify`. */
+function blankOperation(operation: unknown): boolean {
+  return operation === undefined || operation === null || operation === "";
+}
+
 function validTarget(value: unknown): value is BoardTarget {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const target = value as BoardTarget;
   return (
     isString(target.path) &&
-    isString(target.operation) &&
-    target.operation in OPERATIONS &&
+    (blankOperation(target.operation) ||
+      (isString(target.operation) && Object.prototype.hasOwnProperty.call(OPERATIONS, target.operation))) &&
     isString(target.symbol_id) &&
     typeof target.verified === "boolean"
+  );
+}
+
+function normalizeTargets(targets: BoardTarget[]): BoardTarget[] {
+  if (targets.every((target) => !blankOperation(target.operation))) return targets;
+  return targets.map((target) =>
+    blankOperation(target.operation) ? { ...target, operation: "modify" } : target,
   );
 }
 
@@ -148,7 +228,24 @@ function validNote(value: unknown): value is BoardNote {
   return isString(note.id) && isString(note.at) && isString(note.text);
 }
 
-function validTask(value: unknown): value is BoardTask {
+function validLive(value: unknown): value is BoardLive {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const live = value as Record<string, unknown>;
+  return (
+    isString(live.state) &&
+    live.state in LIVE_STATES &&
+    isString(live.by) &&
+    isString(live.source) &&
+    isString(live.detail) &&
+    isString(live.at)
+  );
+}
+
+/**
+ * The C5 task fields are mandatory. The C11 fields are optional on the wire (an
+ * older server omits them) but strictly typed when present.
+ */
+function validTaskBase(value: unknown): value is BoardTask {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const task = value as BoardTask;
   return (
@@ -174,6 +271,88 @@ function validTask(value: unknown): value is BoardTask {
   );
 }
 
+function c11TaskFieldsValid(task: Record<string, unknown>): boolean {
+  if (task.live !== undefined && task.live !== null && !validLive(task.live)) return false;
+  if (
+    task.awaiting_verification !== undefined &&
+    task.awaiting_verification !== null &&
+    typeof task.awaiting_verification !== "boolean"
+  ) {
+    return false;
+  }
+  if (task.discovered !== undefined && task.discovered !== null && typeof task.discovered !== "boolean") {
+    return false;
+  }
+  return true;
+}
+
+/** Fill the C11 task defaults and normalize blank target operations; returns the same object when nothing changes. */
+function normalizeTask(task: BoardTask): BoardTask {
+  const raw = task as unknown as Record<string, unknown>;
+  const targets = normalizeTargets(task.targets);
+  if (
+    targets === task.targets &&
+    validLive(raw.live) &&
+    typeof raw.awaiting_verification === "boolean" &&
+    typeof raw.discovered === "boolean"
+  ) {
+    return task;
+  }
+  return {
+    ...task,
+    targets,
+    live: validLive(raw.live) ? raw.live : EMPTY_LIVE,
+    awaiting_verification: raw.awaiting_verification === true,
+    discovered: raw.discovered === true,
+  };
+}
+
+function validDiscovery(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const d = value as Record<string, unknown>;
+  return (
+    isString(d.id) &&
+    d.id !== "" &&
+    isString(d.kind) &&
+    d.kind in DISCOVERY_KINDS &&
+    isString(d.title) &&
+    (d.paths === undefined || d.paths === null || stringArray(d.paths)) &&
+    (d.parent_task_id === undefined || d.parent_task_id === null || isString(d.parent_task_id)) &&
+    isString(d.reason) &&
+    isString(d.by) &&
+    isString(d.at) &&
+    isString(d.status) &&
+    d.status in DISCOVERY_STATUSES &&
+    isString(d.priority) &&
+    d.priority in PRIORITIES
+  );
+}
+
+function normalizeDiscovery(value: Record<string, unknown>): BoardDiscovery {
+  return {
+    id: value.id as string,
+    kind: value.kind as DiscoveryKind,
+    title: value.title as string,
+    paths: Array.isArray(value.paths) ? (value.paths as string[]) : [],
+    parent_task_id: isString(value.parent_task_id) ? value.parent_task_id : "",
+    reason: value.reason as string,
+    by: value.by as string,
+    at: value.at as string,
+    status: value.status as DiscoveryStatus,
+    priority: value.priority as BoardPriority,
+  };
+}
+
+function validCoordinator(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const c = value as Record<string, unknown>;
+  return (
+    (c.active === undefined || c.active === null || stringArray(c.active)) &&
+    (c.next_up === undefined || c.next_up === null || stringArray(c.next_up)) &&
+    isString(c.updated_at)
+  );
+}
+
 function validConsumer(value: unknown): value is BoardConsumer {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const consumer = value as BoardConsumer;
@@ -184,7 +363,11 @@ function validConsumer(value: unknown): value is BoardConsumer {
   );
 }
 
-/** Validate every field the fixed C5 snapshot contract exposes before it reaches React. */
+/**
+ * Validate every field the fixed C5/C11 snapshot contract exposes before it
+ * reaches React. C11 fields are optional (older servers) but strict when sent;
+ * `null` arrays (Go nil slices) read as empty.
+ */
 export function validateBoardSnapshot(value: unknown): SnapshotValidation {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { ok: false, error: "snapshot must be an object" };
@@ -215,7 +398,13 @@ export function validateBoardSnapshot(value: unknown): SnapshotValidation {
   if (!Array.isArray(snapshot.drift) || !snapshot.drift.every(validDrift)) {
     return { ok: false, error: "drift is malformed" };
   }
-  if (!Array.isArray(snapshot.tasks) || !snapshot.tasks.every(validTask)) {
+  if (
+    !Array.isArray(snapshot.tasks) ||
+    !snapshot.tasks.every(
+      (task) =>
+        validTaskBase(task) && c11TaskFieldsValid(task as unknown as Record<string, unknown>),
+    )
+  ) {
     return { ok: false, error: "tasks are malformed" };
   }
   const taskIDs = new Set(snapshot.tasks.map((task) => task.id));
@@ -225,5 +414,37 @@ export function validateBoardSnapshot(value: unknown): SnapshotValidation {
   if (!Array.isArray(snapshot.consumers) || !snapshot.consumers.every(validConsumer)) {
     return { ok: false, error: "consumers are malformed" };
   }
-  return { ok: true, value: snapshot };
+
+  const rawDiscoveries: unknown = (value as Record<string, unknown>).discoveries;
+  let discoveries: BoardDiscovery[] = [];
+  if (rawDiscoveries !== undefined && rawDiscoveries !== null) {
+    if (!Array.isArray(rawDiscoveries) || !rawDiscoveries.every(validDiscovery)) {
+      return { ok: false, error: "discoveries are malformed" };
+    }
+    discoveries = (rawDiscoveries as Array<Record<string, unknown>>).map(normalizeDiscovery);
+    if (new Set(discoveries.map((discovery) => discovery.id)).size !== discoveries.length) {
+      return { ok: false, error: "discovery ids must be unique" };
+    }
+  }
+
+  const rawCoordinator: unknown = (value as Record<string, unknown>).coordinator;
+  let coordinator: BoardCoordinator = EMPTY_COORDINATOR;
+  if (rawCoordinator !== undefined && rawCoordinator !== null) {
+    if (!validCoordinator(rawCoordinator)) return { ok: false, error: "coordinator is malformed" };
+    coordinator = {
+      active: Array.isArray(rawCoordinator.active) ? (rawCoordinator.active as string[]) : [],
+      next_up: Array.isArray(rawCoordinator.next_up) ? (rawCoordinator.next_up as string[]) : [],
+      updated_at: rawCoordinator.updated_at as string,
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      ...snapshot,
+      tasks: snapshot.tasks.map(normalizeTask),
+      discoveries,
+      coordinator,
+    },
+  };
 }

@@ -8,7 +8,8 @@ import {
   bridgeWSURL,
   WS_SUBPROTOCOL,
 } from "../protocol/bridge";
-import type { BoardNote, BoardPriority, BoardSnapshot } from "./types";
+import type { BoardDiscovery, BoardNote, BoardPriority, BoardSnapshot, BoardTask } from "./types";
+import { EMPTY_LIVE } from "./types";
 import { validateBoardSnapshot } from "./types";
 
 export type BoardConnection = "connecting" | "open" | "reconnecting" | "offline";
@@ -30,6 +31,8 @@ export interface BoardState {
   lastError: string | null;
   toast: BoardToast | null;
   pendingActions: number;
+  /** True after the bridge closed the socket with 4403; reconnecting cannot help. */
+  authFailed: boolean;
 }
 type TimerHandle = number | NodeJS.Timeout;
 
@@ -52,6 +55,8 @@ export interface BoardStore {
   refresh: () => Promise<boolean>;
   acceptSnapshot: (value: unknown) => boolean;
   mutate: (taskID: string, action: BoardMutation) => Promise<boolean>;
+  /** Accept (with a priority) or dismiss a harness discovery through `POST /api/board/discovery`. */
+  resolveDiscovery: (id: string, ...resolution: DiscoveryResolution) => Promise<boolean>;
   clearToast: () => void;
 }
 
@@ -62,7 +67,10 @@ const DEFAULT_STATE: BoardState = {
   lastError: null,
   toast: null,
   pendingActions: 0,
+  authFailed: false,
 };
+
+export const AUTH_FAILED_MESSAGE = "authentication failed — reopen from the plan-forge CLI";
 
 const DEFAULT_DEPENDENCIES: BoardStoreDependencies = {
   bootstrap,
@@ -76,6 +84,76 @@ const DEFAULT_DEPENDENCIES: BoardStoreDependencies = {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export type DiscoveryResolution = ["accept", BoardPriority] | ["dismiss"];
+
+/** Build the C11 discovery request body; exactly one of accept (with priority) or dismiss. */
+export function discoveryRequestBody(
+  discoveryID: string,
+  ...resolution: DiscoveryResolution
+): Record<string, string> {
+  if (discoveryID === "") throw new Error("discovery id is required");
+  if (resolution[0] === "dismiss") return { id: discoveryID, action: "dismiss" };
+  if (
+    resolution[0] === "accept" &&
+    (["high", "normal", "low"] as string[]).includes(resolution[1])
+  ) {
+    return { id: discoveryID, action: "accept", priority: resolution[1] };
+  }
+  throw new Error("invalid discovery action");
+}
+
+/** The accepted board task the server will create for a task discovery (C9/C11), used optimistically. */
+function discoveredTask(discovery: BoardDiscovery, priority: BoardPriority): BoardTask {
+  return {
+    id: discovery.id,
+    epic_id: "",
+    story_id: "",
+    workstream_id: "",
+    title: discovery.title,
+    column: "todo",
+    blocked: false,
+    depends_on: discovery.parent_task_id === "" ? [] : [discovery.parent_task_id],
+    priority,
+    targets: discovery.paths.map((path) => ({
+      path,
+      operation: "modify" as const,
+      symbol_id: "",
+      verified: false,
+    })),
+    verification: { total: 0, passed: 0 },
+    acceptance_criteria: [],
+    human_estimate: { likely: 0, basis: "" },
+    agent_estimate: { likely: 0, basis: "" },
+    notes: [],
+    live: EMPTY_LIVE,
+    awaiting_verification: false,
+    discovered: true,
+  };
+}
+
+function optimisticDiscoverySnapshot(
+  snapshot: BoardSnapshot,
+  discovery: BoardDiscovery,
+  resolution: DiscoveryResolution,
+): BoardSnapshot {
+  const accepted = resolution[0] === "accept";
+  const priority = resolution[0] === "accept" ? resolution[1] : discovery.priority;
+  const discoveries = snapshot.discoveries.map((candidate) =>
+    candidate.id === discovery.id
+      ? { ...candidate, status: accepted ? ("accepted" as const) : ("dismissed" as const), priority }
+      : candidate,
+  );
+  const addTask =
+    accepted &&
+    discovery.kind === "task" &&
+    !snapshot.tasks.some((task) => task.id === discovery.id);
+  return {
+    ...snapshot,
+    discoveries,
+    tasks: addTask ? [...snapshot.tasks, discoveredTask(discovery, priority)] : snapshot.tasks,
+  };
 }
 
 /** Build the C5 request body and reject any accidental multi-action object. */
@@ -190,11 +268,18 @@ export function createBoardStore(
       return;
     }
 
-    let authenticated = false;
+    // The preview harness has no token and so no auth handshake: the socket is
+    // usable as soon as it opens.
+    let authenticated = token === null;
     nextSocket.onopen = () => {
       if (!active || openGeneration !== generation) return;
+      if (token === null) {
+        reconnectAttempt = 0;
+        update({ connection: "open", lastError: null, authFailed: false });
+        return;
+      }
       // Authentication is the only frame Board sends; snapshots are server-push only.
-      if (token !== null) nextSocket.send(authFrame(token));
+      nextSocket.send(authFrame(token));
     };
     nextSocket.onmessage = (event: MessageEvent) => {
       if (!active || openGeneration !== generation || typeof event.data !== "string") return;
@@ -217,7 +302,7 @@ export function createBoardStore(
       if (typedFrame.type === AUTH_OK) {
         authenticated = true;
         reconnectAttempt = 0;
-        update({ connection: "open", lastError: null });
+        update({ connection: "open", lastError: null, authFailed: false });
         return;
       }
       if (!authenticated) {
@@ -233,9 +318,15 @@ export function createBoardStore(
         update({ connection: "offline", lastError: "The board connection is offline." });
       }
     };
-    nextSocket.onclose = () => {
+    nextSocket.onclose = (event: CloseEvent) => {
       if (!active || openGeneration !== generation) return;
       if (socket === nextSocket) socket = null;
+      // 4403 is the bridge refusing the auth frame: the token will not become
+      // valid by retrying, so this is a standing state, never a reconnect.
+      if (event.code === 4403) {
+        update({ connection: "offline", lastError: AUTH_FAILED_MESSAGE, authFailed: true });
+        return;
+      }
       scheduleReconnect(token);
     };
   }
@@ -310,26 +401,20 @@ export function createBoardStore(
     return { ...snapshot, tasks };
   }
 
-  async function mutate(taskID: string, action: BoardMutation): Promise<boolean> {
-    const previous = state.snapshot;
-    if (previous === null || !previous.tasks.some((task) => task.id === taskID)) {
-      errorToast(`Task ${taskID} is no longer on this board.`);
-      return false;
-    }
-
-    let body: Record<string, string>;
-    try {
-      body = actionRequestBody(taskID, action);
-    } catch (error) {
-      errorToast(describeError(error));
-      return false;
-    }
-
-    const optimistic = optimisticSnapshot(previous, taskID, action, body);
+  /**
+   * Apply `optimistic` immediately, POST `body`, and reconcile. Shared by task
+   * and discovery mutations so both have identical 409 / error / rollback rules.
+   */
+  async function submit(
+    path: string,
+    body: Record<string, string>,
+    previous: BoardSnapshot,
+    optimistic: BoardSnapshot,
+  ): Promise<boolean> {
     update({ snapshot: optimistic, pendingActions: state.pendingActions + 1 });
 
     try {
-      const response = await dependencies.apiFetch("/api/board/task", {
+      const response = await dependencies.apiFetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -361,12 +446,62 @@ export function createBoardStore(
       if (!acceptSnapshot(payload)) throw new Error("the server returned a malformed board snapshot");
       return true;
     } catch (error) {
-      if (state.snapshot === optimistic) update({ snapshot: previous });
-      errorToast(`Board update failed: ${describeError(error)}`);
+      if (state.snapshot === optimistic) {
+        update({ snapshot: previous });
+        errorToast(`Board update failed: ${describeError(error)}`);
+      } else {
+        // Another mutation (or a server push) replaced the snapshot while this
+        // request was in flight: restoring `previous` would erase that work, so
+        // rebuild from the server's view instead.
+        errorToast(`Board update failed: ${describeError(error)}`);
+        await refresh();
+      }
       return false;
     } finally {
       update({ pendingActions: Math.max(0, state.pendingActions - 1) });
     }
+  }
+
+  async function mutate(taskID: string, action: BoardMutation): Promise<boolean> {
+    const previous = state.snapshot;
+    if (previous === null || !previous.tasks.some((task) => task.id === taskID)) {
+      errorToast(`Task ${taskID} is no longer on this board.`);
+      return false;
+    }
+
+    let body: Record<string, string>;
+    try {
+      body = actionRequestBody(taskID, action);
+    } catch (error) {
+      errorToast(describeError(error));
+      return false;
+    }
+
+    return submit("/api/board/task", body, previous, optimisticSnapshot(previous, taskID, action, body));
+  }
+
+  async function resolveDiscovery(id: string, ...resolution: DiscoveryResolution): Promise<boolean> {
+    const previous = state.snapshot;
+    const discovery = previous?.discoveries.find((candidate) => candidate.id === id);
+    if (previous === null || discovery === undefined) {
+      errorToast(`Discovery ${id} is no longer on this board.`);
+      return false;
+    }
+
+    let body: Record<string, string>;
+    try {
+      body = discoveryRequestBody(id, ...resolution);
+    } catch (error) {
+      errorToast(describeError(error));
+      return false;
+    }
+
+    return submit(
+      "/api/board/discovery",
+      body,
+      previous,
+      optimisticDiscoverySnapshot(previous, discovery, resolution),
+    );
   }
 
   return {
@@ -380,6 +515,7 @@ export function createBoardStore(
     refresh,
     acceptSnapshot,
     mutate,
+    resolveDiscovery,
     clearToast: () => update({ toast: null }),
   };
 }

@@ -24,6 +24,7 @@ import {
 } from "../protocol/bridge";
 import { validate } from "../protocol/schema";
 import { insertAllowed, textSha256 } from "../collab/model";
+import { toastStore } from "../ui/toasts";
 
 export type ConnState = "connecting" | "open" | "resyncing" | "offline" | "closed";
 
@@ -121,6 +122,12 @@ export interface StatusView {
   ocr: "available" | "missing" | "unknown";
   repo: string;
   repoPath: string;
+  /**
+   * The host the invoking skill passed with `--host` (`claude`, `omp`, `agy`,
+   * or `auto`). Page 3 words its call to action and handoff panel for it.
+   * Absent until the first `/api/status` answer, and on older bridges.
+   */
+  requestedHost?: string;
 }
 
 export const STATUS_UNKNOWN: StatusView = {
@@ -152,6 +159,8 @@ export interface SyncState {
   role: "owner" | "editor" | "viewer" | null;
   members: string[];
   errorMessage: string | null;
+  /** False until the first `/api/status` answer lands; pages show skeletons. */
+  statusLoaded: boolean;
   status: StatusView;
 }
 
@@ -177,6 +186,7 @@ let state: SyncState = {
   role: null,
   members: [],
   errorMessage: null,
+  statusLoaded: false,
   status: STATUS_UNKNOWN,
 };
 
@@ -299,6 +309,7 @@ function handleEnvelope(env: WSEnvelope): void {
         members: p.members ?? state.members,
         route: ROUTE_BY_PHASE[p.phase ?? state.phase],
         banner: null,
+        errorMessage: null,
       });
       break;
     }
@@ -328,8 +339,8 @@ function handleEnvelope(env: WSEnvelope): void {
         setState({ conn: "resyncing" });
         send(commandEnvelope("REPLAY_REQUEST", {}));
       } else {
+        toastStore.push("warning", `Edit rejected (${p.reason ?? "unknown"}) — retrying`);
         setState({
-          banner: `edit rejected (${p.reason ?? "unknown"}) — retrying`,
           outbox: state.outbox.map((e) => ({ ...e, attempts: e.attempts + 1 })),
         });
       }
@@ -462,19 +473,23 @@ function handleEnvelope(env: WSEnvelope): void {
     }
     case "ALREADY_RESOLVED": {
       const p = env.payload as { decision_id?: string; option_id?: string };
+      toastStore.push("info", "Decision already resolved by another member");
       setState({
         decisions: state.decisions.map((d) =>
           d.decisionId === p.decision_id
             ? { ...d, stale: true, ...(p.option_id !== undefined ? { resolvedOptionId: p.option_id } : {}) }
             : d,
         ),
-        banner: "decision already resolved by another member",
       });
       break;
     }
     case "ERROR": {
       const p = env.payload as { code?: string; message?: string };
-      setState({ errorMessage: `${p.code ?? "ERROR"}: ${p.message ?? ""}`.trim() });
+      const text = `${p.code ?? "ERROR"}: ${p.message ?? ""}`.trim();
+      // A version mismatch is a standing condition of the window (banner);
+      // every other error is an event about one request (toast).
+      if (p.code === "UNSUPPORTED_VERSION") setState({ errorMessage: text });
+      else toastStore.push("error", text);
       break;
     }
     case "PRESENCE": {
@@ -507,10 +522,31 @@ function handleEnvelope(env: WSEnvelope): void {
 }
 
 /**
+ * Null a socket's handlers before closing it so a late close/error from the
+ * old connection cannot mutate state or schedule a reconnect for a socket that
+ * has been replaced or torn down on purpose.
+ */
+function detachSocket(reason: string): void {
+  const old = ws;
+  ws = null;
+  if (old === null) return;
+  old.onopen = null;
+  old.onmessage = null;
+  old.onerror = null;
+  old.onclose = null;
+  try {
+    old.close(1000, reason);
+  } catch {
+    /* already closed */
+  }
+}
+
+/**
  * Open the session socket. The caller has already redeemed the launch nonce;
  * `token` is null only under the preview harness, which needs no auth frame.
  */
 function openSocket(token: string | null): void {
+  detachSocket("replaced by a new connection");
   try {
     ws = new WebSocket(state.serverUrl, WS_SUBPROTOCOL);
   } catch {
@@ -561,13 +597,23 @@ function openSocket(token: string | null): void {
     if (frame.envelope.event_type === "AVATAR_DRAFT") {
       const v = validate("envelope.v1", frame.envelope);
       if (!v.ok) {
-        setState({ errorMessage: `invalid envelope: ${v.errors?.[0]?.message ?? ""}` });
+        toastStore.push("error", `Invalid envelope: ${v.errors?.[0]?.message ?? ""}`);
         return;
       }
     }
     handleEnvelope(frame.envelope);
   };
-  ws.onclose = () => {
+  ws.onclose = (ev: CloseEvent) => {
+    // 4403 is the bridge refusing the auth frame. The token will not become
+    // valid by retrying, so this is a standing auth state, not a reconnect.
+    if (ev.code === 4403) {
+      setState({
+        conn: "offline",
+        banner: null,
+        errorMessage: "authentication failed — reopen the window from the plan-forge CLI",
+      });
+      return;
+    }
     setState({ conn: "closed", banner: "closed — reconnecting" });
     scheduleReconnect();
   };
@@ -616,20 +662,19 @@ export function disconnect(): void {
   clearTimeout(reconnectTimer);
   reconnectTimer = undefined;
   checkTimer = undefined;
-  ws?.close(1000, "client closing");
-  ws = null;
+  detachSocket("client closing");
   setState({ conn: "closed" });
 }
 
 /** Merge one `/api/status` body; absent fields keep their last known value. */
 export function applyStatus(patch: Partial<StatusView>): void {
-  setState({ status: { ...state.status, ...patch } });
+  setState({ status: { ...state.status, ...patch }, statusLoaded: true });
 }
 
 /** Local edit (composer/editor): filter, queue, push. */
 export function submitEdit(insert: string, from: number, to: number): void {
   if (!insertAllowed(insert)) {
-    setState({ errorMessage: "rejected: CR or lone surrogate in inserted text" });
+    toastStore.push("error", "Rejected: CR or lone surrogate in inserted text");
     return;
   }
   const cs = ChangeSet.of({ from, to, insert }, state.docText.length);
@@ -705,19 +750,23 @@ export function approve(runId: string, synthesisRev: number, contentSha256: stri
 /** Export unconfirmed edits to the recovery panel feed (never silently dropped). */
 export function exportRecovery(): void {
   if (state.outbox.length === 0) return;
+  toastStore.push("info", "Unconfirmed edits exported to the recovery panel");
   setState({
     recovery: [...state.recovery, { at: Date.now(), room: state.serverUrl, text: state.docText }],
     outbox: [],
-    banner: "unconfirmed edits exported to the recovery panel",
   });
 }
 
-/** Manual navigation guard: allow only routes the phase has reached. */
+/**
+ * Manual navigation guard: allow only routes the authority's phase has
+ * reached. The limit is the phase, not the page on screen, so stepping back to
+ * review earlier work never locks the pages ahead of it again.
+ */
 export function navigate(to: string): void {
   const target = ROUTE_ORDER[to];
-  const current = ROUTE_ORDER[state.route];
-  if (target === undefined || current === undefined) return;
-  if (target > current) return; // blocked: phase has not reached this page
+  const reached = ROUTE_ORDER[ROUTE_BY_PHASE[state.phase]];
+  if (target === undefined || reached === undefined) return;
+  if (target > reached) return; // blocked: phase has not reached this page
   setState({ route: to });
 }
 

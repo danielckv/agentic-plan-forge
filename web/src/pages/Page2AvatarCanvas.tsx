@@ -9,7 +9,6 @@ import {
   ShieldAlert,
   Sparkles,
   TriangleAlert,
-  Users,
   WifiOff,
 } from "lucide-react";
 
@@ -23,21 +22,22 @@ import {
 } from "../store/syncStore";
 import type { CritiqueIssue, DecisionCard } from "../store/syncStore";
 import { MermaidSvg } from "../components/MermaidSvg";
+import { Collapse } from "../ui/Collapse";
+import { SkeletonCard, SkeletonLines } from "../ui/Skeleton";
 
 /**
  * Page 2 — Avatar deliberation canvas.
  *
- * Top bar: cycle label, model badge per avatar, collaborator presence,
- * lease holder. Avatar cards (PM, Architect, specialists, Critic,
- * Synthesizer) with lucide icons and role colors; statuses Idle/Thinking/
- * Drafting/Critiquing/Revising/Synced/Failed/Cancelled/Stale. Expanding a
- * card shows "Live output and rationale" (public summaries + draft deltas —
- * the label never says reasoning). Decision cards with 2-4 options,
- * tradeoffs, recommended badge. Controls: cancel run (owner), retry stage,
- * run superseded notice, executor lost notice, max-cycles panel. Footer:
- * Synthesize Master Spec, enabled only when every avatar has finished the
- * cycle, all contracts validate, no CRITICAL/HIGH is open, and no decision is
- * pending.
+ * Top bar: cycle progress, lease holder, run state. Avatar cards (PM,
+ * Architect, Critic, Synthesizer) with lucide icons and role colors; statuses
+ * Idle/Thinking/Drafting/Critiquing/Revising/Synced/Failed/Cancelled/Stale,
+ * each shown as a chip that animates when the status changes. Expanding a card
+ * shows "Live output and rationale" (public summaries + draft deltas — the
+ * label never says reasoning). Decision cards with 2-4 options, tradeoffs,
+ * recommended badge. Controls: cancel run (owner), retry stage, run superseded
+ * notice, executor lost notice, max-cycles panel. Footer: Synthesize Master
+ * Spec, enabled only when every avatar has finished the cycle, all contracts
+ * validate, no CRITICAL/HIGH is open, and no decision is pending.
  */
 
 const CYCLE_STEPS: Array<{ n: number; label: string }> = [
@@ -157,20 +157,21 @@ export function Page2AvatarCanvas(): React.ReactElement {
   // page keeps its last state and says so rather than claiming work stalled.
   const linkDown = sync.conn !== "open";
 
+  const noOutputYet =
+    sync.decisions.length === 0 && sync.critiques.length === 0 && sync.drafts.length === 0;
+
   return (
     <div className="pf-page">
-      {/* Top bar: cycle progress, presence, lease */}
-      <div
-        className="flex items-center gap-5 border-b px-8 py-3"
-        style={{ borderColor: "var(--pf-border)", background: "var(--pf-panel)" }}
-      >
-        <div className="pf-stepper">
+      {/* Top bar: cycle progress, lease, run state */}
+      <div className="pf-subbar">
+        <div className="pf-stepper" role="list" aria-label="Deliberation cycle">
           {CYCLE_STEPS.map((s, i) => (
-            <span key={s.n} className="flex items-center">
-              {i > 0 && <span className="pf-step-connector" />}
+            <span key={s.n} className="flex items-center" role="listitem">
+              {i > 0 && <span className="pf-step-connector" aria-hidden="true" />}
               <span
                 className="pf-step"
                 data-state={s.n < cycle ? "done" : s.n === cycle ? "active" : "todo"}
+                aria-current={s.n === cycle ? "step" : undefined}
               >
                 <span className="pf-step-index">{s.n}</span>
                 {s.label}
@@ -179,18 +180,7 @@ export function Page2AvatarCanvas(): React.ReactElement {
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
-          <span className="pf-avatar-stack" title={sync.members.join(", ")}>
-            {sync.members.slice(0, 5).map((m) => (
-              <span key={m} className="pf-avatar">
-                {(m.includes(":") ? m.slice(m.indexOf(":") + 1) : m).slice(0, 2).toUpperCase()}
-              </span>
-            ))}
-          </span>
-          <span className="pf-chip">
-            <Users size={12} />
-            {sync.members.length} present
-          </span>
+        <div className="pf-subbar-right">
           <span className="pf-chip pf-chip--accent">
             <Crown size={12} />
             Lease: {sync.leaseHolder ?? (sync.role === "owner" ? "you" : "owner")}
@@ -222,22 +212,24 @@ export function Page2AvatarCanvas(): React.ReactElement {
 
       <div className="pf-page-body">
         <div className="pf-container py-7">
-          <div className="mb-5">
+          <header className="pf-page-header mb-6">
             <h1 className="pf-title">Avatar deliberation</h1>
-            <p className="pf-caption mt-1">
+            <p className="pf-caption">
               Cycle {cycle} of 3 — each avatar works from the frozen baseline; public
               output streams below.
             </p>
-          </div>
+          </header>
 
           {/* Avatar cards */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
             {AVATAR_CARDS.map((spec) => {
               const draft = sync.drafts.find((d) => d.avatarId === spec.id);
               const thought = sync.thoughts[spec.id];
               const status = statusFor(spec.id);
+              const isWorking = WORKING_STATUS[status] === true;
               const Icon = spec.icon;
               const isOpen = expanded === spec.id;
+              const detailId = `p2-card-${spec.id}`;
               const isArchitectDiagram =
                 spec.id === "architect" &&
                 draft?.content !== undefined &&
@@ -245,17 +237,22 @@ export function Page2AvatarCanvas(): React.ReactElement {
               return (
                 <div
                   key={spec.id}
-                  className="pf-card flex flex-col overflow-hidden"
+                  className="pf-card pf-avatar-card"
+                  data-status={status}
+                  data-working={isWorking}
                   style={{ borderTop: `3px solid ${spec.color}` }}
                 >
                   <button
                     type="button"
-                    className="flex flex-col gap-3 p-4 text-left"
+                    className="pf-avatar-card-head"
+                    aria-expanded={isOpen}
+                    aria-controls={detailId}
                     onClick={() => setExpanded(isOpen ? null : spec.id)}
                   >
                     <div className="flex items-center gap-2.5">
                       <span
-                        className="grid h-8 w-8 place-items-center rounded-lg"
+                        className="pf-avatar-icon"
+                        data-working={isWorking}
                         style={{ background: spec.soft, color: spec.color }}
                       >
                         <Icon size={16} />
@@ -268,7 +265,8 @@ export function Page2AvatarCanvas(): React.ReactElement {
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`pf-chip ${STATUS_CHIP[status]}`}>
+                      {/* Keyed by status: a change remounts the chip and replays its swap animation. */}
+                      <span key={status} className={`pf-chip pf-chip--swap ${STATUS_CHIP[status]}`}>
                         <span className="pf-dot" />
                         {status}
                       </span>
@@ -287,30 +285,21 @@ export function Page2AvatarCanvas(): React.ReactElement {
                     {thought === undefined && status === "Queued" && (
                       <p className="pf-caption">Queued for cycle {cycle}.</p>
                     )}
-                    {WORKING_STATUS[status] === true &&
-                      (thought === undefined || thought.summary === "") && (
-                        <div className="flex w-full flex-col gap-1.5 pt-0.5" aria-hidden="true">
-                          <span className="pf-skeleton" style={{ width: "92%" }} />
-                          <span className="pf-skeleton" style={{ width: "74%" }} />
-                        </div>
-                      )}
+                    {isWorking && (thought === undefined || thought.summary === "") && (
+                      <SkeletonLines lines={2} className="pt-0.5" />
+                    )}
                   </button>
-                  {isOpen && (
-                    <div
-                      className="border-t px-4 py-3"
-                      style={{ borderColor: "var(--pf-border)", background: "var(--pf-panel-subtle)" }}
-                    >
+                  <Collapse id={detailId} open={isOpen}>
+                    <div className="pf-avatar-card-detail">
                       <p className="pf-label mb-2">Live output and rationale</p>
                       {draft === undefined ? (
-                        WORKING_STATUS[status] === true ? (
+                        isWorking ? (
                           <div className="flex flex-col gap-2">
                             <p className="pf-caption flex items-center gap-1.5">
                               <LoaderCircle size={12} className="pf-spin" />
                               {status} — output appears here as it lands.
                             </p>
-                            <span className="pf-skeleton" style={{ width: "88%" }} />
-                            <span className="pf-skeleton" style={{ width: "96%" }} />
-                            <span className="pf-skeleton" style={{ width: "61%" }} />
+                            <SkeletonLines lines={3} />
                           </div>
                         ) : (
                           <p className="pf-caption">No draft yet — output appears here as the avatar works.</p>
@@ -324,22 +313,14 @@ export function Page2AvatarCanvas(): React.ReactElement {
                             {draft.contentHash !== undefined ? ` · ${draft.contentHash.slice(0, 8)}` : ""}
                           </p>
                           {draft.content !== undefined && (
-                            <pre
-                              className="pf-mono mt-1 max-h-48 overflow-auto rounded-md border p-2.5 whitespace-pre-wrap"
-                              style={{
-                                borderColor: "var(--pf-border)",
-                                background: "var(--pf-panel)",
-                                fontSize: 11.5,
-                                color: "var(--pf-ink-2)",
-                              }}
-                            >
+                            <pre className="pf-draft-output pf-mono pf-scroll-thin">
                               {draft.content.slice(0, 2000)}
                             </pre>
                           )}
                         </div>
                       )}
                     </div>
-                  )}
+                  </Collapse>
                 </div>
               );
             })}
@@ -347,10 +328,10 @@ export function Page2AvatarCanvas(): React.ReactElement {
 
           {/* Critic issues */}
           {sync.critiques.length > 0 && (
-            <section className="mt-7">
+            <section className="mt-7" aria-labelledby="p2-critic">
               <div className="mb-3 flex items-center gap-2">
                 <ShieldAlert size={15} style={{ color: "var(--pf-danger)" }} />
-                <h2 className="pf-section-title">Critic findings</h2>
+                <h2 id="p2-critic" className="pf-section-title">Critic findings</h2>
                 <span className="pf-caption">
                   {openCritiques.length} blocking · {sync.critiques.length} total
                 </span>
@@ -367,9 +348,9 @@ export function Page2AvatarCanvas(): React.ReactElement {
 
           {/* Decision cards: 2-4 options, tradeoffs, recommended badge */}
           {sync.decisions.length > 0 && (
-            <section className="mt-7">
+            <section className="mt-7" aria-labelledby="p2-decisions">
               <div className="mb-3 flex items-center gap-2">
-                <h2 className="pf-section-title">Decisions</h2>
+                <h2 id="p2-decisions" className="pf-section-title">Decisions</h2>
                 {openDecisions.length > 0 && (
                   <span className="pf-chip pf-chip--warn">
                     <span className="pf-dot" />
@@ -390,18 +371,29 @@ export function Page2AvatarCanvas(): React.ReactElement {
             </section>
           )}
 
-          {sync.decisions.length === 0 && sync.critiques.length === 0 && sync.drafts.length === 0 && (
-            <div className="pf-empty mt-7">
-              <span className="pf-empty-icon">
-                <Compass size={20} />
+          {noOutputYet && (
+            <div className="pf-empty mt-7" aria-live="polite">
+              <span className="pf-empty-icon" data-busy={!linkDown}>
+                {linkDown ? <WifiOff size={20} /> : <Compass size={20} />}
               </span>
               <p className="pf-body font-medium" style={{ color: "var(--pf-ink)" }}>
-                The deliberation has not produced output yet
+                {linkDown
+                  ? "Waiting for the session authority"
+                  : runActive
+                    ? "The avatars are working — nothing has landed yet"
+                    : "The deliberation has not produced output yet"}
               </p>
               <p className="pf-caption max-w-md">
-                Drafts, critic findings, and decisions stream in here as the avatars
-                work through the current cycle.
+                {linkDown
+                  ? "This page keeps its last state and picks up where it left off as soon as the connection is back."
+                  : "Drafts, critic findings, and decisions stream in here as the avatars work through the current cycle."}
               </p>
+              {!linkDown && (
+                <div className="pf-empty-preview" aria-hidden="true">
+                  <SkeletonCard lines={2} />
+                  <SkeletonCard lines={2} />
+                </div>
+              )}
             </div>
           )}
 
@@ -450,10 +442,10 @@ export function Page2AvatarCanvas(): React.ReactElement {
         >
           Cancel session
         </button>
-        <p className="pf-caption ml-3 flex items-center gap-1.5">
+        <p className="pf-caption pf-footer-note">
           {working.length > 0 ? (
             <>
-              <LoaderCircle size={12} className="pf-spin" />
+              <LoaderCircle size={12} className="pf-spin shrink-0" />
               {working.length === 1
                 ? `${working[0]!.label} is still working — synthesis waits for the cycle to finish.`
                 : `${String(working.length)} avatars are still working — synthesis waits for the cycle to finish.`}
@@ -495,7 +487,8 @@ function CritiqueRow(props: { issue: CritiqueIssue; last: boolean }): React.Reac
         : "pf-badge--medium";
   return (
     <li
-      className="flex items-center gap-3 px-4 py-3"
+      className="pf-critique-row"
+      data-resolved={issue.resolved}
       style={last ? undefined : { borderBottom: "1px solid var(--pf-border)" }}
     >
       <span className={`pf-badge ${badge}`}>{issue.severity}</span>
@@ -503,12 +496,12 @@ function CritiqueRow(props: { issue: CritiqueIssue; last: boolean }): React.Reac
         {issue.summary}
       </span>
       {issue.resolved ? (
-        <span className="pf-chip pf-chip--ok">
+        <span className="pf-chip pf-chip--swap pf-chip--ok">
           <span className="pf-dot" />
           Resolved
         </span>
       ) : (
-        <span className="pf-chip">
+        <span className="pf-chip pf-chip--swap">
           <span className="pf-dot" />
           Open
         </span>
@@ -526,29 +519,25 @@ function DecisionCardView(props: {
   const resolved = card.resolvedOptionId !== undefined;
   return (
     <div
-      className="pf-card pf-card-pad"
-      style={
-        card.stale
-          ? { borderColor: "var(--pf-warn-border)", background: "var(--pf-warn-soft)" }
-          : { borderColor: "var(--pf-accent-border)" }
-      }
+      className="pf-card pf-card-pad pf-decision"
+      data-state={card.stale ? "stale" : resolved ? "resolved" : "open"}
     >
       <div className="flex items-start justify-between gap-3">
         <p className="pf-section-title">{card.question}</p>
         {card.stale && (
-          <span className="pf-chip pf-chip--warn">
+          <span className="pf-chip pf-chip--swap pf-chip--warn">
             <span className="pf-dot" />
             Stale — resolved by {card.resolvedBy ?? "another member"}
           </span>
         )}
         {resolved && !card.stale && (
-          <span className="pf-chip pf-chip--ok">
+          <span className="pf-chip pf-chip--swap pf-chip--ok">
             <span className="pf-dot" />
             Resolved by {card.resolvedBy ?? "member"}
           </span>
         )}
         {!resolved && !card.stale && (
-          <span className="pf-chip pf-chip--accent pf-chip--live">
+          <span className="pf-chip pf-chip--swap pf-chip--accent pf-chip--live">
             <span className="pf-dot" />
             Awaiting decision
           </span>
@@ -563,20 +552,10 @@ function DecisionCardView(props: {
               key={o.optionId}
               type="button"
               disabled={disabled || resolved}
-              className="flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed"
-              style={{
-                borderColor: chosen
-                  ? "var(--pf-ok-border)"
-                  : recommended
-                    ? "var(--pf-accent-border)"
-                    : "var(--pf-border)",
-                background: chosen
-                  ? "var(--pf-ok-soft)"
-                  : recommended
-                    ? "var(--pf-accent-soft)"
-                    : "var(--pf-panel)",
-                opacity: resolved && !chosen ? 0.55 : 1,
-              }}
+              className="pf-option"
+              data-chosen={chosen}
+              data-recommended={recommended}
+              data-dim={resolved && !chosen}
               onClick={() => onResolve(card.decisionId, o.optionId)}
             >
               <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: "var(--pf-ink)" }}>
