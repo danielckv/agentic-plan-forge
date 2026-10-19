@@ -545,14 +545,12 @@ body {
   white-space: nowrap;
 }
 
-.pf-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  background: var(--pf-accent-hover);
-  color: var(--pf-accent-ink);
+/*
+ * The brand mark draws its own badge, so it needs no background here: this
+ * only stops a flex row from squashing it.
+ */
+.pf-brandmark {
+  display: block;
   flex: none;
 }
 

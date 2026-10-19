@@ -1,0 +1,592 @@
+/*
+ * The command center's layout.
+ *
+ * Every colour, radius, shadow and easing here is one of the tokens defined in
+ * app.css. Nothing is hard-coded, which is what makes this surface match the
+ * forge and the board window and gives it light and dark parity without a
+ * second set of rules. What is defined below is layout and the few states that
+ * are genuinely new: the connection chip, the live pulse and the queue.
+ */
+
+.pf-center {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--pf-bg);
+  color: var(--pf-ink);
+}
+
+/* --- type scale -------------------------------------------------------------
+ * app.css defines .pf-body and .pf-caption but no heading classes, so the
+ * command center declares its own, scoped to itself so the forge and board
+ * windows keep whatever they rely on today. Three steps are enough: a page
+ * title, a card title and the uppercase section rule already defined below.
+ */
+
+/*
+ * The element selector carries no margin on purpose: it is more specific than
+ * a single class, so resetting it here would silently override the spacing
+ * every heading class below sets for itself.
+ */
+.pf-center h1,
+.pf-center h2,
+.pf-center h3,
+.pf-center h4 {
+  color: var(--pf-ink);
+  letter-spacing: -0.011em;
+}
+
+.pf-center .pf-h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.018em;
+}
+
+.pf-center .pf-h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* --- header ---------------------------------------------------------------- */
+
+.pf-center-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex: none;
+  border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-panel);
+}
+
+.pf-center-header-inner,
+.pf-center-main-inner {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/*
+ * Three columns with equal outer tracks, so the brand sits on the header's
+ * true centre line however wide the nav or the controls grow.
+ */
+.pf-center-header-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 20px;
+  min-height: 60px;
+}
+
+.pf-center-brand {
+  display: flex;
+  grid-column: 2;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pf-center-brand-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pf-center-brand-sub {
+  color: var(--pf-muted);
+  font-size: 13px;
+}
+
+.pf-center-nav {
+  display: flex;
+  grid-column: 1;
+  grid-row: 1;
+  align-items: center;
+  gap: 2px;
+  justify-self: start;
+}
+
+.pf-center-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--pf-radius-ctl);
+  background: transparent;
+  color: var(--pf-muted);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background var(--pf-dur-fast) var(--pf-ease), color var(--pf-dur-fast) var(--pf-ease);
+}
+
+.pf-center-nav-item:hover {
+  background: var(--pf-sidebar-hover);
+  color: var(--pf-ink);
+}
+
+.pf-center-nav-item.is-current {
+  background: var(--pf-sidebar-active);
+  color: var(--pf-sidebar-active-ink);
+  font-weight: 550;
+}
+
+.pf-center-header-right {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* --- connection ------------------------------------------------------------ */
+
+.pf-center-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--pf-border);
+  border-radius: 999px;
+  color: var(--pf-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pf-center-conn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pf-faint);
+}
+
+.pf-center-conn--live {
+  border-color: var(--pf-ok-border);
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+}
+
+.pf-center-conn--live .pf-center-conn-dot {
+  background: var(--pf-ok-bright);
+}
+
+.pf-center-conn--offline,
+.pf-center-conn--parked {
+  border-color: var(--pf-warn-border);
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+}
+
+.pf-center-conn--offline .pf-center-conn-dot {
+  background: var(--pf-warn-bright);
+}
+
+.pf-center-notice {
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--pf-warn-border);
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* --- main ------------------------------------------------------------------ */
+
+.pf-center-main {
+  flex: 1 1 auto;
+  padding: 28px 0 64px;
+}
+
+.pf-center-pagehead {
+  margin-bottom: 22px;
+}
+
+.pf-center-pagehead .pf-caption {
+  margin-top: 4px;
+}
+
+.pf-center-section {
+  margin: 32px 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pf-muted);
+}
+
+.pf-center-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pf-center-card {
+  padding: 18px 20px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+}
+
+.pf-center-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.pf-center-label {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pf-muted);
+}
+
+.pf-center-quiet {
+  margin: 0;
+  color: var(--pf-faint);
+  font-size: 13.5px;
+}
+
+.pf-center-code {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  overflow-x: auto;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-inset);
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* --- coordinator ----------------------------------------------------------- */
+
+.pf-center-coordinator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.pf-center-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-center-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel-subtle);
+  font-size: 13.5px;
+}
+
+/*
+ * The head of the queue is the answer to "what do I start": it is the one
+ * element on the page allowed to carry the accent.
+ */
+.pf-center-queue-row.is-lead {
+  border-color: var(--pf-accent-border);
+  background: var(--pf-accent-soft);
+}
+
+.pf-center-queue-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-center-task-id {
+  flex: none;
+  color: var(--pf-muted);
+  font-size: 12px;
+}
+
+.pf-center-queue-row.is-lead .pf-center-task-id {
+  color: var(--pf-accent);
+  font-weight: 600;
+}
+
+.pf-center-unplanned .pf-center-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: var(--pf-muted);
+}
+
+/* --- sessions -------------------------------------------------------------- */
+
+.pf-center-sessions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-center-session-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.pf-center-session-harness {
+  font-weight: 550;
+}
+
+.pf-center-session-when {
+  margin-inline-start: auto;
+  color: var(--pf-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pf-center-pulse {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--pf-ok-bright);
+  box-shadow: 0 0 0 0 var(--pf-ok-bright);
+  animation: pf-center-pulse 2s var(--pf-ease) infinite;
+}
+
+.pf-center-pulse.is-idle {
+  background: var(--pf-faint);
+  animation: none;
+}
+
+@keyframes pf-center-pulse {
+  70% {
+    box-shadow: 0 0 0 6px rgb(34 197 94 / 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgb(34 197 94 / 0);
+  }
+}
+
+.pf-center-session-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.pf-center-session-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--pf-muted);
+  font-size: 11.5px;
+}
+
+.pf-center-session-facts dd {
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-center-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.pf-center-files code {
+  padding: 2px 6px;
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-inset);
+  color: var(--pf-ink-2);
+}
+
+/* --- sprint ---------------------------------------------------------------- */
+
+.pf-center-epic + .pf-center-epic {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--pf-border);
+}
+
+.pf-center-story + .pf-center-story {
+  margin-top: 12px;
+}
+
+.pf-center-story-id {
+  margin: 0 0 6px;
+  color: var(--pf-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.pf-center-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-center-task {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: var(--pf-radius-ctl);
+  font-size: 13.5px;
+}
+
+.pf-center-task:nth-child(odd) {
+  background: var(--pf-panel-subtle);
+}
+
+.pf-center-task-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-center-task-meta {
+  flex: none;
+  color: var(--pf-faint);
+  font-size: 12px;
+}
+
+.pf-center-chip--ok {
+  border-color: var(--pf-ok-border);
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+}
+
+.pf-center-chip--warn {
+  border-color: var(--pf-warn-border);
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+}
+
+/* --- setup ----------------------------------------------------------------- */
+
+.pf-center-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pf-step;
+}
+
+.pf-center-step {
+  display: flex;
+  gap: 16px;
+}
+
+.pf-center-step-n {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pf-inset);
+  color: var(--pf-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pf-center-step-title {
+  margin: 2px 0 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+/* --- empty states ---------------------------------------------------------- */
+
+.pf-center-empty {
+  text-align: center;
+}
+
+.pf-center-empty--page {
+  display: flex;
+  min-height: 46vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.pf-center-empty .pf-body {
+  max-width: 54ch;
+  margin: 0;
+  color: var(--pf-muted);
+}
+
+.pf-center-empty .pf-center-code {
+  text-align: start;
+}
+
+/* --- narrow ---------------------------------------------------------------- */
+
+@media (width <= 820px) {
+  /*
+   * Too narrow for three tracks: the brand keeps the centre of its own row
+   * and the nav drops below, still full width.
+   */
+  .pf-center-header-inner {
+    grid-template-columns: 1fr auto 1fr;
+    gap: 10px 12px;
+    padding-block: 10px;
+  }
+
+  .pf-center-nav {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-content: center;
+    justify-self: stretch;
+  }
+
+  .pf-center-coordinator-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-center-pulse {
+    animation: none;
+  }
+
+  .pf-center-nav-item {
+    transition: none;
+  }
+}
