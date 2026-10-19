@@ -139,13 +139,26 @@ type Event struct {
 }
 
 // Doc is the whole per-repository document.
+//
+// RepoPath is kept on disk because the daemon needs it to scan a repository
+// for plan evidence, and the file is machine-local at 0600. It never reaches a
+// browser: everything served to a tab goes through Public first.
 type Doc struct {
 	Version  int                `json:"version"`
 	RepoKey  string             `json:"repo_key"`
 	RepoName string             `json:"repo_name"`
+	RepoPath string             `json:"repo_path,omitempty"`
 	Seq      uint64             `json:"seq"`
 	Sessions map[string]Session `json:"sessions"`
 	Events   []Event            `json:"events"`
+}
+
+// Public is the document as a tab may see it: the absolute repository path is
+// removed, leaving the key and the base name, which is what the board already
+// does for the same reason.
+func (d Doc) Public() Doc {
+	d.RepoPath = ""
+	return d
 }
 
 // Record is one telemetry report. SessionID, Harness and Kind are required;
@@ -170,6 +183,7 @@ type Store struct {
 	dir  string
 	key  string
 	name string
+	repo string
 	path string
 }
 
@@ -215,6 +229,7 @@ func OpenAt(dir, repo string) (*Store, error) {
 		dir:  dir,
 		key:  key,
 		name: clamp(filepath.Base(real), MaxRepoNameRunes),
+		repo: real,
 		path: filepath.Join(dir, key+".json"),
 	}, nil
 }
@@ -232,7 +247,7 @@ func clamp(s string, n int) string {
 }
 
 func (s *Store) empty() Doc {
-	d := Doc{Version: Version, RepoKey: s.key, RepoName: s.name}
+	d := Doc{Version: Version, RepoKey: s.key, RepoName: s.name, RepoPath: s.repo}
 	d.normalize()
 	return d
 }
@@ -484,6 +499,9 @@ func (s *Store) writeTrim(d *Doc) error {
 	d.RepoKey = s.key
 	if s.name != "" {
 		d.RepoName = s.name
+	}
+	if s.repo != "" {
+		d.RepoPath = s.repo
 	}
 	d.normalize()
 	data, err := json.Marshal(d)

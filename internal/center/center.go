@@ -75,6 +75,58 @@ type Config struct {
 	LiveDir string
 	// Secret is the daemon token. Empty means one is generated.
 	Secret string
+	// Sprint derives the plan view of one repository: its tasks by live
+	// column and the coordinator's verdict on what to begin next.
+	//
+	// It is injected rather than imported because computing it needs the AST
+	// scanner and so needs cgo, and this package must keep type-checking under
+	// a CGO_ENABLED=0 cross-vet. A nil Sprint means no plan view, which is what
+	// a test that only exercises the API wants.
+	Sprint SprintFunc
+}
+
+// SprintFunc returns the plan view of the repository at an absolute path.
+// ErrNoPlan means the repository has no approved plan, which is a normal
+// answer and not a failure.
+type SprintFunc func(ctx context.Context, repoPath string) (SprintView, error)
+
+// ErrNoPlan reports a repository the forge has never approved a plan for.
+var ErrNoPlan = errors.New("center: no approved plan")
+
+// SprintTask is one planned task as the command center shows it.
+type SprintTask struct {
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	EpicID     string   `json:"epic_id,omitempty"`
+	StoryID    string   `json:"story_id,omitempty"`
+	Column     string   `json:"column"`
+	Priority   string   `json:"priority,omitempty"`
+	Blocked    bool     `json:"blocked,omitempty"`
+	DependsOn  []string `json:"depends_on,omitempty"`
+	Targets    int      `json:"targets"`
+	Verified   int      `json:"verified"`
+	TargetsMet int      `json:"targets_met"`
+}
+
+// SprintView is the coordinator's output for one repository.
+//
+// NextUp is the point of it: the live view states the task to begin now rather
+// than leaving a reader to infer it from a list, and it re-ranks as soon as a
+// discovery is accepted or new evidence lands.
+type SprintView struct {
+	RepoKey   string       `json:"repo_key"`
+	RepoName  string       `json:"repo_name"`
+	Title     string       `json:"title,omitempty"`
+	Approved  bool         `json:"approved"`
+	Tasks     []SprintTask `json:"tasks"`
+	Active    []string     `json:"active"`
+	NextUp    []string     `json:"next_up"`
+	Blocked   []string     `json:"blocked,omitempty"`
+	Awaiting  []string     `json:"awaiting_verification,omitempty"`
+	Verified  int          `json:"verified"`
+	Total     int          `json:"total"`
+	Drifted   bool         `json:"drifted,omitempty"`
+	UpdatedAt string       `json:"updated_at"`
 }
 
 // Server is a running command center.
@@ -191,6 +243,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/session", s.handleSession)
 	mux.HandleFunc("GET /api/center/events", s.authed(s.handleEvents))
 	mux.HandleFunc("GET /api/center/live", s.authed(s.handleLive))
+	mux.HandleFunc("GET /api/center/sprint", s.authed(s.handleSprint))
 	mux.HandleFunc("GET /api/center/status", s.authed(s.handleStatus))
 	mux.HandleFunc("GET /api/center/clients", s.daemonOnly(s.handleClients))
 	mux.HandleFunc("POST /api/center/ticket", s.daemonOnly(s.handleTicket))
@@ -352,10 +405,41 @@ func (s *Server) snapshot() (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if docs == nil {
-		docs = []livestore.Doc{}
+	public := make([]livestore.Doc, 0, len(docs))
+	for _, d := range docs {
+		public = append(public, d.Public())
 	}
-	return Snapshot{At: time.Now().UTC().Format(time.RFC3339), Repos: docs}, nil
+	return Snapshot{At: time.Now().UTC().Format(time.RFC3339), Repos: public}, nil
+}
+
+// handleSprint returns the plan view of every repository that has one. A
+// repository with no approved plan is omitted rather than reported as an
+// error: working without a plan is the normal case this whole surface exists
+// to make visible.
+func (s *Server) handleSprint(w http.ResponseWriter, r *http.Request) {
+	views := []SprintView{}
+	if s.cfg.Sprint != nil {
+		docs, err := livestore.LoadAll(s.liveDir)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not read the live store")
+			return
+		}
+		for _, d := range docs {
+			if d.RepoPath == "" {
+				continue
+			}
+			view, err := s.cfg.Sprint(r.Context(), d.RepoPath)
+			if err != nil {
+				continue
+			}
+			view.RepoKey, view.RepoName = d.RepoKey, d.RepoName
+			views = append(views, view)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"at":    time.Now().UTC().Format(time.RFC3339),
+		"repos": views,
+	})
 }
 
 // handleEvents is the event stream. It pushes the current snapshot first, so a

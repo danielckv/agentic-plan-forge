@@ -149,7 +149,9 @@ func RunCenter(ctx context.Context, opts CenterOptions) CenterResult {
 	if err != nil {
 		return CenterResult{ExitCode: ExitFailure, Message: notice(err)}
 	}
-	srv, err := center.New(center.Config{Port: opts.Port, Assets: webui.Assets(), Secret: secret})
+	srv, err := center.New(center.Config{
+		Port: opts.Port, Assets: webui.Assets(), Secret: secret, Sprint: CenterSprint,
+	})
 	if err != nil {
 		// A port already in use with no live holder is a real conflict with
 		// another program. Moving to a different port would break every
