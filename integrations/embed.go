@@ -15,6 +15,9 @@ var rawSkillPlanForge string
 //go:embed skill-plan-config.md
 var rawSkillPlanConfig string
 
+//go:embed skill-plan-forge-board.md
+var rawSkillPlanForgeBoard string
+
 //go:embed omp-hook-plan-forge.ts
 var rawOMPHook string
 
@@ -29,12 +32,17 @@ var rawAGYLocations string
 //   {{HOST}}            claude|omp|agy
 //   {{WAIT_TIMEOUT}}    per-host wait timeout (100s claude, 50s omp, 50s agy)
 //   {{PLAN_MODE_HINT}}  per-host plan-mode hint text
+//   {{PLAN_MODE_STEP}}  per-host plan-mode handoff instruction (skill step 5)
 
 // SkillPlanForge is the unsubstituted plan-forge skill body.
 func SkillPlanForge() string { return rawSkillPlanForge }
 
 // SkillPlanConfig is the unsubstituted plan-config skill body.
 func SkillPlanConfig() string { return rawSkillPlanConfig }
+
+// SkillPlanForgeBoard is the unsubstituted plan-forge-board skill body
+// (Claude Code only).
+func SkillPlanForgeBoard() string { return rawSkillPlanForgeBoard }
 
 // OMPHook is the unsubstituted OMP session-start hook factory.
 func OMPHook() string { return rawOMPHook }

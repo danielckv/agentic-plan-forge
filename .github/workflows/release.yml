@@ -137,7 +137,7 @@ jobs:
           mkdir -p out/plan-forge-relay-linux-${{ matrix.arch }}
           go build -tags server -trimpath -o out/plan-forge-relay-linux-${{ matrix.arch }}/plan-forge-relay ./cmd/relay
       - name: Assert dependency closure
-        run: '! go list -deps -tags server ./cmd/relay | grep -Eq "internal/(ast|ingestion|host|avatars|storage|synthesizer|window|app|planstate)|/web$|tree-sitter|ledongthuc/pdf"'
+        run: '! go list -deps -tags server ./cmd/relay | grep -Eq "internal/(ast|ingestion|host|avatars|storage|synthesizer|window|app|planstate|board)|/web$|tree-sitter|ledongthuc/pdf"'
       - name: Upload relay
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

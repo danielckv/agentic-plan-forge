@@ -54,7 +54,8 @@ die() {
 # Fills a fresh temp directory (left in $stage) with the client archive layout:
 # plan-forge[.exe], LICENSE, README.md, install.sh (Windows: install.ps1),
 # commands/plan-forge.md, commands/plan-config.md, hooks/post-merge.sh,
-# integrations/ (per-host templates). Tar and zip archives both use it, so
+# integrations/ (per-host templates, including skill-plan-forge-board.md and
+# the OMP hook, never the hook's test). Tar and zip archives both use it, so
 # every client archive renders identical commands and hooks.
 stage_client() {
     name=$1
@@ -74,6 +75,7 @@ stage_client() {
         -e "s|{{HOST}}|claude|g" \
         -e "s|{{WAIT_TIMEOUT}}|100s|g" \
         -e "s|{{PLAN_MODE_HINT}}|press Shift+Tab until Plan Mode is shown|g" \
+        -e "s|{{PLAN_MODE_STEP}}|Immediately enter your host's Plan Mode, or ask the user to switch to Plan Mode if you cannot. In Plan Mode, read docs/plans/.plan/synthesized_spec.md as your authoritative blueprint, review the validation summary printed by wait, verify the listed AST file targets, and present the execution checklist for approval.|g" \
         "$root/integrations/skill-plan-forge.md" >"$stage/commands/plan-forge.md" || die "render command failed"
     sed -e "s|{{PLAN_FORGE_BIN}}|plan-forge|g" \
         "$root/integrations/skill-plan-config.md" >"$stage/commands/plan-config.md" || die "render command failed"
@@ -81,7 +83,9 @@ stage_client() {
     # replacement contains a pipe, so `|` cannot be the sed delimiter here.
     sed -e "s#{{PLAN_FORGE_BIN}}#\$(command -v plan-forge | tr -d '\n')#g" \
         "$root/integrations/git-hook-post-merge.txt" >"$stage/hooks/post-merge.sh" || die "render hook failed"
-    cp "$root"/integrations/*.md "$root"/integrations/*.ts "$root"/integrations/*.txt "$stage/integrations/" || die "copy integrations failed"
+    # The OMP hook ships as a template; its node --test file stays in the repo.
+    [ -f "$root/integrations/skill-plan-forge-board.md" ] || die "integrations/skill-plan-forge-board.md is missing"
+    cp "$root"/integrations/*.md "$root/integrations/omp-hook-plan-forge.ts" "$root"/integrations/*.txt "$stage/integrations/" || die "copy integrations failed"
 }
 
 # stage_archive <name> <binary> <installer>: stage_client, then a tarball.

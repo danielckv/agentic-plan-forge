@@ -103,12 +103,15 @@ type installManifest struct {
 	Rows []manifestRow `json:"rows"`
 }
 
-// artifact is one planned write.
+// artifact is one planned write. handoff carries the second Claude hook
+// command (`hook claude`) for kindSettings artifacts; other kinds leave it
+// empty.
 type artifact struct {
 	path    string
 	host    string
 	kind    manifestKind
 	content string
+	handoff string
 	patch   *patchRecord
 }
 
@@ -206,13 +209,40 @@ func planModeHint(kind string) string {
 	}
 }
 
+// planModeStep returns the per-host {{PLAN_MODE_STEP}} text for skill step 5:
+// how the agent enters plan mode once the forge approves. Claude drives the
+// EnterPlanMode tool itself; OMP gets the plan-mode session from the
+// hook-registered /plan-forge command; AGY keeps the manual hint.
+func planModeStep(kind string) string {
+	switch kind {
+	case string(KindClaude):
+		return "Immediately call the `EnterPlanMode` tool, before any edit. In Plan Mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary `wait` printed (valid, status, verified/total, drift), and verify the listed AST file targets. When the validation is invalid or missing, run `\"{{PLAN_FORGE_BIN}}\" validate --repo <repository root>` first. Present the execution checklist and call `ExitPlanMode` for the user's approval. " + boardReportingRules("claude:<your session id if known, else claude:main>")
+	case string(KindOMP):
+		return "The `/plan-forge` command opens a new plan-mode session seeded with the spec and the validation result; continue there. When you arrived here through the skill instead, the hook has prefilled `/plan …` in the editor: ask the user to press Enter. In plan mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary, verify the listed AST targets, and present the execution checklist. " + boardReportingRules("omp:main")
+	default:
+		return "Immediately enter Plan Mode, ingest `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, verify the listed AST file targets, and present the execution checklist. If you cannot switch modes yourself, ask the user to " + planModeHint(kind) + ", then continue."
+	}
+}
+
+// boardReportingRules is the implementation-phase instruction block appended
+// to the Claude and OMP plan-mode steps: report task start/finish to the
+// board, record off-plan work as discoveries, and follow Coordinator lines.
+// {{PLAN_FORGE_BIN}} is pre-substituted by Installer.substitute.
+func boardReportingRules(consumer string) string {
+	return "While implementing, run `\"{{PLAN_FORGE_BIN}}\" board report --repo <root> --consumer " + consumer + " --task <ID> --state started` before each task and `--state done` after it. Run `board discover --title … [--parent <ID>] [--path …] [--reason …]` for work outside the plan. Follow any `Coordinator:` line in hook context."
+}
+
 // substitute renders a template body with the install-time variables.
 func (in *Installer) substitute(body, kind string) string {
+	// strings.Replacer performs a single pass, so pre-substitute the binary
+	// path inside the plan-mode step text.
+	step := strings.ReplaceAll(planModeStep(kind), "{{PLAN_FORGE_BIN}}", in.bin)
 	r := strings.NewReplacer(
 		"{{PLAN_FORGE_BIN}}", in.bin,
 		"{{HOST}}", kind,
 		"{{WAIT_TIMEOUT}}", waitTimeout(kind),
 		"{{PLAN_MODE_HINT}}", planModeHint(kind),
+		"{{PLAN_MODE_STEP}}", step,
 	)
 	return r.Replace(body)
 }
@@ -283,6 +313,10 @@ func (in *Installer) Plan(ctx context.Context, opts InstallOptions) ([]HostRepor
 		reports = append(reports, report)
 	}
 
+	artifacts, dropNotes := dropRedundantOMPSkills(artifacts, home, opts)
+	if lines := append(dropNotes, ompDuplicateLines(home, ompProjectRepo(opts), artifacts)...); len(lines) > 0 {
+		attachNotes(reports, lines)
+	}
 	if opts.GitHook {
 		arts, err := in.planGitHook(opts)
 		if err != nil {
@@ -344,16 +378,16 @@ func (in *Installer) authLabel(ctx context.Context, kind Kind) (label, cmd strin
 
 func claudeTargets(scope string) []string {
 	if scope == "project" {
-		return []string{".claude/skills/plan-forge, .claude/skills/plan-config"}
+		return []string{".claude/skills/plan-forge, plan-config, plan-forge-board"}
 	}
-	return []string{"~/.claude/skills/plan-forge, ~/.claude/skills/plan-config, SessionStart hook"}
+	return []string{"~/.claude/skills/plan-forge, plan-config, plan-forge-board, SessionStart/PostToolUse/UserPromptSubmit hooks"}
 }
 
 func ompTargets(scope string) []string {
 	if scope == "project" {
-		return []string{".omp/skills/..., .omp/commands/plan-forge.md, plan-config.md, hooks/pre/plan-forge.ts"}
+		return []string{".omp/skills/..., .omp/commands/plan-config.md, hooks/pre/plan-forge.ts"}
 	}
-	return []string{"~/.omp/agent/skills/..., ~/.omp/agent/commands/plan-forge.md, plan-config.md, hooks/pre/plan-forge.ts"}
+	return []string{"~/.omp/agent/skills/..., ~/.omp/agent/commands/plan-config.md, hooks/pre/plan-forge.ts"}
 }
 
 func agyTargets(scope string) []string {
@@ -363,7 +397,8 @@ func agyTargets(scope string) []string {
 	return []string{"~/.gemini/antigravity-cli/skills/..., ~/.gemini/config/skills/..."}
 }
 
-// planClaude plans the two SKILL.md files and the SessionStart settings merge.
+// planClaude plans the three SKILL.md files and the managed settings merge
+// (SessionStart, PostToolUse, UserPromptSubmit).
 func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, error) {
 	root := filepath.Join(home, ".claude")
 	if opts.Scope == "project" {
@@ -371,8 +406,17 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 	} else if err := in.checkHostRoot(root); err != nil {
 		return nil, err
 	}
-	forge := in.substitute(integrations.SkillPlanForge(), string(KindClaude))
-	conf := in.substitute(integrations.SkillPlanConfig(), string(KindClaude))
+	// The Claude copies carry `enabled: false` so oh-my-pi never lists the
+	// skill twice. OMP's conventional scanners skip a skill with that key
+	// (omp://skills.md, "SKILL.md frontmatter": `enabled: false` skips a
+	// skill), so OMP stops seeing these copies however the user configures
+	// skills.customDirectories or enabledProviders (e.g. ~/.claude/skills).
+	// Claude Code ignores unknown frontmatter keys, so its own loading is
+	// unaffected. OMP's native copies and the AGY copies are NOT marked:
+	// marking OMP's own copy would remove /plan-forge from OMP.
+	forge := markHiddenFromOMP(in.substitute(integrations.SkillPlanForge(), string(KindClaude)))
+	conf := markHiddenFromOMP(in.substitute(integrations.SkillPlanConfig(), string(KindClaude)))
+	board := markHiddenFromOMP(in.substitute(integrations.SkillPlanForgeBoard(), string(KindClaude)))
 	arts := []artifact{
 		{
 			path: filepath.Join(root, "skills", "plan-forge", "SKILL.md"),
@@ -382,21 +426,30 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 			path: filepath.Join(root, "skills", "plan-config", "SKILL.md"),
 			host: string(KindClaude), kind: kindSkill, content: conf,
 		},
+		{
+			path: filepath.Join(root, "skills", "plan-forge-board", "SKILL.md"),
+			host: string(KindClaude), kind: kindSkill, content: board,
+		},
 	}
 	if opts.Scope == "user" {
 		hookCommand := strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", in.bin)
+		handoffCommand := strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)
 		arts = append(arts, artifact{
 			path:    filepath.Join(root, "settings.json"),
 			host:    string(KindClaude),
 			kind:    kindSettings,
 			content: hookCommand,
+			handoff: handoffCommand,
 			patch:   &patchRecord{Anchor: "hooks.SessionStart"},
 		})
 	}
 	return arts, nil
 }
 
-// planOMP plans two skills, two slash commands and the hook factory.
+// planOMP plans two skills, the plan-config slash command and the hook
+// factory. The hook registers /plan-forge (and /plan-forge-board) itself, so
+// no commands/plan-forge.md is written; a previously installed managed copy
+// is removed by Apply.
 func (in *Installer) planOMP(home string, opts InstallOptions) ([]artifact, error) {
 	var skills, commands, hooks string
 	if opts.Scope == "project" {
@@ -418,7 +471,6 @@ func (in *Installer) planOMP(home string, opts InstallOptions) ([]artifact, erro
 	return []artifact{
 		{path: filepath.Join(skills, "plan-forge", "SKILL.md"), host: string(KindOMP), kind: kindSkill, content: forge},
 		{path: filepath.Join(skills, "plan-config", "SKILL.md"), host: string(KindOMP), kind: kindSkill, content: conf},
-		{path: filepath.Join(commands, "plan-forge.md"), host: string(KindOMP), kind: kindCommand, content: forge},
 		{path: filepath.Join(commands, "plan-config.md"), host: string(KindOMP), kind: kindCommand, content: conf},
 		{path: filepath.Join(hooks, "plan-forge.ts"), host: string(KindOMP), kind: kindHookFactory, content: hookBody},
 	}, nil
@@ -690,12 +742,24 @@ func (in *Installer) Apply(arts []artifact, opts InstallOptions) error {
 	// Rows for paths this run no longer manages (another scope) survive;
 	// only the current artifacts' rows are rewritten (uninstall --host all
 	// removes the rest).
-	// Rebuild: current artifacts' rows plus rows from other scopes we leave
-	// alone (uninstall --host all handles them).
 	kept := make([]manifestRow, 0, len(manifest.Rows))
+	// The OMP hook registers /plan-forge itself: a managed
+	// commands/plan-forge.md from an older install, in a commands directory
+	// this run manages, is removed. Manifest-owned only: a copy whose bytes
+	// diverged from the recorded hash stays on disk and keeps its row.
+	stale := staleOMPForgeCommands(arts)
 	for _, row := range manifest.Rows {
 		if rowReplaced(row.Path, arts) {
 			continue
+		}
+		if stale[row.Path] && row.Host == string(KindOMP) && row.Kind == kindCommand {
+			gone, err := removeOwnedRow(row)
+			if err != nil {
+				return err
+			}
+			if gone {
+				continue
+			}
 		}
 		kept = append(kept, row)
 	}
@@ -712,6 +776,39 @@ func rowReplaced(path string, arts []artifact) bool {
 		}
 	}
 	return false
+}
+
+// staleOMPForgeCommands lists the commands/plan-forge.md paths an OMP install
+// from before the hook registered /plan-forge itself may have left behind: one
+// per commands directory the planned OMP artifacts write into.
+func staleOMPForgeCommands(arts []artifact) map[string]bool {
+	stale := map[string]bool{}
+	for _, art := range arts {
+		if art.host == string(KindOMP) && art.kind == kindCommand {
+			stale[filepath.Join(filepath.Dir(art.path), "plan-forge.md")] = true
+		}
+	}
+	return stale
+}
+
+// removeOwnedRow deletes a manifest-owned file, but only while its content
+// still matches the recorded hash. It reports whether the file is gone
+// (removed now or already absent); a diverged file is left alone.
+func removeOwnedRow(row manifestRow) (bool, error) {
+	raw, err := os.ReadFile(row.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if sha256Hex(raw) != row.SHA256 {
+		return false, nil
+	}
+	if err := os.Remove(row.Path); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // applyArtifact writes one artifact following the manifest rules. A zero
@@ -776,7 +873,15 @@ func (in *Installer) applyArtifact(art artifact, prev manifestRow, opts InstallO
 }
 
 // applyArtifactForce overwrites a diverged template artifact after --force.
+// Merged files (settings, git hook) are re-merged instead: the divergence
+// check is skipped but the user's other content is never overwritten.
 func (in *Installer) applyArtifactForce(art artifact, opts InstallOptions) (manifestRow, error) {
+	switch art.kind {
+	case kindSettings:
+		return in.applySettings(art, manifestRow{}, opts)
+	case kindGitHook:
+		return in.applyGitHook(art, manifestRow{}, opts)
+	}
 	if err := ensureDir(filepath.Dir(art.path)); err != nil {
 		return manifestRow{}, err
 	}
@@ -817,7 +922,7 @@ func (in *Installer) applySettings(art artifact, prev manifestRow, opts InstallO
 	var merged map[string]any
 	var changed bool
 	if art.host == string(KindClaude) {
-		merged, changed, err = mergeClaudeHook(settings, art.content)
+		merged, changed, err = mergeClaudeHook(settings, art.content, art.handoff)
 	} else {
 		merged, changed, err = mergeAGYHook(settings, art.content)
 	}
@@ -954,70 +1059,633 @@ func appendGitShebang(existing, block string) string {
 }
 
 // Uninstall removes only manifest-owned files with matching hashes and only
-// our hook entries/managed blocks. It returns the removal report lines.
+// our hook entries/managed blocks. It returns the removal report lines. With
+// DryRun nothing is written or deleted; otherwise the manifest rows that no
+// longer have anything to remove are pruned, so a later install starts clean.
 func (in *Installer) Uninstall(opts InstallOptions) ([]string, error) {
-	manifest, _, err := loadManifest()
+	manifest, manifestFile, err := loadManifest()
 	if err != nil {
 		return nil, err
 	}
 	var removed []string
+	kept := make([]manifestRow, 0, len(manifest.Rows))
 	for _, row := range manifest.Rows {
 		if opts.Host != "all" && row.Host != opts.Host {
+			kept = append(kept, row)
 			continue
 		}
-		raw, err := os.ReadFile(row.Path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
+		line, keep, err := uninstallRow(row, opts.DryRun)
 		if err != nil {
 			return removed, err
 		}
-		switch row.Kind {
-		case kindSettings:
-			stripped, ours, err := splitManagedHook(raw)
-			if err != nil || !ours {
-				continue
-			}
+		if keep {
+			kept = append(kept, row)
+		}
+		if line != "" {
+			removed = append(removed, line)
+		}
+	}
+	if opts.DryRun || len(kept) == len(manifest.Rows) {
+		return removed, nil
+	}
+	manifest.Rows = kept
+	return removed, saveManifest(manifest, manifestFile)
+}
+
+// uninstallRow removes one manifest row's managed content. It returns the
+// report line (empty when nothing was removed) and whether the row must stay
+// in the manifest (the file is still ours but could not be touched).
+func uninstallRow(row manifestRow, dryRun bool) (line string, keep bool, err error) {
+	raw, err := os.ReadFile(row.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", true, err
+	}
+	switch row.Kind {
+	case kindSettings:
+		stripped, ours, splitErr := splitManagedHook(raw)
+		if splitErr != nil {
+			return "", true, nil // unparseable settings: leave file and row alone
+		}
+		if !ours {
+			return "", false, nil
+		}
+		if !dryRun {
 			encoded, err := encodeSettings(stripped)
 			if err != nil {
-				return removed, err
+				return "", true, err
 			}
 			if err := backup(raw); err != nil {
-				return removed, err
+				return "", true, err
 			}
 			if err := writeAtomicPrivate(row.Path, encoded, 0o600); err != nil {
-				return removed, err
+				return "", true, err
 			}
-			removed = append(removed, row.Path+" (hook entry removed)")
-		case kindGitHook:
-			stripped, ours := stripManagedGitHook(string(raw))
-			if !ours {
-				continue
-			}
+		}
+		return row.Path + " (hook entry removed)", false, nil
+	case kindGitHook:
+		stripped, ours := stripManagedGitHook(string(raw))
+		if !ours {
+			return "", false, nil
+		}
+		if !dryRun {
 			if err := backup(raw); err != nil {
-				return removed, err
+				return "", true, err
 			}
 			if strings.TrimSpace(stripped) == "#!/bin/sh" {
 				if err := os.Remove(row.Path); err != nil {
-					return removed, err
+					return "", true, err
 				}
 			} else if err := writeAtomicPrivate(row.Path, []byte(stripped), 0o755); err != nil {
-				return removed, err
+				return "", true, err
 			}
-			removed = append(removed, row.Path+" (managed block removed)")
-		default:
-			if sha256Hex(raw) != row.SHA256 {
-				// Diverged after install: do not delete what we cannot prove
-				// we own byte-for-byte.
+		}
+		return row.Path + " (managed block removed)", false, nil
+	default:
+		if sha256Hex(raw) != row.SHA256 {
+			// Diverged after install: do not delete what we cannot prove
+			// we own byte-for-byte.
+			return "", true, nil
+		}
+		if !dryRun {
+			if err := os.Remove(row.Path); err != nil {
+				return "", true, err
+			}
+		}
+		return row.Path, false, nil
+	}
+}
+
+// managedSkillNames are the skill directory names Plan Forge installs.
+var managedSkillNames = []string{"plan-forge", "plan-config", "plan-forge-board"}
+
+// SkillRoot is one directory a host reads skills from.
+type SkillRoot struct {
+	Path   string   `json:"path"`
+	Via    string   `json:"via"`
+	Skills []string `json:"skills,omitempty"` // managed skill names OMP/the host lists from here
+	Hidden []string `json:"hidden,omitempty"` // names OMP reads here but skips (enabled: false)
+}
+
+// SkillDuplicate is one managed skill name present in more than one root the
+// same host surface reads.
+type SkillDuplicate struct {
+	Name      string   `json:"name"`
+	Paths     []string `json:"paths"`
+	Identical bool     `json:"identical"` // byte-identical bodies: OMP collapses them silently
+}
+
+// SkillRootView is what one host surface reads. AGY has two surfaces (CLI
+// and app) that read different global roots; they are never compared.
+type SkillRootView struct {
+	Host       string           `json:"host"`
+	Surface    string           `json:"surface,omitempty"`
+	Roots      []SkillRoot      `json:"roots"`
+	Duplicates []SkillDuplicate `json:"duplicates,omitempty"`
+	OptIn      []string         `json:"opt_in_sources,omitempty"` // OMP settings files that enabled a foreign root
+}
+
+// SkillDuplicateRemedy is the advice printed next to every visible duplicate.
+// Plan Forge never edits the user's OMP settings itself.
+const SkillDuplicateRemedy = `add ignoredSkills: ["plan-forge*"] to your OMP settings, or remove the foreign provider from enabledProviders (or set its enableClaudeUser/enableAgentsUser/enableClaudeProject/enableAgentsProject toggle to false); plan-forge does not edit that file`
+
+// ompSkillSettings is the part of the user's OMP configuration that decides
+// which foreign skill roots OMP reads.
+type ompSkillSettings struct {
+	ClaudeUser, AgentsUser, CodexUser, PiUser bool // opt-in user roots
+	ClaudeProject, AgentsProject              bool // default true; false when explicitly disabled
+	CustomDirs                                []string
+	Sources                                   []string // files that enabled something
+}
+
+// rawSkillCfg is one parsed settings file.
+type rawSkillCfg struct {
+	enabledProviders []string
+	flags            map[string]bool
+	customDirs       []string
+}
+
+// readOMPSkillSettings reads ~/.omp/agent/{settings.json,config.yml,config.yaml}
+// and, when repo is set, <repo>/.omp/ the same way. It only reads.
+// Keys: enabledProviders (claude|agents|codex), enableClaudeUser,
+// enableAgentsUser, enableCodexUser, enablePiUser, enableClaudeProject,
+// enableAgentsProject and skills.customDirectories, each either top level or
+// under skills:.
+func readOMPSkillSettings(home, repo string) ompSkillSettings {
+	s := ompSkillSettings{ClaudeProject: true, AgentsProject: true}
+	dirs := []string{filepath.Join(home, ".omp", "agent")}
+	if repo != "" {
+		dirs = append(dirs, filepath.Join(repo, ".omp"))
+	}
+	for _, dir := range dirs {
+		for _, name := range []string{"settings.json", "config.yml", "config.yaml"} {
+			path := filepath.Join(dir, name)
+			info, err := os.Stat(path)
+			if err != nil || !info.Mode().IsRegular() || info.Size() > 1<<20 {
 				continue
 			}
-			if err := os.Remove(row.Path); err != nil {
-				return removed, err
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				continue
 			}
-			removed = append(removed, row.Path)
+			var cfg rawSkillCfg
+			if strings.HasSuffix(name, ".json") {
+				cfg = parseOMPSkillJSON(raw)
+			} else {
+				cfg = parseOMPSkillYAML(raw)
+			}
+			s.apply(cfg, path, home, repo)
 		}
 	}
-	return removed, nil
+	return s
+}
+
+func (s *ompSkillSettings) apply(cfg rawSkillCfg, path, home, repo string) {
+	enabled := false
+	for _, p := range cfg.enabledProviders {
+		switch strings.ToLower(strings.TrimSpace(p)) {
+		case "claude":
+			s.ClaudeUser, enabled = true, true
+		case "agents":
+			s.AgentsUser, enabled = true, true
+		case "codex":
+			s.CodexUser, enabled = true, true
+		}
+	}
+	for key, on := range cfg.flags {
+		switch key {
+		case "enableClaudeUser":
+			if on {
+				s.ClaudeUser, enabled = true, true
+			}
+		case "enableAgentsUser":
+			if on {
+				s.AgentsUser, enabled = true, true
+			}
+		case "enableCodexUser":
+			if on {
+				s.CodexUser, enabled = true, true
+			}
+		case "enablePiUser":
+			if on {
+				s.PiUser, enabled = true, true
+			}
+		case "enableClaudeProject":
+			s.ClaudeProject = on
+		case "enableAgentsProject":
+			s.AgentsProject = on
+		}
+	}
+	for _, dir := range cfg.customDirs {
+		if resolved := resolveSkillDir(dir, home, repo); resolved != "" {
+			s.CustomDirs = append(s.CustomDirs, resolved)
+			enabled = true
+		}
+	}
+	if enabled {
+		s.Sources = append(s.Sources, path)
+	}
+}
+
+func resolveSkillDir(dir, home, repo string) string {
+	dir = strings.TrimSpace(dir)
+	switch {
+	case dir == "":
+		return ""
+	case dir == "~" || strings.HasPrefix(dir, "~/"):
+		return filepath.Join(home, strings.TrimPrefix(dir, "~"))
+	case filepath.IsAbs(dir):
+		return filepath.Clean(dir)
+	case repo != "":
+		return filepath.Join(repo, dir)
+	}
+	return ""
+}
+
+var skillSettingFlags = map[string]bool{
+	"enableClaudeUser": true, "enableAgentsUser": true, "enableCodexUser": true, "enablePiUser": true,
+	"enableClaudeProject": true, "enableAgentsProject": true,
+}
+
+func parseOMPSkillJSON(raw []byte) rawSkillCfg {
+	cfg := rawSkillCfg{flags: map[string]bool{}}
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return cfg
+	}
+	strs := func(v any) []string {
+		var out []string
+		if list, ok := v.([]any); ok {
+			for _, item := range list {
+				if s, ok := item.(string); ok {
+					out = append(out, s)
+				}
+			}
+		}
+		return out
+	}
+	cfg.enabledProviders = strs(root["enabledProviders"])
+	scopes := []map[string]any{root}
+	if skills, ok := root["skills"].(map[string]any); ok {
+		scopes = append(scopes, skills)
+	}
+	for _, m := range scopes {
+		for key := range skillSettingFlags {
+			if b, ok := m[key].(bool); ok {
+				cfg.flags[key] = b
+			}
+		}
+		cfg.customDirs = append(cfg.customDirs, strs(m["customDirectories"])...)
+	}
+	return cfg
+}
+
+// parseOMPSkillYAML is a line scanner for the handful of keys above. A
+// nested key counts only at the top level or under skills:, so the unrelated
+// commands.enableClaudeUser toggle is ignored.
+func parseOMPSkillYAML(raw []byte) rawSkillCfg {
+	cfg := rawSkillCfg{flags: map[string]bool{}}
+	section, list, listIndent := "", "", 0
+	scalar := func(v string) string { return strings.Trim(strings.TrimSpace(v), `"'`) }
+	add := func(key, v string) {
+		switch key {
+		case "enabledProviders":
+			cfg.enabledProviders = append(cfg.enabledProviders, scalar(v))
+		case "customDirectories":
+			cfg.customDirs = append(cfg.customDirs, scalar(v))
+		}
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		text := strings.TrimRight(line, " \t\r")
+		trimmed := strings.TrimSpace(text)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		trimmed = strings.TrimSpace(strings.SplitN(trimmed, " #", 2)[0])
+		indent := len(text) - len(strings.TrimLeft(text, " "))
+		if list != "" && indent >= listIndent && strings.HasPrefix(trimmed, "-") {
+			add(list, strings.TrimPrefix(trimmed, "-"))
+			continue
+		}
+		list = ""
+		key, val, ok := strings.Cut(trimmed, ":")
+		if !ok {
+			continue
+		}
+		key, val = strings.TrimSpace(key), strings.TrimSpace(val)
+		if indent == 0 {
+			section = ""
+			if val == "" {
+				section = key
+			}
+		}
+		if indent != 0 && section != "skills" {
+			continue
+		}
+		switch {
+		case key == "enabledProviders" || key == "customDirectories":
+			if val == "" {
+				list, listIndent = key, indent
+			} else if strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]") {
+				for _, item := range strings.Split(val[1:len(val)-1], ",") {
+					if strings.TrimSpace(item) != "" {
+						add(key, item)
+					}
+				}
+			}
+		case skillSettingFlags[key]:
+			if val == "true" || val == "false" {
+				cfg.flags[key] = val == "true"
+			}
+		}
+	}
+	return cfg
+}
+
+type readRoot struct{ Path, Via string }
+
+type skillSurface struct {
+	Name  string
+	Roots []readRoot
+}
+
+// hostSurfaces lists the skill roots each surface of a host reads. repo ""
+// means no project scope. Claude reads only .claude roots. OMP reads its own
+// .omp roots, the Claude and Agents project roots by default, and the user
+// roots of a foreign provider only after the user opted in. AGY's CLI and
+// app surfaces read different global roots and share the project root.
+func hostSurfaces(kind, home, repo string, s ompSkillSettings) []skillSurface {
+	var roots []readRoot
+	add := func(path, via string) { roots = append(roots, readRoot{filepath.Join(path), via}) }
+	switch kind {
+	case string(KindClaude):
+		add(filepath.Join(home, ".claude", "skills"), "user")
+		if repo != "" {
+			add(filepath.Join(repo, ".claude", "skills"), "project")
+		}
+	case string(KindOMP):
+		add(filepath.Join(home, ".omp", "agent", "skills"), "native user")
+		if repo != "" {
+			add(filepath.Join(repo, ".omp", "skills"), "native project")
+			if s.ClaudeProject {
+				add(filepath.Join(repo, ".claude", "skills"), "claude project (read by default)")
+			}
+			if s.AgentsProject {
+				add(filepath.Join(repo, ".agents", "skills"), "agents project (read by default)")
+			}
+		}
+		if s.ClaudeUser {
+			add(filepath.Join(home, ".claude", "skills"), "claude user (opted in)")
+		}
+		if s.AgentsUser {
+			add(filepath.Join(home, ".agents", "skills"), "agents user (opted in)")
+		}
+		if s.CodexUser {
+			add(filepath.Join(home, ".codex", "skills"), "codex user (opted in)")
+		}
+		for _, dir := range s.CustomDirs {
+			add(dir, "skills.customDirectories")
+		}
+	case string(KindAGY):
+		var project []readRoot
+		if repo != "" {
+			project = []readRoot{{filepath.Join(repo, ".agents", "skills"), "project"}}
+		}
+		return []skillSurface{
+			{"cli", append([]readRoot{{filepath.Join(home, ".gemini", "antigravity-cli", "skills"), "user"}}, project...)},
+			{"app", append([]readRoot{{filepath.Join(home, ".gemini", "config", "skills"), "user"}}, project...)},
+		}
+	}
+	return []skillSurface{{Roots: roots}}
+}
+
+// skillBodies resolves the SKILL.md a root would hold for a name: the planned
+// content when an artifact targets that path, otherwise what is on disk.
+func skillBody(root, name string, planned map[string][]byte) ([]byte, bool) {
+	path := filepath.Join(root, name, "SKILL.md")
+	if body, ok := planned[path]; ok {
+		return body, true
+	}
+	body, err := os.ReadFile(path)
+	return body, err == nil
+}
+
+// markHiddenFromOMP adds `enabled: false` as the last frontmatter key. A body
+// without frontmatter, or one that already sets `enabled`, is returned as is.
+func markHiddenFromOMP(body string) string {
+	if !strings.HasPrefix(body, "---\n") {
+		return body
+	}
+	end := strings.Index(body[4:], "\n---\n")
+	if end < 0 {
+		return body
+	}
+	front := body[4 : 4+end+1]
+	for _, line := range strings.Split(front, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "enabled:") {
+			return body
+		}
+	}
+	at := 4 + end + 1
+	return body[:at] + "enabled: false\n" + body[at:]
+}
+
+// hiddenFromOMP reports whether a SKILL.md frontmatter carries `enabled: false`.
+func hiddenFromOMP(body []byte) bool {
+	text := string(body)
+	if !strings.HasPrefix(text, "---\n") {
+		return false
+	}
+	end := strings.Index(text[4:], "\n---")
+	if end < 0 {
+		return false
+	}
+	for _, line := range strings.Split(text[4:4+end], "\n") {
+		if strings.TrimSpace(line) == "enabled: false" {
+			return true
+		}
+	}
+	return false
+}
+
+// inspectSurface lists a surface's roots and the managed names present in
+// more than one of them. For OMP, a copy marked `enabled: false` is skipped
+// by OMP's scanners, so it is reported as hidden and never as a duplicate.
+func inspectSurface(host string, sf skillSurface, planned map[string][]byte) SkillRootView {
+	view := SkillRootView{Host: host, Surface: sf.Name, Roots: []SkillRoot{}}
+	seen := map[string]bool{}
+	type copyOf struct {
+		path string
+		body []byte
+	}
+	copies := map[string][]copyOf{}
+	for _, r := range sf.Roots {
+		key := r.Path
+		if resolved, err := filepath.EvalSymlinks(r.Path); err == nil {
+			key = resolved
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		root := SkillRoot{Path: r.Path, Via: r.Via}
+		for _, name := range managedSkillNames {
+			if body, ok := skillBody(r.Path, name, planned); ok {
+				if host == string(KindOMP) && hiddenFromOMP(body) {
+					root.Hidden = append(root.Hidden, name)
+					continue
+				}
+				root.Skills = append(root.Skills, name)
+				copies[name] = append(copies[name], copyOf{filepath.Join(r.Path, name, "SKILL.md"), body})
+			}
+		}
+		view.Roots = append(view.Roots, root)
+	}
+	for _, name := range managedSkillNames {
+		list := copies[name]
+		if len(list) < 2 {
+			continue
+		}
+		dup := SkillDuplicate{Name: name, Identical: true}
+		for _, c := range list {
+			dup.Paths = append(dup.Paths, c.path)
+			if !bytes.Equal(c.body, list[0].body) {
+				dup.Identical = false
+			}
+		}
+		view.Duplicates = append(view.Duplicates, dup)
+	}
+	return view
+}
+
+// InspectSkillRoots is the read-only view behind `plan-forge doctor`: the
+// skill roots each given host kind reads and the managed skill names present
+// in more than one root of the same surface. repo "" skips project roots.
+func InspectSkillRoots(kinds []string, repo string) ([]SkillRootView, error) {
+	home, err := homeDir()
+	if err != nil {
+		return nil, err
+	}
+	settings := readOMPSkillSettings(home, repo)
+	var views []SkillRootView
+	for _, kind := range kinds {
+		for _, sf := range hostSurfaces(kind, home, repo, settings) {
+			view := inspectSurface(kind, sf, nil)
+			if kind == string(KindOMP) {
+				view.OptIn = settings.Sources
+			}
+			views = append(views, view)
+		}
+	}
+	return views, nil
+}
+
+func ompProjectRepo(opts InstallOptions) string {
+	if opts.Scope == "project" {
+		return opts.Repo
+	}
+	return ""
+}
+
+func plannedSkillBodies(arts []artifact) map[string][]byte {
+	planned := map[string][]byte{}
+	for _, art := range arts {
+		if art.kind == kindSkill {
+			planned[art.path] = []byte(art.content)
+		}
+	}
+	return planned
+}
+
+// ompDuplicateLines returns one warning per managed skill that OMP would list
+// twice with differing bodies once the planned artifacts are written. A
+// foreign user root counts only when the user opted in; nothing is edited.
+func ompDuplicateLines(home, repo string, arts []artifact) []string {
+	settings := readOMPSkillSettings(home, repo)
+	planned := plannedSkillBodies(arts)
+	var lines []string
+	for _, sf := range hostSurfaces(string(KindOMP), home, repo, settings) {
+		for _, dup := range inspectSurface(string(KindOMP), sf, planned).Duplicates {
+			if dup.Identical {
+				continue // OMP drops byte-identical copies silently
+			}
+			lines = append(lines, fmt.Sprintf("warning: OMP would list skill %q twice (%s); %s", dup.Name, strings.Join(dup.Paths, " and "), SkillDuplicateRemedy))
+		}
+	}
+	return lines
+}
+
+// dropRedundantOMPSkills removes an OMP project skill copy when another
+// planned host's copy with identical bytes sits in a project root OMP reads by
+// default, so the skill is written once for OMP. Differing copies are kept
+// and reported: each host needs its own rendering.
+func dropRedundantOMPSkills(arts []artifact, home string, opts InstallOptions) ([]artifact, []string) {
+	if opts.Scope != "project" || opts.Repo == "" {
+		return arts, nil
+	}
+	settings := readOMPSkillSettings(home, opts.Repo)
+	var foreign []string
+	if settings.ClaudeProject {
+		foreign = append(foreign, filepath.Join(opts.Repo, ".claude", "skills"))
+	}
+	if settings.AgentsProject {
+		foreign = append(foreign, filepath.Join(opts.Repo, ".agents", "skills"))
+	}
+	var kept []artifact
+	var notes []string
+	for _, art := range arts {
+		if art.host == string(KindOMP) && art.kind == kindSkill {
+			name := filepath.Base(filepath.Dir(art.path))
+			dropped := false
+			for _, other := range arts {
+				if other.kind != kindSkill || other.host == art.host || other.content != art.content {
+					continue
+				}
+				for _, root := range foreign {
+					if other.path == filepath.Join(root, name, "SKILL.md") {
+						notes = append(notes, fmt.Sprintf("skipped %s: OMP already reads the identical copy at %s", art.path, other.path))
+						dropped = true
+					}
+				}
+			}
+			if dropped {
+				continue
+			}
+		}
+		kept = append(kept, art)
+	}
+	return kept, notes
+}
+
+// attachNotes puts report lines on the OMP row, else on the first found row,
+// so they print in both real and --dry-run output.
+func attachNotes(reports []HostReport, lines []string) {
+	target := -1
+	for i, r := range reports {
+		if !r.Found {
+			continue
+		}
+		if target < 0 {
+			target = i
+		}
+		if r.Host == string(KindOMP) {
+			target = i
+			break
+		}
+	}
+	if target < 0 {
+		return
+	}
+	note := reports[target].Note
+	for _, l := range lines {
+		if note != "" {
+			note += "\n    "
+		}
+		note += l
+	}
+	reports[target].Note = note
 }
 
 // homeDir resolves the user's home directory for host roots.

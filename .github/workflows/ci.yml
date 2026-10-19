@@ -104,7 +104,7 @@ jobs:
       - name: Test server-tag packages
         run: go test -tags server ./cmd/relay/... ./internal/relay/...
       - name: Assert dependency closure
-        run: '! go list -deps -tags server ./cmd/relay | grep -Eq "internal/(ast|ingestion|host|avatars|storage|synthesizer|window|app|planstate)|/web$|tree-sitter|ledongthuc/pdf"'
+        run: '! go list -deps -tags server ./cmd/relay | grep -Eq "internal/(ast|ingestion|host|avatars|storage|synthesizer|window|app|planstate|board)|/web$|tree-sitter|ledongthuc/pdf"'
 
   web:
     runs-on: ubuntu-24.04
@@ -126,6 +126,8 @@ jobs:
         run: npm --prefix web run typecheck
       - name: Test web
         run: npm --prefix web test
+      - name: Test OMP hook
+        run: node --test integrations/omp-hook-plan-forge.test.ts
       - name: Build web
         run: npm --prefix web run build
       - name: Upload web-dist

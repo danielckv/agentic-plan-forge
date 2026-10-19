@@ -77,6 +77,7 @@ need commands/plan-config.md
 need hooks/post-merge.sh
 need integrations/skill-plan-forge.md
 need integrations/skill-plan-config.md
+need integrations/skill-plan-forge-board.md
 
 # Rendered files must not keep unresolved placeholders.
 if grep -rl '{{[A-Z_]*}}' "$tmpdir/commands" "$tmpdir/hooks" >/dev/null 2>&1; then
