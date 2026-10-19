@@ -61,9 +61,13 @@ Keyed by repository, not by manifest digest, so an unplanned repository has some
   `center status [--json]` is a read-only probe. Hidden `__center-child` is the detached worker.
 - The name is `center`, not `ui`: `serve-ui` is the hidden release smoke test (`cmd/client/cmd_serveui.go:16`) and `open`
   already means "print the approved spec" (`cmd/client/cmd_open.go:16`).
-- Single instance via the pid-lock algorithm proven by the board (`internal/app/board.go:261-408`): publish by `os.Link`
+- Single instance via `internal/applock`, the pid-lock algorithm proven by the board (`internal/app/board.go:261-408`): publish by `os.Link`
   from a temp file, stale takeover serialized by a separate `.guard` flock. Extract it to `internal/applock` with the
   board's tests ported; refactoring the board to delegate is optional and last.
+  Two corrections were made while extracting it, and the board keeps the originals until it
+  delegates: the staging file is named per call rather than per process, so two concurrent
+  acquisitions in one process cannot delete each other's temp file, and an acquisition that finds a
+  lock naming its own process reports that it holds it rather than treating it as stale.
 - `center ensure` prints `{"center":"open"|"already_open","pid":N,"clients":M}`, mirroring `board --detach`.
 - Port precedence: `--port` → `PLAN_FORGE_UI_PORT` → config `ui_port` → `8420`. **Never silently fall back to another
   port**: a fixed port that moves breaks every bookmark. Port in use with no live lock holder exits 1 with the remedy.
