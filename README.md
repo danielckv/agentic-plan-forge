@@ -1,4 +1,4 @@
-# Agentic Plan Forge
+# <img src="docs/logo.svg" alt="" width="30" height="30" align="top"> Agentic Plan Forge
 
 [![CI](https://github.com/danielckv/agentic-plan-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/danielckv/agentic-plan-forge/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -128,26 +128,39 @@ The one-command install fetches the latest published release, `v0.1.2` or later.
 ### What gets installed
 
 The installer verifies the release checksum, places the binary, then runs `plan-forge install --host auto`, which detects
-installed agents and writes the skills:
+installed agents and writes the skills, commands and hooks:
 
-| Host | Skill files | Slash commands |
+| Host | Installed files | Slash commands |
 | :--- | :--- | :--- |
 | Claude Code | `~/.claude/skills/plan-forge/SKILL.md`, `~/.claude/skills/plan-config/SKILL.md` and `~/.claude/skills/plan-forge-board/SKILL.md` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
-| OMP | `~/.omp/agent/skills/plan-forge/SKILL.md`, `~/.omp/agent/skills/plan-config/SKILL.md`, `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
+| OMP | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board`. No skill files | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
 
 Every row above ships in `v0.1.2` and later. `v0.1.1` installed none of the `plan-forge-board` artifacts or the board hook entries.
 
-**OMP and duplicate skills.** Plan Forge marks the Claude copies of its skills `enabled: false`, which oh-my-pi's skill scanners skip, so those copies stay hidden even when `~/.claude/skills` is in `skills.customDirectories` or a foreign provider is enabled; Claude Code ignores the key. That hiding is the whole guarantee: a copy oh-my-pi reads from any other root can still surface twice, because nothing else deduplicates across roots. `/plan-forge` in oh-my-pi comes from its own `~/.omp/agent/skills` copy plus the command the hook registers; a probe on this machine lists exactly one `skill:plan-forge`. `plan-forge doctor` lists the roots each host reads and flags a duplicate, and `plan-forge install` warns with both paths; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
+**OMP installs no skills.** oh-my-pi reaches Plan Forge through built-in commands only: the hook registers `/plan-forge` and `/plan-forge-board` with `pi.registerCommand`, and `/plan-config` is `~/.omp/agent/commands/plan-config.md`. Because no `SKILL.md` is written for oh-my-pi, a command can never be listed twice. Upgrading removes the `plan-forge` and `plan-config` skill copies an earlier version installed, and leaves a copy you edited yourself untouched.
+
+Plan Forge still marks the Claude copies `enabled: false`, which oh-my-pi's skill scanners skip. That marker now carries the whole guarantee on its own: oh-my-pi reads `<repo>/.claude/skills` by default and `~/.claude/skills` on opt-in, and an unmarked copy would surface the Claude-rendered body — whose plan-mode step calls `EnterPlanMode`, a tool oh-my-pi does not have — beside the command the hook registers. Claude Code ignores the key. `plan-forge doctor` lists the roots each host reads and flags any skill that would shadow a built-in command, and `plan-forge install` prints the same warning; suppress it with `ignoredSkills: ["plan-forge*"]` or by removing the foreign provider from `enabledProviders` (Plan Forge never edits your settings).
+
+One trade comes with this: a skill can be matched from its description, a registered command cannot. Asking oh-my-pi in prose to "forge a plan" no longer triggers Plan Forge on its own — type `/plan-forge`.
 
 Hooks are registered where the host supports them:
 
-- Claude Code: `SessionStart` reports a plan that changed since your last session. `PostToolUse` (matcher
+- Claude Code: `SessionStart` carries two handlers — one reports a plan that changed since your last session, the
+  other makes sure the command center is running and opens a tab. `PostToolUse` (matcher
   `Bash|Edit|Write|MultiEdit|NotebookEdit`) moves the agent
-  into Plan Mode after an approval. `PostToolUse` and `UserPromptSubmit` deliver board edits. All three entries in
-  `~/.claude/settings.json` carry a `plan-forge managed` marker, and uninstall removes only those entries.
-- OMP: the hook reports plan status at session start, runs the forge from `/plan-forge`, opens the board from
-  `/plan-forge-board`, and pushes board edits into the live session.
+  into Plan Mode after an approval and reports the tool call. `PreToolUse` (matcher `Edit|Write|MultiEdit|NotebookEdit`)
+  refuses an edit once when the approved plan changed under a running session, and refuses an edit aimed at the approved
+  plan itself. `PostToolUse` and `UserPromptSubmit` deliver board edits.
+  Every entry in `~/.claude/settings.json` carries a `plan-forge managed` marker, and uninstall removes only those.
+
+  The guard blocks at most once per change: it records what the session was told, denies once when that changes, and
+  immediately records the new state, so your next tool call proceeds. It never blocks in a repository with no approved
+  plan, and it never runs a repository scan — it reads two files. `Bash` is deliberately outside the matcher, because
+  blocking it would block the `plan-forge validate` run the refusal asks for.
+- OMP: the hook reports plan status at session start, opens the command center beside it, runs the forge from
+  `/plan-forge`, opens the board from `/plan-forge-board`, reports tool calls, and pushes board edits into the live
+  session.
 - Antigravity: user-scope installs merge a `SessionStart` plan-status entry, carrying the same `plan-forge managed` marker, into `~/.gemini/config/hooks.json`; whether Antigravity loads that layout is unverified.
 
 Project-scope installs (`--scope project`) write into the repository instead and are opt-in, because those directories
@@ -240,6 +253,37 @@ You can re-run the check at any time:
 plan-forge validate            # exit 0 valid, 6 invalid
 plan-forge validate --json
 ```
+
+### Command center
+
+*Ships after `v0.1.3`.*
+
+Starting `claude` or `omp` opens `http://127.0.0.1:8420` in your browser, once. It is a browser tab, not the dedicated
+window the forge and board use, and it outlives any one session.
+
+- **Live** shows every running harness — Claude Code and OMP, across repositories — with its branch, the tool it just
+  ran and the files it has touched. **It works with no plan at all.** The board needs an approved manifest and refuses
+  to exist without one; this records a session from the moment a harness starts, on any branch, planned or not.
+- When a repository does have an approved plan, Live leads with the coordinator's verdict: **Active now** and **Begin
+  next**, the same ranking the board window computes, so the task to start is stated rather than inferred. Accepting a
+  discovery re-ranks it. Nothing enters the plan automatically, and the approved manifest is never modified.
+- **Sprint** renders the approved plan as epic, story and task, with live columns.
+- **Setup** explains the local surface. There is nothing to connect: see below.
+
+The daemon hands each tab a single-use launch ticket, so a tab you open by hand parks on a screen telling you to run
+`plan-forge center ensure --open` rather than being handed a session. A tab is opened only when none is already
+connected, and a cooldown stops several terminals starting at once from opening several tabs. Control it with
+`center_port` and `center_auto_open` in the config, or `PLAN_FORGE_CENTER_PORT`.
+
+```sh
+plan-forge center status          # is it running, and where
+plan-forge center ensure --open   # start it and open one tab
+plan-forge center serve           # run it in the foreground
+```
+
+**No trackers, no egress.** The command center binds loopback only and makes no outbound request. It connects to no
+issue tracker and stores no credentials: the plan, the board and the live sessions are local state. An end-to-end test
+asserts the page issues zero external requests.
 
 ### Plan board
 

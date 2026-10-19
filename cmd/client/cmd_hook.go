@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danielckv/agentic-plan-forge/internal/app"
 	"github.com/danielckv/agentic-plan-forge/internal/board"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/sanitize"
@@ -46,16 +47,16 @@ func runHook(ctx context.Context, args []string) int {
 	}
 	if sub == "" {
 		if fs.NArg() < 1 {
-			fmt.Fprintln(os.Stderr, "usage: plan-forge hook <check-state|claude> [--repo PATH] [--format text|claude|omp|agy]")
+			fmt.Fprintln(os.Stderr, "usage: plan-forge hook <check-state|claude|claude-guard> [--repo PATH] [--format text|claude|omp|agy]")
 			return exitUsage
 		}
 		sub = fs.Arg(0)
 		if fs.NArg() > 1 {
-			fmt.Fprintln(os.Stderr, "hook takes exactly one subcommand: check-state or claude")
+			fmt.Fprintln(os.Stderr, "hook takes exactly one subcommand: check-state, claude or claude-guard")
 			return exitUsage
 		}
 	} else if fs.NArg() > 0 {
-		fmt.Fprintln(os.Stderr, "hook takes exactly one subcommand: check-state or claude")
+		fmt.Fprintln(os.Stderr, "hook takes exactly one subcommand: check-state, claude or claude-guard")
 		return exitUsage
 	}
 	if sub == "claude" {
@@ -63,8 +64,14 @@ func runHook(ctx context.Context, args []string) int {
 		// from stdin, always exits 0. Flags do not apply.
 		return runHookClaude(ctx, os.Stdin, os.Stdout, hookClaudeBound)
 	}
+	if sub == "claude-guard" {
+		// Claude Code PreToolUse hook. It is a separate subcommand because
+		// `hook claude` compare-and-advances the board cursor, and running
+		// that on the pre side would consume board events twice.
+		return runHookClaudeGuard(ctx, os.Stdin, os.Stdout, hookGuardBound)
+	}
 	if sub != "check-state" {
-		fmt.Fprintln(os.Stderr, "usage: plan-forge hook <check-state|claude> [--repo PATH] [--format text|claude|omp|agy]")
+		fmt.Fprintln(os.Stderr, "usage: plan-forge hook <check-state|claude|claude-guard> [--repo PATH] [--format text|claude|omp|agy]")
 		return exitUsage
 	}
 	switch format {
@@ -180,25 +187,8 @@ type claudeWaitOutput struct {
 // seen yet (consumer `claude:<session_id>`).
 func runHookClaude(ctx context.Context, stdin io.Reader, stdout io.Writer, bound time.Duration) int {
 	deadline := time.Now().Add(bound)
-	type readResult struct {
-		raw []byte
-		err error
-	}
-	done := make(chan readResult, 1)
-	go func() {
-		raw, err := io.ReadAll(io.LimitReader(stdin, hookClaudeMaxStdin+1))
-		done <- readResult{raw, err}
-	}()
-	var raw []byte
-	select {
-	case res := <-done:
-		if res.err != nil || len(res.raw) == 0 || len(res.raw) > hookClaudeMaxStdin {
-			return exitOK
-		}
-		raw = res.raw
-	case <-time.After(bound):
-		return exitOK
-	case <-ctx.Done():
+	raw, ok := readHookStdin(ctx, stdin, bound)
+	if !ok {
 		return exitOK
 	}
 
@@ -213,7 +203,8 @@ func runHookClaude(ctx context.Context, stdin io.Reader, stdout io.Writer, bound
 
 	var parts []string
 	if in.Event == "PostToolUse" {
-		claudeRecordActivity(ctx, repo, in, time.Until(deadline)/2)
+		claudeRecordActivity(ctx, repo, in, time.Until(deadline)/3)
+		claudeReportToCenter(ctx, repo, in, time.Until(deadline)/3)
 	}
 	if in.Event == "PostToolUse" && in.ToolName == "Bash" && commandRunsWait(in.ToolInput.Command) {
 		if result, ok := approvedWaitResult(in.ToolResponse); ok {
@@ -242,6 +233,32 @@ func runHookClaude(ctx context.Context, stdin io.Reader, stdout io.Writer, bound
 		ack()
 	}
 	return exitOK
+}
+
+// readHookStdin reads a hook payload within the bound. It reports false for a
+// read error, an empty payload, one over the cap, or a stdin that never
+// closes: a hook that cannot read its input allows, it never blocks.
+func readHookStdin(ctx context.Context, stdin io.Reader, bound time.Duration) ([]byte, bool) {
+	type readResult struct {
+		raw []byte
+		err error
+	}
+	done := make(chan readResult, 1)
+	go func() {
+		raw, err := io.ReadAll(io.LimitReader(stdin, hookClaudeMaxStdin+1))
+		done <- readResult{raw, err}
+	}()
+	select {
+	case res := <-done:
+		if res.err != nil || len(res.raw) == 0 || len(res.raw) > hookClaudeMaxStdin {
+			return nil, false
+		}
+		return res.raw, true
+	case <-time.After(bound):
+		return nil, false
+	case <-ctx.Done():
+		return nil, false
+	}
 }
 
 // claudeHookRepo picks the repository a Claude hook speaks for: the project
@@ -325,6 +342,36 @@ func claudeRecordActivity(ctx context.Context, repo string, in claudeHookInput, 
 	}
 	runBounded(ctx, budget, func() struct{} {
 		_ = boardActivity(repo, consumer, []string{path})
+		return struct{}{}
+	})
+}
+
+// claudeReportToCenter feeds one tool call to a running command center, so a
+// session is visible whether or not a plan governs it. The board covers the
+// planned half and refuses to exist without an approved manifest; this covers
+// the other half.
+//
+// It is silent and best-effort: no daemon means the loopback dial is refused
+// in about a millisecond and the record is dropped. Nothing here may delay or
+// fail the tool call that triggered it.
+func claudeReportToCenter(ctx context.Context, repo string, in claudeHookInput, budget time.Duration) {
+	session := "claude:" + in.SessionID
+	if repo == "" || budget <= 0 || !board.ValidConsumer(session) {
+		return
+	}
+	rec := app.CenterRecord{
+		Repo: repo, SessionID: session, Harness: "claude-code",
+		Tool: hookField(in.ToolName), Kind: "tool",
+	}
+	if path := claudeEditedPath(in); path != "" {
+		rec.Detail = hookField(path)
+	}
+	if in.ToolName == "Bash" && strings.TrimSpace(in.ToolInput.Command) != "" {
+		rec.Command = hookField(in.ToolInput.Command)
+		rec.Kind = "command"
+	}
+	runBounded(ctx, budget, func() struct{} {
+		_ = app.CenterReport(ctx, rec)
 		return struct{}{}
 	})
 }

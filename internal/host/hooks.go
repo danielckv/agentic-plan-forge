@@ -27,12 +27,35 @@ const claudeHookCommand = `"{{PLAN_FORGE_BIN}}" hook check-state --repo "$CLAUDE
 // into plan mode and, on edit tools, reports harness activity to the board.
 const claudeHandoffCommand = `"{{PLAN_FORGE_BIN}}" hook claude`
 
+// claudeCenterCommand is the second SessionStart hook command template: it
+// makes sure the command center is running and opens one tab when no tab is
+// already connected.
+//
+// It is a separate handler rather than a flag on check-state because
+// check-state returns early when a plan is unchanged and again when there is
+// no plan at all, and the dashboard must open in both of those cases. A second
+// handler makes that question moot and is bounded by the host independently.
+const claudeCenterCommand = `"{{PLAN_FORGE_BIN}}" center ensure --repo "$CLAUDE_PROJECT_DIR" --open`
+
 // claudePostToolUseMatcher is the managed PostToolUse matcher: Bash for the
 // forge handoff, the edit tools for board activity capture.
 const claudePostToolUseMatcher = "Bash|Edit|Write|MultiEdit|NotebookEdit"
 
+// claudeGuardCommand is the PreToolUse hook command template: it refuses an
+// edit once when the approved plan changed under a running session.
+const claudeGuardCommand = `"{{PLAN_FORGE_BIN}}" hook claude-guard`
+
+// claudePreToolUseMatcher is the managed PreToolUse matcher.
+//
+// Bash is deliberately absent. Blocking it would block the agent's own
+// `plan-forge validate` run, which is the remedy the deny reason names, and
+// reading a file is not something a stale plan makes unsafe. Letters and "|"
+// only, so Claude Code reads this as an exact-name list rather than an
+// unanchored regular expression.
+const claudePreToolUseMatcher = "Edit|Write|MultiEdit|NotebookEdit"
+
 // claudeHookEvents are the Claude Code settings events plan-forge manages.
-var claudeHookEvents = []string{"SessionStart", "PostToolUse", "UserPromptSubmit"}
+var claudeHookEvents = []string{"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit"}
 
 // claudeHookTimeout is the explicit per-handler timeout (seconds) applied to
 // every managed Claude hook handler.
@@ -53,7 +76,7 @@ func (e *settingsMergeError) Error() string { return e.msg }
 // is idempotent per event. Unrelated keys and foreign entries are never
 // rewritten: unknown keys decode into the generic map and are written back
 // unchanged.
-func mergeClaudeHook(settings map[string]any, sessionStartCommand, handoffCommand string) (map[string]any, bool, error) {
+func mergeClaudeHook(settings map[string]any, sessionStartCommand, centerCommand, guardCommand, handoffCommand string) (map[string]any, bool, error) {
 	var hooks map[string]any
 	switch v := settings["hooks"].(type) {
 	case nil:
@@ -74,7 +97,8 @@ func mergeClaudeHook(settings map[string]any, sessionStartCommand, handoffComman
 		}
 	}
 	entries := map[string]map[string]any{
-		"SessionStart":     {"hooks": []any{managed(sessionStartCommand)}},
+		"SessionStart":     {"hooks": []any{managed(sessionStartCommand), managed(centerCommand)}},
+		"PreToolUse":       {"matcher": claudePreToolUseMatcher, "hooks": []any{managed(guardCommand)}},
 		"PostToolUse":      {"matcher": claudePostToolUseMatcher, "hooks": []any{managed(handoffCommand)}},
 		"UserPromptSubmit": {"hooks": []any{managed(handoffCommand)}},
 	}
@@ -371,6 +395,21 @@ const manualHookSnippet = `{
         "hooks": [
           {
             "command": "PLAN_FORGE_BIN hook check-state --repo \"$CLAUDE_PROJECT_DIR\" --format claude",
+            "timeout": 5
+          },
+          {
+            "command": "PLAN_FORGE_BIN center ensure --repo \"$CLAUDE_PROJECT_DIR\" --open",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "command": "PLAN_FORGE_BIN hook claude-guard",
             "timeout": 5
           }
         ]

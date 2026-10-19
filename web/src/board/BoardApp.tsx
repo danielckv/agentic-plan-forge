@@ -20,6 +20,8 @@ import {
   X,
 } from "lucide-react";
 
+import { BrandMark } from "../ui/BrandMark";
+
 import { BoardCard } from "./BoardCard";
 import { BoardDrawer } from "./BoardDrawer";
 import { CoordinatorPanel } from "./CoordinatorPanel";
@@ -323,7 +325,7 @@ export function BoardApp(): React.ReactElement {
       <div style={{ display: "contents" }} inert={selectedTask !== undefined}>
       <header className="pf-board-header">
         <div className="pf-board-brand">
-          <div className="pf-brand-mark"><LayoutDashboard size={17} aria-hidden="true" /></div>
+          <BrandMark size={26} />
           <div className="pf-board-heading-copy">
             <div className="pf-board-title-line">
               <h1>{snapshot.title}</h1>

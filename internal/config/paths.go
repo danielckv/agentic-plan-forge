@@ -151,6 +151,10 @@ func PurgeTargets() ([]string, error) {
 		filepath.Join(cache, "sessions"),
 		filepath.Join(cache, "recovery"),
 		filepath.Join(cache, "notices"),
+		filepath.Join(cache, "board"),
+		filepath.Join(cache, "live"),
+		filepath.Join(cache, "center"),
+		filepath.Join(home, "center"),
 	}
 	return targets, nil
 }

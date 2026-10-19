@@ -31,6 +31,7 @@ type doctorReport struct {
 	OCR     map[string]string `json:"ocr"`
 
 	SkillRoots []host.SkillRootView `json:"skill_roots"`
+	Hooks      []host.HookStatus    `json:"hooks"`
 }
 
 type doctorBrowser struct {
@@ -132,6 +133,15 @@ func runDoctor(ctx context.Context, args []string) int {
 	if views, serr := host.InspectSkillRoots(found, repo); serr == nil {
 		report.SkillRoots = views
 	}
+	// Hooks are checked for every host that was detected or that the install
+	// manifest knows about, so a host whose binary is absent but whose hook is
+	// installed is never silently skipped.
+	report.Hooks = []host.HookStatus{}
+	if in, ierr := host.NewInstaller(version); ierr == nil {
+		if statuses, herr := in.InspectHooks(host.HookHosts(found), repo); herr == nil {
+			report.Hooks = statuses
+		}
+	}
 
 	if asJSON {
 		raw, err := json.MarshalIndent(report, "", "  ")
@@ -167,11 +177,45 @@ func runDoctor(ctx context.Context, args []string) int {
 		}
 	}
 	fmt.Println()
+	printHookStatuses(os.Stdout, report.Hooks)
 	printSkillRoots(os.Stdout, report.SkillRoots)
 	fmt.Println()
 	fmt.Printf("ocr (optional, scanned PDFs only): pdftoppm %s; tesseract %s\n",
 		report.OCR["pdftoppm"], report.OCR["tesseract"])
 	return exitOK
+}
+
+// printHookStatuses reports whether each host's managed hooks are installed
+// and point at this binary. A state that needs attention is uppercase, the
+// same convention printSkillRoots uses for a duplicate, and carries its
+// remedy on the next line.
+func printHookStatuses(w io.Writer, statuses []host.HookStatus) {
+	if len(statuses) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "managed hooks:")
+	for _, st := range statuses {
+		label := st.State
+		if st.State != host.HookInstalled {
+			label = strings.ToUpper(st.State)
+		}
+		detail := ""
+		switch {
+		case len(st.Stale) > 0 && st.Bin != "":
+			detail = "  " + strings.Join(st.Stale, ", ") + " points at " + st.Bin
+		case len(st.Stale) > 0:
+			detail = "  " + strings.Join(st.Stale, ", ") + " is out of date"
+		case len(st.Missing) > 0:
+			detail = "  missing: " + strings.Join(st.Missing, ", ")
+		case len(st.Events) > 0:
+			detail = "  " + strings.Join(st.Events, ", ")
+		}
+		fmt.Fprintf(w, "  %-8s %-38s %s%s\n", st.Host, st.Path, label, detail)
+		if st.Remedy != "" {
+			fmt.Fprintf(w, "           %s\n", st.Remedy)
+		}
+	}
+	fmt.Fprintln(w)
 }
 
 // printSkillRoots lists, per detected host, the skill roots it reads and

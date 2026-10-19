@@ -4,13 +4,14 @@ import {
   FileText,
   FolderGit2,
   Keyboard,
-  Layers,
   PanelLeftClose,
   PanelLeftOpen,
   ScrollText,
   Wifi,
   WifiOff,
 } from "lucide-react";
+
+import { BrandMark } from "../ui/BrandMark";
 
 import { navigate, ROUTE_BY_PHASE, ROUTE_ORDER } from "../store/syncStore";
 import type { SyncState } from "../store/syncStore";
@@ -46,9 +47,7 @@ export function Sidebar(props: {
   return (
     <aside className="pf-sidebar" data-collapsed={collapsed} aria-label="Plan Forge">
       <div className="pf-sidebar-brand">
-        <span className="pf-brand-mark">
-          <Layers size={16} strokeWidth={2.2} />
-        </span>
+        <BrandMark size={26} />
         <div className="pf-sidebar-brand-text">
           <span className="pf-sidebar-title">Plan Forge</span>
           <span className="pf-sidebar-project" title={projectTitle}>
