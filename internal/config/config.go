@@ -23,6 +23,10 @@ const (
 	DefaultMaxCycles    = 3
 	DefaultMaxParallel  = 4
 	DefaultOCRLanguage  = "eng"
+	// DefaultCenterPort is the loopback port the command center binds. It is
+	// fixed so a bookmarked tab keeps working; the daemon never silently moves
+	// to another port.
+	DefaultCenterPort = 8420
 )
 
 // Config is the persisted settings file. Unknown keys survive a load/save round
@@ -40,6 +44,11 @@ type Config struct {
 	BrowserPath       string   `json:"browser_path,omitempty"`
 	OCRLanguage       string   `json:"ocr_language,omitempty"`
 	HostEnvAllow      []string `json:"host_env_allow,omitempty"`
+	CenterPort        int      `json:"center_port,omitempty"`
+	// CenterAutoOpen is a pointer so an explicit false survives a round trip:
+	// the zero value of a bool cannot be told apart from "not configured", and
+	// turning the tab off is exactly the setting a user will set to false.
+	CenterAutoOpen *bool `json:"center_auto_open,omitempty"`
 
 	// unknown preserves keys written by another build.
 	unknown map[string]json.RawMessage
@@ -125,6 +134,7 @@ var knownKeys = map[string]bool{
 	"default_judge_model": true, "main_host": true, "judge_host": true,
 	"human_workday_hours": true, "max_cycles": true, "max_parallel": true,
 	"browser_path": true, "ocr_language": true, "host_env_allow": true,
+	"center_port": true, "center_auto_open": true,
 }
 
 // Save writes the configuration atomically: same-directory temporary file,
@@ -222,7 +232,26 @@ func Validate(cfg Config) error {
 			return fmt.Errorf("host_env_allow entry %q is not a bare environment variable name", name)
 		}
 	}
+	// Port 0 means "not configured", so the default applies. A privileged port
+	// is refused because the daemon must never need elevation to start.
+	if cfg.CenterPort != 0 && (cfg.CenterPort < 1024 || cfg.CenterPort > 65535) {
+		return fmt.Errorf("center_port must be between 1024 and 65535, got %d", cfg.CenterPort)
+	}
 	return nil
+}
+
+// CenterPortOrDefault is the port the command center should bind.
+func (c Config) CenterPortOrDefault() int {
+	if c.CenterPort == 0 {
+		return DefaultCenterPort
+	}
+	return c.CenterPort
+}
+
+// CenterAutoOpenEnabled reports whether a harness session should open a tab.
+// Unset means on: the feature is useless if nobody ever sees it.
+func (c Config) CenterAutoOpenEnabled() bool {
+	return c.CenterAutoOpen == nil || *c.CenterAutoOpen
 }
 
 // ValidateRelayURL rejects relay endpoints that would leak or mislead. Query

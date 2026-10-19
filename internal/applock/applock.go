@@ -150,6 +150,11 @@ func Acquire(path string, r Record) (Record, bool, error) {
 	return Record{}, false, errors.New("applock: could not take the lock")
 }
 
+// LockGuard takes the advisory guard lock beside a lock file. It is exported
+// so a caller that needs its own check-and-set to be atomic across processes
+// can borrow the same serialisation the takeover uses.
+func LockGuard(path string) (func(), error) { return lockGuardFile(path) }
+
 // removeStale deletes the lock file Acquire found stale. It serialises
 // takeovers with the <lock>.guard advisory lock and re-reads the file first: a
 // lock that no longer names the same stale pid was replaced meanwhile and is

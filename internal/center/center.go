@@ -192,6 +192,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/center/events", s.authed(s.handleEvents))
 	mux.HandleFunc("GET /api/center/live", s.authed(s.handleLive))
 	mux.HandleFunc("GET /api/center/status", s.authed(s.handleStatus))
+	mux.HandleFunc("GET /api/center/clients", s.daemonOnly(s.handleClients))
 	mux.HandleFunc("POST /api/center/ticket", s.daemonOnly(s.handleTicket))
 	mux.HandleFunc("POST /api/ingest", s.daemonOnly(s.handleIngest))
 	mux.HandleFunc("/", s.handleStatic)
@@ -272,6 +273,18 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"token": tok})
 }
+
+// handleClients tells the local CLI how many tabs are streaming, which is what
+// `center ensure` reads to decide whether opening another would be a
+// duplicate. It is daemon-authenticated because the answer is operational
+// detail, and it carries the Bearer header like every other data GET.
+func (s *Server) handleClients(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]int{"active_clients": s.hub.active(), "port": s.port})
+}
+
+// NewSecret mints a daemon token. The caller persists it at 0600 so a local
+// CLI can prove it is not a browser.
+func NewSecret() (string, error) { return cryptoHex(daemonBytes) }
 
 // handleTicket mints a launch ticket for the CLI that is about to open a tab.
 func (s *Server) handleTicket(w http.ResponseWriter, r *http.Request) {
