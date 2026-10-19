@@ -344,5 +344,71 @@
       "avgMs": 958393,
       "label": "[15m58s, avg: 15m58s]"
     }
+  },
+  {
+    "id": "dir-5jfrsi2",
+    "text": "push it and cut the release so the one-command install actually ships this work",
+    "stage": "end_of_session",
+    "kind": "instruction",
+    "timestamp": 1792408844962,
+    "sessionOffsetMs": 1402287,
+    "lastTriggeredAt": 1792408844962,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "internal",
+        "integrations",
+        "cmd",
+        "docs",
+        "agent:",
+        "web",
+        "scripts",
+        "CHANGELOG.md",
+        "README.md"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      1402287
+    ],
+    "timeRange": {
+      "minMs": 1402287,
+      "maxMs": 1402287,
+      "avgMs": 1402287,
+      "label": "[23m22s, avg: 23m22s]"
+    }
+  },
+  {
+    "id": "dir-4uxyurx",
+    "text": "cut v0.1.3 so the install output is clean",
+    "stage": "user_added_to_queue",
+    "kind": "instruction",
+    "timestamp": 1792408852420,
+    "sessionOffsetMs": 1409745,
+    "lastTriggeredAt": 1792408852420,
+    "context": {
+      "branch": "main",
+      "paths": [
+        "internal",
+        "integrations",
+        "cmd",
+        "docs",
+        "agent:",
+        "web",
+        "scripts",
+        "CHANGELOG.md",
+        "README.md"
+      ]
+    },
+    "triggerCount": 1,
+    "historicalOffsets": [
+      1409745
+    ],
+    "timeRange": {
+      "minMs": 1409745,
+      "maxMs": 1409745,
+      "avgMs": 1409745,
+      "label": "[23m30s, avg: 23m30s]"
+    }
   }
 ]

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-19
+
+### Fixed
+
+- The installer header printed the version twice. The release pipeline injects the tag itself, so `plan-forge install` prefixed its own `v` and announced `Plan-Forge vv0.1.2`. `versionDisplay` normalizes the label to a single leading `v` and leaves a source build's `dev` alone.
+
 ## [0.1.2] - 2026-10-19
 
 ### Fixed
@@ -110,7 +116,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/danielckv/agentic-plan-forge/releases/tag/v0.1.0
