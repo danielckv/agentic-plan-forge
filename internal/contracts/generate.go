@@ -37,6 +37,14 @@ const MaxGenerateTimeout = 180 * time.Second
 // MaxStageOutputBytes bounds one stage's raw output before schema validation.
 const MaxStageOutputBytes = 2 << 20
 
+// MaxStagePayloadBytes bounds one stage's user payload. Output has always been
+// bounded; an unbounded payload is how a stage silently grew past the model's
+// context window and the host was killed mid-call with no diagnosable error.
+// The bound is deliberately generous: the repository graph it carries is
+// already cut to ast.SnapshotBudgetBytes, so only a pathological payload trips
+// it, and tripping it reports the limit instead of failing inside the provider.
+const MaxStagePayloadBytes = 2 << 20
+
 // GenerateRequest is one tool-free provider invocation.
 type GenerateRequest struct {
 	Role         RoleID          `json:"role"`

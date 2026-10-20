@@ -176,9 +176,22 @@ func (r *room) frameLocked(t relay.WSEventType, sender, eventID string, seq uint
 	return env, raw
 }
 
+// sendLocked writes one frame to the window. A frame that does not land means
+// the window is no longer reachable, so the room stops pushing at it: the
+// control frames are already in the replay log and the window collects them on
+// its next HELLO. Dropping this error on the floor is what let a window that
+// stopped draining die silently and end the session at exit 130.
 func (r *room) sendLocked(raw []byte) {
-	if raw != nil && r.deliver != nil {
-		_ = r.deliver(raw)
+	if raw == nil || r.deliver == nil {
+		return
+	}
+	err := r.deliver(raw)
+	if err == nil {
+		return
+	}
+	r.live = false
+	if errors.Is(err, relay.ErrUIBackpressure) {
+		r.logger.Warn("window stopped draining its socket; frames held for replay", "bytes", len(raw))
 	}
 }
 

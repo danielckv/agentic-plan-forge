@@ -25,6 +25,11 @@ const (
 	ownerMemberID = "owner"
 	// replayWindow is how many control frames a UI that reconnects can replay.
 	replayWindow = 2000
+	// maxReplayBurst bounds one resync's exact tail. The bridge's write queue
+	// holds relay.UIQueueDepth frames and destroys the socket when a burst
+	// overruns it, so a tail longer than this is answered with the sticky state
+	// instead: replaying it would close the very socket it is catching up.
+	maxReplayBurst = relay.UIQueueDepth / 2
 )
 
 var uuidV4Re = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
@@ -204,7 +209,12 @@ func (l *frameLog) missed(lastSeq uint64) [][]byte {
 				out = append(out, e.raw)
 			}
 		}
-		return out
+		if len(out) <= maxReplayBurst {
+			return out
+		}
+		// Too far behind for an exact replay: fall through to the sticky state,
+		// which carries the same current drafts, decisions and markers in a
+		// bounded number of frames.
 	}
 	entries := make([]logEntry, 0, len(l.sticky))
 	for _, e := range l.sticky {
