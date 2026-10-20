@@ -39,7 +39,13 @@ const (
 type CenterOptions struct {
 	Port int
 	Repo string
+	// Open asks for a tab when none is already streaming and no other process
+	// opened one inside the cooldown.
 	Open bool
+	// Force opens a tab unconditionally. It is set by `center open`, where the
+	// user asked for the tab in as many words: a tab somebody else already has
+	// on another desktop is not the tab they asked to see.
+	Force bool
 }
 
 // CenterResult is the outcome of running or ensuring the daemon.
@@ -226,27 +232,48 @@ func EnsureCenter(ctx context.Context, opts CenterOptions) CenterResult {
 	}
 	secret, err := readCenterSecret()
 	if err != nil {
+		res.Message = notice(err)
 		return res
 	}
 	clients, err := centerClients(ctx, rec.Port, secret)
 	if err != nil {
+		res.Message = notice(err)
 		return res
 	}
 	res.ActiveClients = clients
-	if !opts.Open || clients > 0 {
-		return res
-	}
-	if !claimCenterOpen() {
+	if !shouldOpenTab(opts, clients, claimCenterOpen) {
 		return res
 	}
 	url, err := centerTicketURL(ctx, rec.Port, secret, opts.Repo)
 	if err != nil {
+		res.Message = notice(err)
 		return res
 	}
-	if err := openInBrowser(url); err == nil {
-		res.Opened = true
+	if err := openInBrowser(url); err != nil {
+		res.Message = notice(err)
+		return res
 	}
+	res.Opened = true
 	return res
+}
+
+// shouldOpenTab decides whether EnsureCenter opens a tab, and is the whole of
+// that decision. A forced open skips both guards: `center open` is a user
+// typing the words, and a tab somebody else already has on another desktop is
+// not the tab they asked to see. Otherwise a streaming tab is enough, and the
+// cross-process claim settles which of several terminals starting together
+// opens the one tab.
+func shouldOpenTab(opts CenterOptions, activeClients int, claim func() bool) bool {
+	if !opts.Open {
+		return false
+	}
+	if opts.Force {
+		return true
+	}
+	if activeClients > 0 {
+		return false
+	}
+	return claim()
 }
 
 // centerClients asks the daemon how many tabs are streaming.

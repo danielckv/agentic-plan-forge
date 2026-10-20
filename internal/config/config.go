@@ -45,9 +45,9 @@ type Config struct {
 	OCRLanguage       string   `json:"ocr_language,omitempty"`
 	HostEnvAllow      []string `json:"host_env_allow,omitempty"`
 	CenterPort        int      `json:"center_port,omitempty"`
-	// CenterAutoOpen is a pointer so an explicit false survives a round trip:
-	// the zero value of a bool cannot be told apart from "not configured", and
-	// turning the tab off is exactly the setting a user will set to false.
+	// CenterAutoOpen is a pointer so the unset state is distinguishable from
+	// an explicit false. Both mean "do not open automatically"; keeping them
+	// apart is what lets `config --show` report the setting honestly.
 	CenterAutoOpen *bool `json:"center_auto_open,omitempty"`
 
 	// unknown preserves keys written by another build.
@@ -248,10 +248,12 @@ func (c Config) CenterPortOrDefault() int {
 	return c.CenterPort
 }
 
-// CenterAutoOpenEnabled reports whether a harness session should open a tab.
-// Unset means on: the feature is useless if nobody ever sees it.
+// CenterAutoOpenEnabled reports whether `center ensure --open` may open a tab.
+// Unset means off: starting a harness is not asking to look at a dashboard,
+// and this also silences a hook installed by an older version that still
+// passes --open. `center open` is the explicit request and ignores this.
 func (c Config) CenterAutoOpenEnabled() bool {
-	return c.CenterAutoOpen == nil || *c.CenterAutoOpen
+	return c.CenterAutoOpen != nil && *c.CenterAutoOpen
 }
 
 // ValidateRelayURL rejects relay endpoints that would leak or mislead. Query

@@ -529,13 +529,16 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
 
   pi.on("session_start", async (_event: unknown, ctx: CtxLike) => {
     state.shutdown = false;
-    // Start the command center and open a tab, without awaiting it: the status
-    // banner below can take a moment, and the dashboard must not wait for it.
-    // `center ensure` opens nothing when a tab is already connected, and exits
-    // 0 whatever happens, so a failure here is silent by design.
+    // Start the command center daemon, without awaiting it: the status banner
+    // below can take a moment, and the daemon must not hold it up. No --open:
+    // starting a session is not asking to look at a dashboard. The daemon is
+    // headless and has to be up for this session to be recorded at all, since
+    // `center report` drops every record when nothing is listening. The tab is
+    // `plan-forge center open`, on request. `center ensure` exits 0 whatever
+    // happens, so a failure here is silent by design.
     void execPlanForge(
       pi,
-      ["center", "ensure", "--repo", ctx.cwd, "--open"],
+      ["center", "ensure", "--repo", ctx.cwd],
       deps.centerEnsureMs ?? 3_000,
     ).catch(() => undefined);
     try {

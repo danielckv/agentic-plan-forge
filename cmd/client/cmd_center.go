@@ -23,7 +23,7 @@ func init() {
 
 // The subcommand is `center`, not `ui`: `serve-ui` is already the hidden
 // release smoke test, and `open` already means "print the approved spec".
-const centerUsage = "center takes one subcommand: serve, ensure, status or report"
+const centerUsage = "center takes one subcommand: open, serve, ensure, status or report"
 
 func runCenter(ctx context.Context, args []string) int {
 	if len(args) == 0 {
@@ -31,6 +31,8 @@ func runCenter(ctx context.Context, args []string) int {
 		return exitUsage
 	}
 	switch args[0] {
+	case "open":
+		return runCenterOpen(ctx, args[1:])
 	case "serve":
 		return runCenterServe(ctx, args[1:])
 	case "ensure":
@@ -64,6 +66,49 @@ func centerPort(flagPort int) (int, error) {
 		return 0, err
 	}
 	return cfg.CenterPortOrDefault(), nil
+}
+
+// runCenterOpen starts the daemon if it is down and opens a tab on it. It is
+// the explicit request, so unlike `center ensure --open` it honours neither
+// center_auto_open nor the open cooldown, and it reports a failure rather than
+// swallowing it: a user who typed this is watching for a tab to appear.
+func runCenterOpen(ctx context.Context, args []string) int {
+	var (
+		repoFlag string
+		portFlag int
+	)
+	if _, err := parseFlags("center open", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&repoFlag, "repo", "", "repository path to focus (default: cwd)")
+		fs.IntVar(&portFlag, "port", 0, "loopback port to bind")
+	}); err != nil {
+		return exitUsage
+	}
+	port, err := centerPort(portFlag)
+	if err != nil {
+		return fail(err)
+	}
+	if repoFlag == "" {
+		if cwd, cerr := os.Getwd(); cerr == nil {
+			repoFlag = cwd
+		}
+	}
+	res := app.EnsureCenter(ctx, app.CenterOptions{Port: port, Repo: repoFlag, Open: true, Force: true})
+	if res.PID == 0 {
+		fmt.Fprintln(os.Stderr, "center: the command center could not be started")
+		if res.Message != "" {
+			fmt.Fprintln(os.Stderr, "center: "+res.Message)
+		}
+		return exitRuntimeError
+	}
+	if !res.Opened {
+		fmt.Fprintf(os.Stderr, "center: running on %s, but the tab could not be opened\n", res.URL)
+		if res.Message != "" {
+			fmt.Fprintln(os.Stderr, "center: "+res.Message)
+		}
+		return exitRuntimeError
+	}
+	fmt.Printf("command center: opened %s\n", res.URL)
+	return exitOK
 }
 
 func runCenterServe(ctx context.Context, args []string) int {
@@ -117,7 +162,7 @@ func runCenterEnsure(ctx context.Context, args []string) int {
 	if _, err := parseFlags("center ensure", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&repoFlag, "repo", "", "repository path to focus (default: none)")
 		fs.IntVar(&portFlag, "port", 0, "loopback port to bind")
-		fs.BoolVar(&open, "open", false, "open a browser tab when none is connected")
+		fs.BoolVar(&open, "open", false, "open a browser tab when none is connected (needs center_auto_open; `center open` is the explicit request)")
 		fs.BoolVar(&asJSON, "json", false, "print the outcome as JSON")
 	}); err != nil {
 		return exitOK

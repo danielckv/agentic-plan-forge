@@ -857,7 +857,7 @@ test("handoff prompt carries the board report/discover/Coordinator instructions"
   assert.equal(activityCalls(pi).length, 0, "a bash wait is not an edit");
 });
 
-test("session_start: the command center is ensured with the session's repo", async () => {
+test("session_start: the command center daemon is ensured, and never opens a tab", async () => {
   const pi = new FakePi((args) =>
     args[0] === "center"
       ? { code: 0, stdout: "", stderr: "" }
@@ -867,7 +867,8 @@ test("session_start: the command center is ensured with the session's repo", asy
   await pi.handlers.get("session_start")![0]({}, new FakeCtx());
 
   const ensure = pi.execCalls.find((a) => a[0] === "center");
-  assert.deepEqual(ensure, ["center", "ensure", "--repo", "/repo", "--open"]);
+  assert.deepEqual(ensure, ["center", "ensure", "--repo", "/repo"]);
+  assert.ok(!ensure!.includes("--open"), "starting a session must not open a dashboard tab");
   // The banner still arrives: the launch runs beside it, not before it.
   assert.equal(pi.messages.length, 1);
 });
