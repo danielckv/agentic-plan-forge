@@ -39,7 +39,7 @@ func managedHandler(t *testing.T, settings map[string]any, event string) map[str
 
 const (
 	newStartCmd   = `"/new/path/plan-forge" hook check-state --repo "$CLAUDE_PROJECT_DIR" --format claude`
-	newCenterCmd  = `"/new/path/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR" --open`
+	newCenterCmd  = `"/new/path/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR"`
 	newGuardCmd   = `"/new/path/plan-forge" hook claude-guard`
 	newHandoffCmd = `"/new/path/plan-forge" hook claude`
 )
@@ -504,5 +504,31 @@ func TestSplitManagedHookRemovesBothSessionStartHandlers(t *testing.T) {
 	}
 	if bytes.Contains(encoded, []byte("center ensure")) {
 		t.Errorf("the command center handler survived uninstall: %s", encoded)
+	}
+}
+
+// A session starting is not a request to look at a dashboard. The managed
+// SessionStart handlers bring the headless daemon up — a session nothing is
+// listening for is a session that goes unrecorded — and nothing more: no
+// handler, and no snippet the user is told to paste, may carry --open.
+func TestManagedSessionStartNeverOpensADashboardTab(t *testing.T) {
+	bin := "/opt/plan-forge"
+	sub := func(tmpl string) string { return strings.ReplaceAll(tmpl, "{{PLAN_FORGE_BIN}}", bin) }
+	merged, _, err := mergeClaudeHook(map[string]any{},
+		sub(claudeHookCommand), sub(claudeCenterCommand), sub(claudeGuardCommand), sub(claudeHandoffCommand))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, settings := range map[string]string{"merged settings": string(raw), "manual snippet": manualHookSnippet} {
+		if strings.Contains(settings, "--open") {
+			t.Errorf("%s carries --open: a harness session must not open a tab", name)
+		}
+		if !strings.Contains(settings, "center ensure") {
+			t.Errorf("%s dropped `center ensure`: the daemon must still come up", name)
+		}
 	}
 }

@@ -28,14 +28,19 @@ const claudeHookCommand = `"{{PLAN_FORGE_BIN}}" hook check-state --repo "$CLAUDE
 const claudeHandoffCommand = `"{{PLAN_FORGE_BIN}}" hook claude`
 
 // claudeCenterCommand is the second SessionStart hook command template: it
-// makes sure the command center is running and opens one tab when no tab is
-// already connected.
+// makes sure the command center daemon is running. It deliberately does not
+// pass --open. Starting a session is not asking to look at a dashboard, and a
+// tab that appears on every `claude` is noise; the daemon is headless, and it
+// has to be up for a session to be recorded at all, because CenterReport drops
+// every record when nothing is listening.
+//
+// The tab is opened by `plan-forge center open`, on request.
 //
 // It is a separate handler rather than a flag on check-state because
 // check-state returns early when a plan is unchanged and again when there is
-// no plan at all, and the dashboard must open in both of those cases. A second
+// no plan at all, and the daemon must come up in both of those cases. A second
 // handler makes that question moot and is bounded by the host independently.
-const claudeCenterCommand = `"{{PLAN_FORGE_BIN}}" center ensure --repo "$CLAUDE_PROJECT_DIR" --open`
+const claudeCenterCommand = `"{{PLAN_FORGE_BIN}}" center ensure --repo "$CLAUDE_PROJECT_DIR"`
 
 // claudePostToolUseMatcher is the managed PostToolUse matcher: Bash for the
 // forge handoff, the edit tools for board activity capture.
@@ -398,7 +403,7 @@ const manualHookSnippet = `{
             "timeout": 5
           },
           {
-            "command": "PLAN_FORGE_BIN center ensure --repo \"$CLAUDE_PROJECT_DIR\" --open",
+            "command": "PLAN_FORGE_BIN center ensure --repo \"$CLAUDE_PROJECT_DIR\"",
             "timeout": 5
           }
         ]

@@ -281,3 +281,24 @@ func TestRedactedNeverExposesCredentials(t *testing.T) {
 		}
 	}
 }
+
+// A dashboard tab is opt-in. Unset must mean off, so that a hook installed by
+// an older version — one that still passes --open on every session start —
+// goes quiet the moment the binary is upgraded, without the user having to
+// reinstall the hooks or find a setting.
+func TestCenterAutoOpenIsOffUnlessAskedFor(t *testing.T) {
+	yes, no := true, false
+	cases := map[string]struct {
+		value *bool
+		want  bool
+	}{
+		"unset":          {nil, false},
+		"explicit false": {&no, false},
+		"explicit true":  {&yes, true},
+	}
+	for name, tc := range cases {
+		if got := (config.Config{CenterAutoOpen: tc.value}).CenterAutoOpenEnabled(); got != tc.want {
+			t.Errorf("%s: CenterAutoOpenEnabled() = %t, want %t", name, got, tc.want)
+		}
+	}
+}

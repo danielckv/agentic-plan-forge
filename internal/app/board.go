@@ -70,7 +70,7 @@ type BoardOptions struct {
 	// Detached is true for the __board-child: nothing is printed to a terminal
 	// and the window-startup wait outlasts the parent's.
 	Detached bool
-	// LaunchWindow replaces the dedicated window; tests only.
+	// LaunchWindow replaces the browser tab; tests only.
 	LaunchWindow   func(url string) (windowHandle, error)
 	Logger         *slog.Logger
 	Stdout, Stderr io.Writer
@@ -84,6 +84,8 @@ type BoardOptions struct {
 
 	// taskBoard replaces planstate.TaskBoard; tests only.
 	taskBoard func(ctx context.Context, repo string, opts planstate.CheckOptions) (planstate.TaskBoardResult, error)
+	// loadSwarm replaces loadBoardSwarm; tests only.
+	loadSwarm func(repo string, at time.Time) []BoardSwarmSession
 }
 
 // --- snapshot (contracts C5 and C11) -----------------------------------------------------------
@@ -137,6 +139,9 @@ type BoardSnapshot struct {
 	Consumers      []BoardConsumer         `json:"consumers"`
 	Discoveries    []board.Discovery       `json:"discoveries"`
 	Coordinator    BoardCoordinator        `json:"coordinator"`
+	// Swarm is every live harness session on this machine, so the board shows
+	// who else is working while the plan is being executed.
+	Swarm []BoardSwarmSession `json:"swarm"`
 }
 
 // buildBoardSnapshot combines plan evidence, the overlay and session facts. A
@@ -154,7 +159,7 @@ func buildBoardSnapshot(repoName, title, sha, host string, ev planstate.TaskBoar
 		Status: string(planstate.StatusUnknown), Revision: ov.Revision,
 		EvaluatedAt: evaluatedAt.UTC().Format(time.RFC3339),
 		Drift:       []planstate.DriftReason{}, Tasks: []BoardTask{}, Consumers: []BoardConsumer{},
-		Discoveries: []board.Discovery{},
+		Discoveries: []board.Discovery{}, Swarm: []BoardSwarmSession{},
 		Coordinator: BoardCoordinator{Active: []string{}, NextUp: []string{}},
 	}
 	if ev.Status.Present && ev.Status.Approved && ev.Status.ManifestSHA256 == sha {
@@ -441,6 +446,8 @@ type boardServer struct {
 	scanTimeout                      time.Duration
 	// taskBoard replaces planstate.TaskBoard; tests only.
 	taskBoard func(ctx context.Context, repo string, opts planstate.CheckOptions) (planstate.TaskBoardResult, error)
+	// loadSwarm replaces loadBoardSwarm; tests only.
+	loadSwarm func(repo string, at time.Time) []BoardSwarmSession
 	// send replaces bridge.Send; tests only.
 	send func(frame []byte) error
 
@@ -467,7 +474,20 @@ func (s *boardServer) snapshot() (BoardSnapshot, error) {
 	s.mu.Lock()
 	ev, at := s.evidence, s.evaluatedAt
 	s.mu.Unlock()
-	return buildBoardSnapshot(s.repoName, s.title, s.sha, s.host, ev, at, ov), nil
+	snap := buildBoardSnapshot(s.repoName, s.title, s.sha, s.host, ev, at, ov)
+	snap.Swarm = s.swarm()
+	return snap, nil
+}
+
+// swarm reads the live sessions. It is separate from buildBoardSnapshot
+// because that function is pure over the plan evidence and the overlay, and
+// the swarm comes off the machine's live store instead.
+func (s *boardServer) swarm() []BoardSwarmSession {
+	load := s.loadSwarm
+	if load == nil {
+		load = loadBoardSwarm
+	}
+	return load(s.repo, time.Now())
 }
 
 // evaluate re-reads the plan evidence. Concurrent calls collapse: the caller
@@ -776,7 +796,7 @@ func orDefault(d, def time.Duration) time.Duration {
 	return d
 }
 
-// RunBoard opens the dedicated window on the Board view of the repository's
+// RunBoard opens a browser tab on the Board view of the repository's
 // approved plan and serves it until the window closes. Closing the window is a
 // normal end: exit code 0.
 func RunBoard(ctx context.Context, opts BoardOptions) Result {

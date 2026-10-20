@@ -30,7 +30,7 @@ type windowParams struct {
 	OnWindowGone func()
 }
 
-// startWindow launches the dedicated window against the bridge and supervises
+// startWindow opens the browser tab against the bridge and supervises
 // it. The returned channel receives one Result when the window goes away for
 // good (closed without coming back, or never connected); it receives nothing
 // when the caller's context ends first.
@@ -98,7 +98,7 @@ func startWindow(ctx context.Context, p windowParams) (windowHandle, <-chan Resu
 		o, serr := window.Supervise(ctx, window.Signals{UI: sup, Process: win.Done()}, grace, startup)
 		switch o {
 		case window.OutcomeWindowGone:
-			outcome <- resultFor(PhaseCancelled, "the Plan-Forge window was closed without an approval", nil)
+			outcome <- resultFor(PhaseCancelled, "the Plan-Forge tab was closed without an approval", nil)
 		case window.OutcomeNeverConnected:
 			outcome <- resultFor(PhaseFailed, notice(serr), nil)
 		}

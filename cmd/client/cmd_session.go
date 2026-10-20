@@ -22,7 +22,7 @@ import (
 )
 
 func init() {
-	register("run", "open the Plan-Forge window and run a planning session", runRun)
+	register("run", "open the Plan-Forge tab and run a planning session", runRun)
 	register("wait", "wait for a detached session to finish (exit 75 on timeout)", runWait)
 	register("join", "join a remote collaboration session with an invite URL", runJoin)
 	register("invite", "mint or revoke an invite for a running remote session", runInvite)

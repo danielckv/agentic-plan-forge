@@ -56,8 +56,8 @@ type doctorAuth struct {
 }
 
 // runDoctor reports prerequisites: host detection, auth state and models per
-// host, the browser the dedicated window will use (honoring browser_path),
-// and the optional OCR tools. Secrets are redacted by construction: nothing
+// host, how a browser tab will be opened (honoring browser_path), and the
+// optional OCR tools. Secrets are redacted by construction: nothing
 // here reads or prints credentials or raw probe output.
 func runDoctor(ctx context.Context, args []string) int {
 	var asJSON bool
@@ -83,7 +83,7 @@ func runDoctor(ctx context.Context, args []string) int {
 	} else {
 		report.Browser = doctorBrowser{
 			Found:  "none",
-			Remedy: "install Chrome, Edge, Brave or Chromium, or set browser_path",
+			Remedy: "no platform URL opener was found; set browser_path to a browser executable",
 		}
 	}
 
@@ -154,9 +154,9 @@ func runDoctor(ctx context.Context, args []string) int {
 
 	fmt.Printf("plan-forge %s doctor\n\n", version)
 	if report.Browser.Found == "yes" {
-		fmt.Printf("browser:    %s (%s)\n", report.Browser.Name, report.Browser.Path)
+		fmt.Printf("tab opener: %s (%s)\n", report.Browser.Name, report.Browser.Path)
 	} else {
-		fmt.Printf("browser:    none — %s\n", report.Browser.Remedy)
+		fmt.Printf("tab opener: none — %s\n", report.Browser.Remedy)
 	}
 	for _, entry := range report.Hosts {
 		name := padRight(entry.Host, 10)

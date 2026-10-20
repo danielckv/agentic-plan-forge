@@ -181,6 +181,21 @@ class FakePi {
     list.push(handler);
     this.handlers.set(event, list);
   }
+
+  // The swarm protocol's event bus. channels stays empty when a test builds a
+  // FakePi without one, which is how an older OMP looks to the hook.
+  channels = new Map<string, ((payload: unknown) => void)[]>();
+  events = {
+    on: (channel: string, handler: (payload: unknown) => void): void => {
+      const list = this.channels.get(channel) ?? [];
+      list.push(handler);
+      this.channels.set(channel, list);
+    },
+  };
+
+  publish(channel: string, payload: unknown): void {
+    for (const handler of this.channels.get(channel) ?? []) handler(payload);
+  }
 }
 
 function makeDeps(): HookDeps {
@@ -188,8 +203,13 @@ function makeDeps(): HookDeps {
     execTimeoutMs: 500,
     syncIntervalMs: 4000,
     waitTimeout: "1s",
+    swarmCoalesceMs: 5,
     sleep: async () => {},
   };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const APPROVED_WAIT = JSON.stringify({
@@ -857,7 +877,7 @@ test("handoff prompt carries the board report/discover/Coordinator instructions"
   assert.equal(activityCalls(pi).length, 0, "a bash wait is not an edit");
 });
 
-test("session_start: the command center is ensured with the session's repo", async () => {
+test("session_start: the command center daemon is ensured, and never opens a tab", async () => {
   const pi = new FakePi((args) =>
     args[0] === "center"
       ? { code: 0, stdout: "", stderr: "" }
@@ -867,7 +887,8 @@ test("session_start: the command center is ensured with the session's repo", asy
   await pi.handlers.get("session_start")![0]({}, new FakeCtx());
 
   const ensure = pi.execCalls.find((a) => a[0] === "center");
-  assert.deepEqual(ensure, ["center", "ensure", "--repo", "/repo", "--open"]);
+  assert.deepEqual(ensure, ["center", "ensure", "--repo", "/repo"]);
+  assert.ok(!ensure!.includes("--open"), "starting a session must not open a dashboard tab");
   // The banner still arrives: the launch runs beside it, not before it.
   assert.equal(pi.messages.length, 1);
 });
@@ -933,4 +954,86 @@ test("tool_result: a bash command reaches the command center, but a wait poll do
     new FakeCtx(),
   );
   assert.equal(quiet.execCalls.filter((a) => a[0] === "center" && a[1] === "report").length, 0);
+});
+
+// --- the oh-my-pi swarm protocol ------------------------------------------
+
+const swarmSnapshot = {
+  word: "WORKING",
+  waitingOnUser: false,
+  taskId: "T-12",
+  stage: "limit retries",
+  dispatch: "∥3 ready",
+  activeAgents: 2,
+  epic: "ship the board",
+  currentTask: "wire the panel",
+  parallelSubtasks: [
+    { id: "worker-ada", agent: "coder", employee: "Ada", task: "wire the panel" },
+    { id: "worker-bo", agent: "reviewer", employee: "Bo", task: "read the diff" },
+  ],
+};
+
+async function startedHook(): Promise<FakePi> {
+  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
+  createHook(pi, makeDeps());
+  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
+  return pi;
+}
+
+function swarmReports(pi: FakePi): string[][] {
+  return pi.execCalls.filter((a) => a[0] === "swarm" && a[1] === "report");
+}
+
+test("swarm: an assistant:status snapshot is forwarded verbatim", async () => {
+  const pi = await startedHook();
+  pi.publish("assistant:status", swarmSnapshot);
+  await delay(40);
+
+  const reports = swarmReports(pi);
+  assert.equal(reports.length, 1);
+  const args = reports[0];
+  assert.deepEqual(args.slice(0, 8), [
+    "swarm", "report", "--repo", "/repo", "--session", "omp:abc123", "--harness", "omp",
+  ]);
+  assert.equal(args[8], "--json");
+  // Forwarded as the protocol wrote it: Plan-Forge consumes this payload, it
+  // does not own it, so no field is renamed on the way through.
+  assert.deepEqual(JSON.parse(args[9]), swarmSnapshot);
+});
+
+test("swarm: a burst coalesces into one report carrying the newest snapshot", async () => {
+  const pi = await startedHook();
+  pi.publish("assistant:status", { ...swarmSnapshot, activeAgents: 1 });
+  pi.publish("assistant:status", { ...swarmSnapshot, activeAgents: 2 });
+  pi.publish("assistant:status", { ...swarmSnapshot, activeAgents: 3 });
+  await delay(40);
+
+  const reports = swarmReports(pi);
+  assert.equal(reports.length, 1, "a dispatch burst must not become a burst of subprocesses");
+  assert.equal(JSON.parse(reports[0][9]).activeAgents, 3, "a panel must show what is running now");
+});
+
+test("swarm: an unusable payload is dropped rather than forwarded", async () => {
+  const pi = await startedHook();
+  for (const bad of [null, "a string", ["an", "array"], 42]) {
+    pi.publish("assistant:status", bad);
+  }
+  await delay(40);
+  assert.equal(swarmReports(pi).length, 0);
+});
+
+test("swarm: nothing is reported after the session shuts down", async () => {
+  const pi = await startedHook();
+  pi.publish("assistant:status", swarmSnapshot);
+  await pi.handlers.get("session_shutdown")![0]({}, new FakeCtx());
+  await delay(40);
+  assert.equal(swarmReports(pi).length, 0, "a queued snapshot must not outlive its session");
+});
+
+test("swarm: an OMP without the event bus simply has no swarm panel", async () => {
+  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
+  (pi as { events?: unknown }).events = undefined;
+  assert.doesNotThrow(() => createHook(pi, makeDeps()));
+  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
+  assert.equal(swarmReports(pi).length, 0);
 });

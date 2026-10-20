@@ -25,8 +25,8 @@ export function SetupPage(): React.JSX.Element {
     },
     {
       title: "Open this dashboard",
-      body: "Starts the command center if it is not running and opens one tab. Your agents call it for you at session start.",
-      command: "plan-forge center ensure --open",
+      body: "Starts the command center if it is not running, then opens a tab on it. Starting an agent brings the daemon up but opens nothing, so this is how you get here.",
+      command: "plan-forge center open",
     },
   ];
 

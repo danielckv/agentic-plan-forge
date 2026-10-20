@@ -21,8 +21,8 @@ curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/downl
 Restart your agent, then type `/plan-forge`. Windows, manual installs and the full host matrix are in
 [docs/install.md](docs/install.md).
 
-You need Git, a Chromium-family browser, and Claude Code or OMP signed in. Plan Forge never asks for or stores provider
-API keys — it uses the credentials your host agent already has.
+You need Git, a browser, and Claude Code or OMP signed in. The UI opens as a tab in your default browser. Plan Forge
+never asks for or stores provider API keys — it uses the credentials your host agent already has.
 
 ## Why
 

@@ -1,7 +1,7 @@
 /**
  * Window preferences: theme choice and sidebar state.
  *
- * Both survive reloads through `localStorage`. The dedicated window runs with
+ * Both survive reloads through `localStorage`. The Plan-Forge tab runs with
  * an ephemeral browser profile, so nothing here outlives the window itself;
  * the keys exist so a reload (or the relaunch of a still-open window) keeps
  * the choice. Storage is optional everywhere: a refused read or write falls

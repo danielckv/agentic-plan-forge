@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A **Live agents** panel on the board: every harness session on this machine, this repository's first, with the agents each one has dispatched — the persona, the agent type and what it is working on. oh-my-pi already publishes this on its `assistant:status` extension channel; the OMP hook subscribes and forwards each snapshot verbatim through `plan-forge swarm report`. Plan Forge consumes that protocol, it does not own it, so no field is renamed on the way through. A dispatch burst coalesces into one report per second and keeps the newest snapshot, because a panel a human reads must show what is running now. Snapshots are stored as session state, not as events: the activity log is bounded, and a swarm that repaints whenever an agent changes task would evict the tool calls that log exists to hold.
+- Each session in that panel states why it shows no agents. A session that went quiet is dimmed rather than dropped, because going quiet is itself worth noticing. A Claude Code session is marked unreachable — it reports tool activity and publishes no swarm channel, so an empty swarm there would read as idle when it means unknown.
+- `plan-forge center open` starts the daemon if needed and opens a tab. It is the explicit request, so it honours neither `center_auto_open` nor the open cooldown — a tab somebody left on another desktop is not the tab you just asked for — and it reports a failure instead of swallowing it.
+
+### Changed
+
+- The forge and the board open as a tab in your default browser. They launched a Chromium `--app` window in a throwaway profile, which meant a second browser with none of your extensions or sessions, and a hard requirement on Chrome, Edge, Brave or Chromium being installed. The URL now goes to the platform opener (`open`, `xdg-open`, the Windows protocol handler); `browser_path` still wins and now names a browser that takes a bare URL, so it opens a tab in the instance you already have running.
+- Because the opener is not the browser — it exits milliseconds after handing the URL over — its exit is no longer treated as the window closing. Publishing it would have ended a session on the first page refresh. The UI WebSocket is now the only close signal, and nothing kills the tab: after an approval the page says it is safe to close, which is also why an explicit `browser_path` cannot be turned into a way to shut your browser down.
+
+### Fixed
+
+- Starting `claude` or `omp` no longer puts a command center tab on screen. Both session-start hooks ran `center ensure --open`, so every session opened a dashboard whether or not a plan was ever asked for. They now start the headless daemon and nothing else — it has to be up for a session to be recorded at all, because a report with nothing listening is dropped where it is made. `center_auto_open` also defaults to off now, so a hook installed by an earlier version goes quiet as soon as the binary is upgraded, with no reinstall and no setting to find.
+
 ## [0.3.0] - 2026-10-20
 
 ### Added

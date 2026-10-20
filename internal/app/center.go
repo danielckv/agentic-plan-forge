@@ -18,6 +18,7 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/applock"
 	"github.com/danielckv/agentic-plan-forge/internal/center"
 	"github.com/danielckv/agentic-plan-forge/internal/config"
+	"github.com/danielckv/agentic-plan-forge/internal/livestore"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 	webui "github.com/danielckv/agentic-plan-forge/web"
 )
@@ -39,7 +40,13 @@ const (
 type CenterOptions struct {
 	Port int
 	Repo string
+	// Open asks for a tab when none is already streaming and no other process
+	// opened one inside the cooldown.
 	Open bool
+	// Force opens a tab unconditionally. It is set by `center open`, where the
+	// user asked for the tab in as many words: a tab somebody else already has
+	// on another desktop is not the tab they asked to see.
+	Force bool
 }
 
 // CenterResult is the outcome of running or ensuring the daemon.
@@ -226,27 +233,48 @@ func EnsureCenter(ctx context.Context, opts CenterOptions) CenterResult {
 	}
 	secret, err := readCenterSecret()
 	if err != nil {
+		res.Message = notice(err)
 		return res
 	}
 	clients, err := centerClients(ctx, rec.Port, secret)
 	if err != nil {
+		res.Message = notice(err)
 		return res
 	}
 	res.ActiveClients = clients
-	if !opts.Open || clients > 0 {
-		return res
-	}
-	if !claimCenterOpen() {
+	if !shouldOpenTab(opts, clients, claimCenterOpen) {
 		return res
 	}
 	url, err := centerTicketURL(ctx, rec.Port, secret, opts.Repo)
 	if err != nil {
+		res.Message = notice(err)
 		return res
 	}
-	if err := openInBrowser(url); err == nil {
-		res.Opened = true
+	if err := openInBrowser(url); err != nil {
+		res.Message = notice(err)
+		return res
 	}
+	res.Opened = true
 	return res
+}
+
+// shouldOpenTab decides whether EnsureCenter opens a tab, and is the whole of
+// that decision. A forced open skips both guards: `center open` is a user
+// typing the words, and a tab somebody else already has on another desktop is
+// not the tab they asked to see. Otherwise a streaming tab is enough, and the
+// cross-process claim settles which of several terminals starting together
+// opens the one tab.
+func shouldOpenTab(opts CenterOptions, activeClients int, claim func() bool) bool {
+	if !opts.Open {
+		return false
+	}
+	if opts.Force {
+		return true
+	}
+	if activeClients > 0 {
+		return false
+	}
+	return claim()
 }
 
 // centerClients asks the daemon how many tabs are streaming.
@@ -446,6 +474,8 @@ type CenterRecord struct {
 	DirtyFiles []string `json:"dirty_files,omitempty"`
 	Kind       string   `json:"kind"`
 	Detail     string   `json:"detail,omitempty"`
+	// Swarm is the harness's swarm snapshot, when it publishes one.
+	Swarm *livestore.Swarm `json:"swarm,omitempty"`
 }
 
 // CenterReport posts one record to a running command center.
@@ -457,8 +487,13 @@ type CenterRecord struct {
 // is refused in about a millisecond and the record is simply dropped.
 func CenterReport(ctx context.Context, rec CenterRecord) error {
 	rec.Repo = strings.TrimSpace(rec.Repo)
-	if rec.Repo == "" || rec.SessionID == "" || rec.Kind == "" {
-		return errors.New("center: repo, session id and kind are required")
+	if rec.Repo == "" || rec.SessionID == "" {
+		return errors.New("center: repo and session id are required")
+	}
+	// A kind is what makes a record an event. A swarm snapshot is state
+	// instead, and is the one record allowed to arrive without one.
+	if rec.Kind == "" && rec.Swarm == nil {
+		return errors.New("center: a record needs an event kind or a swarm snapshot")
 	}
 	held, up := CenterHolder()
 	if !up {

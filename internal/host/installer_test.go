@@ -345,7 +345,7 @@ func managedCount(t *testing.T, settings map[string]any, event string) int {
 
 const (
 	startCmd   = `"/opt/plan forge/plan-forge" hook check-state --repo "$CLAUDE_PROJECT_DIR" --format claude`
-	centerCmd  = `"/opt/plan forge/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR" --open`
+	centerCmd  = `"/opt/plan forge/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR"`
 	guardCmd   = `"/opt/plan forge/plan-forge" hook claude-guard`
 	handoffCmd = `"/opt/plan forge/plan-forge" hook claude`
 )

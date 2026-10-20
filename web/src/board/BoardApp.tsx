@@ -25,6 +25,7 @@ import { BrandMark } from "../ui/BrandMark";
 import { BoardCard } from "./BoardCard";
 import { BoardDrawer } from "./BoardDrawer";
 import { CoordinatorPanel } from "./CoordinatorPanel";
+import { SwarmPanel } from "./SwarmPanel";
 import { AUTH_FAILED_MESSAGE, boardStore, useBoardState } from "./boardStore";
 import type { BoardConnection } from "./boardStore";
 import {
@@ -430,6 +431,8 @@ export function BoardApp(): React.ReactElement {
           </div>
         </section>
       ) : null}
+
+      <SwarmPanel sessions={snapshot.swarm} />
 
       {viewMode === "board" ? (
       <>

@@ -1,7 +1,7 @@
 /**
  * Loopback bridge handshake.
  *
- * `internal/relay/local_ws.go` launches the dedicated window at
+ * `internal/relay/local_ws.go` launches the Plan-Forge tab at
  * `http://127.0.0.1:<port>/#n=<nonce>` and answers nothing else until the page
  * completes this exchange:
  *

@@ -24,7 +24,7 @@ import (
 // maxLabelRunes bounds a source label spliced into a document heading.
 const maxLabelRunes = 80
 
-// uiCommands are the events the dedicated window may submit. Executor events
+// uiCommands are the events the Plan-Forge tab may submit. Executor events
 // (CYCLE_START, AVATAR_*, ARTIFACT_SAVED, lease messages) are produced only by
 // this process, never by the page, so a compromised page cannot forge them.
 var uiCommands = map[relay.WSEventType]bool{

@@ -7,7 +7,7 @@ Version notes live in [CHANGELOG.md](../CHANGELOG.md). This page describes the c
 | Requirement | Notes |
 | :--- | :--- |
 | Git | Plan Forge grounds on a repository. Non-Git folders work with reduced status features. |
-| Chromium-family browser | Chrome, Edge, Brave or Chromium. The UI opens in a dedicated application window, never a browser tab. |
+| A browser | The UI opens as a tab in your default browser, through the platform URL opener. Set `browser_path` to send it somewhere else. |
 | Claude Code or OMP, signed in | Avatar generation runs through these CLIs. |
 | Antigravity (optional) | Hosts `/plan-forge` and `/plan-config` as skills. With only Antigravity installed, avatar generation reports that Claude Code or OMP is required. |
 | Poppler and Tesseract (optional) | Only needed to read scanned PDFs. Text from born-digital PDFs needs nothing extra. |
@@ -67,7 +67,8 @@ prose to "forge a plan" does not trigger Plan Forge on its own — type `/plan-f
 Hooks are registered where the host supports them:
 
 - **Claude Code.** `SessionStart` carries two handlers — one reports a plan that changed since your last session, the
-  other makes sure the command center is running and opens a tab. `PostToolUse` (matcher
+  other makes sure the command center daemon is running. Neither opens anything: starting a session is not a request to
+  look at a dashboard, and the daemon is headless. Run `plan-forge center open` when you want the tab. `PostToolUse` (matcher
   `Bash|Edit|Write|MultiEdit|NotebookEdit`) moves the agent into Plan Mode after an approval and reports the tool call.
   `PreToolUse` (matcher `Edit|Write|MultiEdit|NotebookEdit`) refuses an edit once when the approved plan changed under a
   running session, and refuses an edit aimed at the approved plan itself. `PostToolUse` and `UserPromptSubmit` deliver

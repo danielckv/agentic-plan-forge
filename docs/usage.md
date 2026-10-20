@@ -1,7 +1,7 @@
 # Using Plan Forge
 
-Type `/plan-forge` in your agent. The skill starts the app window and waits, so the agent's terminal stays blocked until
-you approve a plan.
+Type `/plan-forge` in your agent. The skill opens a tab in your default browser and waits, so the agent's terminal
+stays blocked until you approve a plan. Closing the tab without approving ends the session.
 
 ## The three views
 
@@ -19,7 +19,8 @@ and a shortcut sheet (`?`):
 
 ## Plan Mode handoff and validation
 
-Approving writes the plan, and the window shows each handoff step before it closes.
+Approving writes the plan, and the tab shows each handoff step. It then says it is safe to close: the tab is yours, in
+your own browser, so Plan Forge never closes it for you.
 
 1. `plan-forge wait` returns the approval with a `validation` result. The validation checks that the plan is approved on
   this machine, that it has not drifted from the repository, and how many AST targets already exist.

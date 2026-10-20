@@ -376,3 +376,92 @@ func TestWriteTrimDropsOldEventsBeforeFailing(t *testing.T) {
 		t.Fatalf("want nil or ErrTooLarge, got %v", err)
 	}
 }
+
+func TestRecordSwarmStoresStateWithoutSpendingAnEvent(t *testing.T) {
+	s := newStore(t)
+	if _, err := s.Record(Record{SessionID: "omp:a", Harness: "omp", Kind: KindTool, Tool: "edit"}); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := s.RecordSwarm("omp:a", "omp", Swarm{
+		Word: "WORKING", ActiveAgents: 2, Epic: "ship the board",
+		Agents: []SwarmAgent{
+			{ID: "worker-ada", Agent: "coder", Employee: "Ada", Task: "wire the panel"},
+			{ID: "worker-bo", Agent: "reviewer", Task: "read the diff"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(doc.Events); got != 1 {
+		t.Fatalf("events = %d, want the 1 from the tool call: a swarm snapshot is state, not activity", got)
+	}
+	sw := doc.Sessions["omp:a"].Swarm
+	if sw == nil {
+		t.Fatal("the swarm snapshot was not stored")
+	}
+	if sw.Word != "WORKING" || sw.ActiveAgents != 2 || len(sw.Agents) != 2 {
+		t.Fatalf("swarm = %+v", sw)
+	}
+	if sw.Agents[0].Employee != "Ada" || sw.Agents[1].Agent != "reviewer" {
+		t.Fatalf("agents = %+v", sw.Agents)
+	}
+	if sw.At == "" {
+		t.Fatal("the snapshot must carry when it was taken")
+	}
+}
+
+// A swarm snapshot is the harness's live state, so an ordinary tool ping must
+// leave it alone; otherwise the panel would blink empty on every edit.
+func TestRecordLeavesAnExistingSwarmSnapshotAlone(t *testing.T) {
+	s := newStore(t)
+	if _, err := s.RecordSwarm("omp:a", "omp", Swarm{Word: "WORKING", ActiveAgents: 3}); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := s.Record(Record{SessionID: "omp:a", Harness: "omp", Kind: KindTool, Tool: "edit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sw := doc.Sessions["omp:a"].Swarm
+	if sw == nil || sw.ActiveAgents != 3 {
+		t.Fatalf("swarm = %+v, want the snapshot kept", sw)
+	}
+}
+
+func TestSwarmStringsAreSanitizedAndBounded(t *testing.T) {
+	s := newStore(t)
+	long := strings.Repeat("x", MaxSwarmTextRunes+50)
+	agents := make([]SwarmAgent, 0, MaxSwarmAgents+5)
+	for i := range MaxSwarmAgents + 5 {
+		agents = append(agents, SwarmAgent{ID: fmt.Sprintf("w-%d", i), Agent: "coder", Task: "t"})
+	}
+	agents = append(agents, SwarmAgent{}) // wholly empty: nothing to show
+	doc, err := s.RecordSwarm("omp:a", "omp", Swarm{
+		Word: "WORK\x1b[31mING", Stage: long, ActiveAgents: -4, Agents: agents,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sw := doc.Sessions["omp:a"].Swarm
+	if strings.Contains(sw.Word, "\x1b") {
+		t.Fatalf("word kept a control sequence: %q", sw.Word)
+	}
+	if len([]rune(sw.Stage)) > MaxSwarmTextRunes {
+		t.Fatalf("stage is %d runes, want at most %d", len([]rune(sw.Stage)), MaxSwarmTextRunes)
+	}
+	if sw.ActiveAgents != 0 {
+		t.Fatalf("active agents = %d, want a negative count clamped to 0", sw.ActiveAgents)
+	}
+	if len(sw.Agents) != MaxSwarmAgents {
+		t.Fatalf("agents = %d, want them capped at %d", len(sw.Agents), MaxSwarmAgents)
+	}
+}
+
+func TestRecordSwarmRefusesAnUnusableSession(t *testing.T) {
+	s := newStore(t)
+	if _, err := s.RecordSwarm("not-a-session", "omp", Swarm{}); err == nil {
+		t.Fatal("an invalid session id must be refused")
+	}
+	if _, err := s.RecordSwarm("omp:a", "  ", Swarm{}); err == nil {
+		t.Fatal("an empty harness must be refused")
+	}
+}

@@ -2,7 +2,7 @@
 
 package relay
 
-// The loopback bridge is the only network surface the dedicated window talks
+// The loopback bridge is the only network surface the Plan-Forge tab talks
 // to. It binds 127.0.0.1 on an ephemeral port, serves the embedded UI, and
 // carries the UI's WebSocket. The browser never sees a relay secret: the binary
 // dials the relay itself (client_conn.go) and forwards.
@@ -127,7 +127,7 @@ type BridgeConfig struct {
 	LaunchPath string
 }
 
-// Bridge is the loopback HTTP and WebSocket server for the dedicated window.
+// Bridge is the loopback HTTP and WebSocket server for the Plan-Forge tab.
 type Bridge struct {
 	cfg    BridgeConfig
 	logger *slog.Logger

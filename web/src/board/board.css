@@ -2205,3 +2205,169 @@ filter re-rasterizes every node on each pan frame and a plain shape does not. */
     opacity: 0.9;
   }
 }
+
+/* --- live agents (swarm) ------------------------------------------------ */
+
+.pf-swarm {
+  margin: 0 0 14px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-swarm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pf-ink-2);
+}
+
+.pf-swarm-head h2 {
+  margin: 0;
+}
+
+.pf-swarm-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--pf-muted);
+}
+
+.pf-swarm-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-swarm-session {
+  padding: 8px 10px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel);
+}
+
+/* A session that went quiet is dimmed rather than dropped: going quiet is
+itself worth noticing. */
+.pf-swarm-session.is-stale {
+  opacity: 0.6;
+}
+
+.pf-swarm-session-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pf-swarm-harness {
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-swarm-repo {
+  color: var(--pf-muted);
+}
+
+.pf-swarm-here {
+  color: var(--pf-accent);
+}
+
+.pf-swarm-branch {
+  color: var(--pf-faint);
+}
+
+.pf-swarm-word {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid var(--pf-ok-border);
+  border-radius: 999px;
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.pf-swarm-word.is-waiting {
+  border-color: var(--pf-warn-border);
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+}
+
+.pf-swarm-stale-tag {
+  font-size: 11px;
+  color: var(--pf-faint);
+}
+
+.pf-swarm-focus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--pf-ink-2);
+}
+
+.pf-swarm-epic {
+  font-weight: 600;
+}
+
+.pf-swarm-step::before {
+  content: "→ ";
+  color: var(--pf-faint);
+}
+
+.pf-swarm-dispatch {
+  color: var(--pf-muted);
+}
+
+.pf-swarm-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--pf-muted);
+}
+
+.pf-swarm-note.is-unreachable {
+  color: var(--pf-warn);
+}
+
+.pf-swarm-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-swarm-agent {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--pf-ink-2);
+}
+
+.pf-swarm-agent-name {
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-swarm-agent-type {
+  color: var(--pf-faint);
+  font-size: 11px;
+}
+
+.pf-swarm-agent-task {
+  overflow: hidden;
+  color: var(--pf-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

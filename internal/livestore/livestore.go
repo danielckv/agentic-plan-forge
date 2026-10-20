@@ -20,7 +20,8 @@
 //	{"version":1,"repo_key":"…","repo_name":"…","seq":N,
 //	 "sessions":{"claude:abc":{"id":"claude:abc","harness":"claude-code","developer":"d",
 //	   "branch":"main","mode":"UNPLANNED","last_tool":"Edit","last_command":"",
-//	   "dirty_files":[],"started_at":"RFC3339","last_heartbeat":"RFC3339","seq":N}},
+//	   "dirty_files":[],"started_at":"RFC3339","last_heartbeat":"RFC3339","seq":N,
+//	   "swarm":{"word":"WORKING","active_agents":2,"agents":[…],"at":"RFC3339"}}},
 //	 "events":[{"seq":N,"at":"RFC3339","session_id":"claude:abc","kind":"tool","detail":"…"}]}
 //
 // The repository's absolute path is deliberately absent: repo_name and the key
@@ -86,6 +87,12 @@ const (
 	MaxNameRunes     = 64
 	MaxDetailRunes   = 200
 	MaxRepoNameRunes = 120
+	// MaxSwarmAgents bounds one session's live subagents. omp dispatches a
+	// handful; a document that claims hundreds is a bug or a forgery, and the
+	// panel could not show them either way.
+	MaxSwarmAgents    = 32
+	MaxSwarmWordRunes = 32
+	MaxSwarmTextRunes = 160
 )
 
 // Lifetimes. StaleAfter only changes how a session renders; EvictAfter and
@@ -127,6 +134,48 @@ type Session struct {
 	StartedAt   string   `json:"started_at"`
 	LastBeat    string   `json:"last_heartbeat"`
 	Seq         uint64   `json:"seq"`
+	// Swarm is the last swarm snapshot this session published, or nil when the
+	// harness publishes none.
+	Swarm *Swarm `json:"swarm,omitempty"`
+}
+
+// SwarmAgent is one live subagent inside a harness session, as the harness
+// itself reports it. It mirrors the `assistant:status` payload's subtask shape.
+type SwarmAgent struct {
+	ID string `json:"id"`
+	// Agent is the agent type the harness dispatched (its own vocabulary).
+	Agent string `json:"agent"`
+	// Employee is the persona the harness assigned, when it assigns one.
+	Employee string `json:"employee,omitempty"`
+	// Task is what that agent is working on, in one line.
+	Task string `json:"task"`
+}
+
+// Swarm is the latest swarm snapshot a session published: what the harness is
+// doing and which subagents are live inside it.
+//
+// It is reported, never inferred. Only a harness that speaks the
+// `assistant:status` protocol fills this in; for every other harness it stays
+// nil, and a reader must show that absence rather than an empty swarm, because
+// "no agents running" and "no way to ask" are different facts.
+type Swarm struct {
+	// Word is the harness's own status word (WORKING, PLANNING, STUCK, …).
+	Word string `json:"word"`
+	// WaitingOnUser is true when nothing moves until the user answers.
+	WaitingOnUser bool   `json:"waiting_on_user"`
+	TaskID        string `json:"task_id,omitempty"`
+	// Stage is a short objective label.
+	Stage string `json:"stage,omitempty"`
+	// Dispatch is the harness's dispatch-shape indicator, e.g. "∥3 ready".
+	Dispatch string `json:"dispatch,omitempty"`
+	// Epic is the plan goal currently active.
+	Epic string `json:"epic,omitempty"`
+	// CurrentTask is the active plan step.
+	CurrentTask  string       `json:"current_task,omitempty"`
+	ActiveAgents int          `json:"active_agents"`
+	Agents       []SwarmAgent `json:"agents"`
+	// At is when the harness published this snapshot.
+	At string `json:"at"`
 }
 
 // Event is one entry in the bounded activity log.
@@ -176,6 +225,9 @@ type Record struct {
 	DirtyFiles []string
 	Kind       string
 	Detail     string
+	// Swarm replaces the session's swarm snapshot when non-nil. A nil Swarm
+	// leaves the stored one alone, so an ordinary tool ping never erases it.
+	Swarm *Swarm
 }
 
 // Store is the document for one repository.
@@ -262,8 +314,16 @@ func (d *Doc) normalize() {
 		d.Events = []Event{}
 	}
 	for id, sess := range d.Sessions {
+		changed := false
 		if sess.DirtyFiles == nil {
 			sess.DirtyFiles = []string{}
+			changed = true
+		}
+		if sess.Swarm != nil && sess.Swarm.Agents == nil {
+			sess.Swarm.Agents = []SwarmAgent{}
+			changed = true
+		}
+		if changed {
 			d.Sessions[id] = sess
 		}
 	}
@@ -388,6 +448,9 @@ func (s *Store) Record(r Record) (Doc, error) {
 		if r.DirtyFiles != nil {
 			sess.DirtyFiles = cleanPaths(r.DirtyFiles)
 		}
+		if r.Swarm != nil {
+			sess.Swarm = cleanSwarm(*r.Swarm, at)
+		}
 		d.Sessions[r.SessionID] = sess
 		d.Events = append(d.Events, Event{
 			Seq:       d.Seq,
@@ -396,6 +459,38 @@ func (s *Store) Record(r Record) (Doc, error) {
 			Kind:      r.Kind,
 			Detail:    clamp(r.Detail, MaxDetailRunes),
 		})
+		d.prune(now())
+		return true, nil
+	})
+}
+
+// RecordSwarm replaces a session's swarm snapshot and refreshes its heartbeat,
+// without appending an event.
+//
+// A status snapshot is state, not activity. The event log is bounded at
+// MaxEvents and feeds an activity feed; a swarm that repaints whenever an
+// agent changes what it is doing would evict the tool calls that log exists to
+// hold. The session is created if the harness has not reported one yet, so a
+// swarm panel works from the first snapshot.
+func (s *Store) RecordSwarm(sessionID, harness string, sw Swarm) (Doc, error) {
+	if !ValidSessionID(sessionID) {
+		return Doc{}, fmt.Errorf("livestore: invalid session id %q", sanitize.Truncate(sanitize.Terminal(sessionID), 64))
+	}
+	if strings.TrimSpace(harness) == "" {
+		return Doc{}, errors.New("livestore: empty harness")
+	}
+	return s.update(func(d *Doc) (bool, error) {
+		at := stamp(now())
+		d.Seq++
+		sess, ok := d.Sessions[sessionID]
+		if !ok {
+			sess = Session{ID: sessionID, StartedAt: at, Mode: ModeUnplanned, DirtyFiles: []string{}}
+		}
+		sess.Harness = clamp(harness, MaxNameRunes)
+		sess.LastBeat = at
+		sess.Seq = d.Seq
+		sess.Swarm = cleanSwarm(sw, at)
+		d.Sessions[sessionID] = sess
 		d.prune(now())
 		return true, nil
 	})
@@ -410,6 +505,46 @@ func (s *Store) Sweep() (Doc, error) {
 		d.prune(now())
 		return len(d.Sessions)+len(d.Events) != before, nil
 	})
+}
+
+// cleanSwarm sanitizes and bounds a reported swarm snapshot. Every string in
+// it came off a harness's event bus through an argv, so none of it is trusted:
+// terminal control characters are stripped, each field is rune-bounded, and
+// the agent list is capped. ActiveAgents is the harness's own count and is
+// kept even when the agent list is empty or was truncated, because a harness
+// may report a count without naming the agents.
+func cleanSwarm(in Swarm, at string) *Swarm {
+	out := Swarm{
+		Word:          clamp(in.Word, MaxSwarmWordRunes),
+		WaitingOnUser: in.WaitingOnUser,
+		TaskID:        clamp(in.TaskID, MaxNameRunes),
+		Stage:         clamp(in.Stage, MaxSwarmTextRunes),
+		Dispatch:      clamp(in.Dispatch, MaxSwarmWordRunes),
+		Epic:          clamp(in.Epic, MaxSwarmTextRunes),
+		CurrentTask:   clamp(in.CurrentTask, MaxSwarmTextRunes),
+		ActiveAgents:  in.ActiveAgents,
+		Agents:        []SwarmAgent{},
+		At:            at,
+	}
+	if out.ActiveAgents < 0 {
+		out.ActiveAgents = 0
+	}
+	for _, a := range in.Agents {
+		if len(out.Agents) == MaxSwarmAgents {
+			break
+		}
+		agent := SwarmAgent{
+			ID:       clamp(a.ID, MaxNameRunes),
+			Agent:    clamp(a.Agent, MaxNameRunes),
+			Employee: clamp(a.Employee, MaxNameRunes),
+			Task:     clamp(a.Task, MaxSwarmTextRunes),
+		}
+		if agent.ID == "" && agent.Agent == "" && agent.Task == "" {
+			continue
+		}
+		out.Agents = append(out.Agents, agent)
+	}
+	return &out
 }
 
 func validKind(k string) bool {
