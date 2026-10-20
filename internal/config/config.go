@@ -248,7 +248,7 @@ func (c Config) CenterPortOrDefault() int {
 	return c.CenterPort
 }
 
-// CenterAutoOpenEnabled reports whether `center ensure --open` may open a tab.
+// CenterAutoOpenEnabled reports whether a session start may open a tab.
 // Unset means off: starting a harness is not asking to look at a dashboard,
 // and this also silences a hook installed by an older version that still
 // passes --open. `center open` is the explicit request and ignores this.

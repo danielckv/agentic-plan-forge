@@ -311,7 +311,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	if req.Ticket == "" {
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": "this tab was not opened by plan-forge",
-			"hint":  "run: plan-forge center ensure --open",
+			"hint":  "run: plan-forge center open",
 		})
 		return
 	}

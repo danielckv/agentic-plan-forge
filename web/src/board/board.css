@@ -2250,7 +2250,7 @@ filter re-rasterizes every node on each pan frame and a plain shape does not. */
 }
 
 /* A session that went quiet is dimmed rather than dropped: going quiet is
-   itself worth noticing. */
+itself worth noticing. */
 .pf-swarm-session.is-stale {
   opacity: 0.6;
 }

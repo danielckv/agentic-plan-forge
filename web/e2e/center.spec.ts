@@ -88,7 +88,7 @@ test("one record reaches two open tabs", async ({ browser }) => {
 test("a tab opened by hand parks instead of silently failing", async ({ page }) => {
   await page.goto(`${harness.origin}/live`);
   await expect(page.getByText("This tab was not opened by Plan Forge")).toBeVisible();
-  await expect(page.getByText("plan-forge center ensure --open")).toBeVisible();
+  await expect(page.getByText("plan-forge center open")).toBeVisible();
 });
 
 test("the command center makes no external request", async ({ page }) => {
