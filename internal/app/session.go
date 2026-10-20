@@ -32,7 +32,7 @@ func UsageError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrUsage, fmt.Sprintf(format, args...))
 }
 
-// windowHandle is the running dedicated window; *window.Window implements it.
+// windowHandle is the open Plan-Forge tab; *window.Window implements it.
 type windowHandle interface {
 	Done() <-chan error
 	Terminate(after time.Duration)
@@ -352,11 +352,11 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 
 	if opts.InteractiveInvite {
 		if url, ok := s.inviteURL(); ok {
-			fmt.Fprintf(opts.Stderr, "Invite teammates (visible only in this terminal and the Plan-Forge window):\n  %s\n", url)
+			fmt.Fprintf(opts.Stderr, "Invite teammates (visible only in this terminal and the Plan-Forge tab):\n  %s\n", url)
 		}
 	}
 	if !opts.Detached {
-		fmt.Fprintln(opts.Stderr, "Plan-Forge window opened. Approve the plan there to continue.")
+		fmt.Fprintln(opts.Stderr, "Plan-Forge opened a browser tab. Approve the plan there to continue.")
 	}
 
 	for {

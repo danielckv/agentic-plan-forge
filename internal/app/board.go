@@ -70,7 +70,7 @@ type BoardOptions struct {
 	// Detached is true for the __board-child: nothing is printed to a terminal
 	// and the window-startup wait outlasts the parent's.
 	Detached bool
-	// LaunchWindow replaces the dedicated window; tests only.
+	// LaunchWindow replaces the browser tab; tests only.
 	LaunchWindow   func(url string) (windowHandle, error)
 	Logger         *slog.Logger
 	Stdout, Stderr io.Writer
@@ -776,7 +776,7 @@ func orDefault(d, def time.Duration) time.Duration {
 	return d
 }
 
-// RunBoard opens the dedicated window on the Board view of the repository's
+// RunBoard opens a browser tab on the Board view of the repository's
 // approved plan and serves it until the window closes. Closing the window is a
 // normal end: exit code 0.
 func RunBoard(ctx context.Context, opts BoardOptions) Result {

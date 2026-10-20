@@ -1,13 +1,20 @@
 //go:build client && !server
 
-// Package window launches and supervises Plan-Forge's dedicated application
-// window: a Chromium-family browser started with --app against the loopback
-// bridge, in a throwaway profile so the launched process is the browser process
-// and cmd.Wait() returns when the window closes.
+// Package window opens and supervises Plan-Forge's view of a session: a tab in
+// the user's default browser, pointed at the loopback bridge.
 //
-// It never falls back to the user's default browser or to a tab: a missing
-// browser is exit code 3, and the window is the session — closing it without an
-// approval ends the session with exit code 130.
+// It hands the URL to the platform opener (`open` on macOS, `xdg-open` and
+// friends on Linux, the protocol handler on Windows), or to the executable
+// browser_path names. It never starts a Chromium --app window and never
+// creates a throwaway profile: the tab belongs to the user's everyday browser,
+// with their extensions, their sessions and their history.
+//
+// The opener process is therefore not the browser. It exits within
+// milliseconds of handing the URL over, so it says nothing about whether the
+// tab is still on screen, and Done() deliberately never fires. The UI
+// WebSocket is the only close signal: the tab is the session, and dropping
+// that socket for longer than the grace period ends the session with exit
+// code 130.
 package window
 
 import (
@@ -36,16 +43,17 @@ const (
 // Timings from the plan.
 const (
 	// DefaultGrace is how long the UI WebSocket may stay disconnected before the
-	// window counts as closed. A refresh, a crash and a close are
-	// indistinguishable at the socket, so the window gets a moment to return.
+	// tab counts as closed. A refresh, a crash and a close are
+	// indistinguishable at the socket, so the tab gets a moment to return.
 	DefaultGrace = 10 * time.Second
 	// DefaultStartupWait bounds how long the page may take to open its first
-	// WebSocket after the browser started.
+	// WebSocket after the opener ran. It covers a cold browser start, not only
+	// a new tab in a browser that is already up.
 	DefaultStartupWait = 30 * time.Second
-	// PostApprovalClose is how long the window may show "Approved — safe to
-	// close" before the binary terminates the browser process it owns.
+	// PostApprovalClose is how long the binary stays up after an approval so
+	// the tab receives the "Approved — safe to close" frame. Nothing closes the
+	// tab: it is the user's, in the user's browser.
 	PostApprovalClose = 5 * time.Second
-	terminateGrace    = 3 * time.Second
 )
 
 // ConfigKey names the configuration key that selects a browser explicitly.
@@ -53,12 +61,12 @@ const ConfigKey = "browser_path"
 
 // Errors.
 var (
-	// ErrNoBrowser means no Chromium-family browser could be launched.
-	ErrNoBrowser = errors.New("no Chromium-family browser found")
-	// ErrWindowClosed means the window went away without an approval.
-	ErrWindowClosed = errors.New("the Plan-Forge window was closed")
+	// ErrNoBrowser means no way to open a URL could be resolved.
+	ErrNoBrowser = errors.New("no way to open a browser tab was found")
+	// ErrWindowClosed means the tab went away without an approval.
+	ErrWindowClosed = errors.New("the Plan-Forge tab was closed")
 	// ErrNeverConnected means the page never opened its WebSocket.
-	ErrNeverConnected = errors.New("the Plan-Forge window never connected to the local session")
+	ErrNeverConnected = errors.New("the Plan-Forge tab never connected to the local session")
 	// ErrBadURL means the launch URL is not a loopback http URL.
 	ErrBadURL = errors.New("window URL must be http://127.0.0.1:<port>/...")
 )
@@ -71,19 +79,18 @@ type NoBrowserError struct {
 
 func (e *NoBrowserError) Error() string {
 	var b strings.Builder
-	b.WriteString("no Chromium-family browser found")
+	b.WriteString("no way to open a browser tab was found")
 	if e.Detail != "" {
 		b.WriteString(": " + e.Detail)
 	}
-	b.WriteString(". Install Google Chrome, Microsoft Edge, Brave or Chromium, or set " + ConfigKey +
-		" with: plan-forge config --help")
+	b.WriteString(". Set " + ConfigKey + " to a browser executable with: plan-forge config --help")
 	return b.String()
 }
 
 func (e *NoBrowserError) Is(target error) bool { return target == ErrNoBrowser }
 
-// ExitCode maps a window error to the process exit code: 3 when no browser is
-// available, 130 when the window closed without approval, otherwise 1.
+// ExitCode maps a window error to the process exit code: 3 when no opener is
+// available, 130 when the tab closed without approval, otherwise 1.
 func ExitCode(err error) int {
 	switch {
 	case err == nil:
@@ -97,16 +104,23 @@ func ExitCode(err error) int {
 	}
 }
 
-// --- browser discovery ----------------------------------------------------------
+// --- opener discovery -----------------------------------------------------------
 
-// Browser is a discovered executable.
+// Browser is the resolved executable that opens the tab: a platform opener, or
+// the browser named by browser_path.
 type Browser struct {
+	// Name is what the user is told was used.
 	Name string
+	// Path is the absolute executable.
 	Path string
+	// Prefix are the arguments that must precede the URL. The platform openers
+	// need one (an end-of-flags marker, a handler entry point); a browser
+	// executable takes the URL on its own.
+	Prefix []string
 }
 
-// Finder discovers browsers. Every environment dependency is injectable so the
-// search order is testable on any machine.
+// Finder discovers the opener. Every environment dependency is injectable so
+// the search is testable on any machine.
 type Finder struct {
 	GOOS     string
 	Home     string
@@ -121,71 +135,50 @@ func DefaultFinder() Finder {
 	return Finder{GOOS: runtime.GOOS, Home: home, Getenv: os.Getenv, Stat: os.Stat, LookPath: exec.LookPath}
 }
 
-type candidate struct {
-	name  string
-	paths []string // absolute install locations
-	names []string // executable names resolved through PATH
+// opener is one candidate platform opener.
+type opener struct {
+	name   string
+	paths  []string // absolute locations tried before PATH
+	names  []string // executable names resolved through PATH
+	prefix []string
 }
 
-// candidates lists browsers in the plan's order: Chrome, Edge, Brave, Chromium.
-func (f Finder) candidates() []candidate {
-	env := func(k string) string {
-		if f.Getenv == nil {
-			return ""
-		}
-		return f.Getenv(k)
-	}
+// openers lists the platform openers in the order they are tried. The first
+// entry of each platform is the one a stock machine has.
+func (f Finder) openers() []opener {
 	switch f.GOOS {
 	case "darwin":
-		app := func(bundle, exe string) []string {
-			rel := filepath.Join("Applications", bundle+".app", "Contents", "MacOS", exe)
-			out := []string{filepath.Join("/", rel)}
-			if f.Home != "" {
-				out = append(out, filepath.Join(f.Home, rel))
-			}
-			return out
-		}
-		// The bundle executable is run directly, not through `open`, so that
-		// cmd.Wait() tracks the window.
-		return []candidate{
-			{name: "Google Chrome", paths: app("Google Chrome", "Google Chrome")},
-			{name: "Microsoft Edge", paths: app("Microsoft Edge", "Microsoft Edge")},
-			{name: "Brave", paths: app("Brave Browser", "Brave Browser")},
-			{name: "Chromium", paths: app("Chromium", "Chromium")},
-		}
+		// `open` without -n reuses the running default browser, so the URL
+		// lands as a new tab rather than a second browser instance. "--" stops
+		// a URL beginning with a dash being read as a flag.
+		return []opener{{
+			name: "open", paths: []string{"/usr/bin/open"}, names: []string{"open"}, prefix: []string{"--"},
+		}}
 	case "windows":
-		join := func(root string, parts ...string) []string {
-			if root == "" {
-				return nil
-			}
-			return []string{filepath.Join(append([]string{root}, parts...)...)}
+		var paths []string
+		if root := f.env("SystemRoot"); root != "" {
+			paths = []string{filepath.Join(root, "System32", "rundll32.exe")}
 		}
-		pf, pf86, local := env("ProgramFiles"), env("ProgramFiles(x86)"), env("LocalAppData")
-		chrome := []string{}
-		for _, r := range []string{pf, pf86, local} {
-			chrome = append(chrome, join(r, "Google", "Chrome", "Application", "chrome.exe")...)
-		}
-		edge := append(join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
-			join(pf, "Microsoft", "Edge", "Application", "msedge.exe")...)
-		brave := []string{}
-		for _, r := range []string{pf, pf86, local} {
-			brave = append(brave, join(r, "BraveSoftware", "Brave-Browser", "Application", "brave.exe")...)
-		}
-		chromium := join(local, "Chromium", "Application", "chrome.exe")
-		return []candidate{
-			{name: "Google Chrome", paths: chrome, names: []string{"chrome.exe"}},
-			{name: "Microsoft Edge", paths: edge, names: []string{"msedge.exe"}},
-			{name: "Brave", paths: brave, names: []string{"brave.exe"}},
-			{name: "Chromium", paths: chromium, names: []string{"chromium.exe"}},
-		}
+		return []opener{{
+			name:  "the Windows protocol handler",
+			paths: paths, names: []string{"rundll32.exe", "rundll32"},
+			prefix: []string{"url.dll,FileProtocolHandler"},
+		}}
 	default:
-		return []candidate{
-			{name: "Google Chrome", names: []string{"google-chrome", "google-chrome-stable"}},
-			{name: "Microsoft Edge", names: []string{"microsoft-edge", "microsoft-edge-stable"}},
-			{name: "Brave", names: []string{"brave-browser", "brave"}},
-			{name: "Chromium", names: []string{"chromium", "chromium-browser"}, paths: []string{"/snap/bin/chromium"}},
+		return []opener{
+			{name: "xdg-open", names: []string{"xdg-open"}},
+			{name: "gio", names: []string{"gio"}, prefix: []string{"open"}},
+			{name: "x-www-browser", names: []string{"x-www-browser"}},
+			{name: "sensible-browser", names: []string{"sensible-browser"}},
 		}
 	}
+}
+
+func (f Finder) env(key string) string {
+	if f.Getenv == nil {
+		return ""
+	}
+	return f.Getenv(key)
 }
 
 func (f Finder) isExecutable(path string) bool {
@@ -199,14 +192,20 @@ func (f Finder) isExecutable(path string) bool {
 	return f.GOOS == "windows" || info.Mode().Perm()&0o111 != 0
 }
 
-// Find resolves the browser to launch: an explicit browser_path first, then
-// Chrome, Edge, Brave and Chromium from their known install locations and PATH.
-// An explicit path that is unusable is an error, never a silent fall-through to
-// a browser the user did not choose.
+func (f Finder) lookPath(name string) (string, error) {
+	if f.LookPath == nil {
+		return "", exec.ErrNotFound
+	}
+	return f.LookPath(name)
+}
+
+// Find resolves what opens the tab: an explicit browser_path first, then the
+// platform opener. An explicit path that is unusable is an error, never a
+// silent fall-through to an opener the user did not choose.
 func (f Finder) Find(browserPath string) (Browser, error) {
 	if browserPath != "" {
 		if !filepath.IsAbs(browserPath) {
-			resolved, err := f.LookPath(browserPath)
+			resolved, err := f.lookPath(browserPath)
 			if err != nil {
 				return Browser{}, &NoBrowserError{Detail: fmt.Sprintf("%s %q is not an absolute path or a command on PATH", ConfigKey, browserPath)}
 			}
@@ -215,24 +214,25 @@ func (f Finder) Find(browserPath string) (Browser, error) {
 		if !f.isExecutable(browserPath) {
 			return Browser{}, &NoBrowserError{Detail: fmt.Sprintf("%s %q is not an executable file", ConfigKey, browserPath)}
 		}
+		// A browser executable handed a bare URL opens it in the instance the
+		// user already has running, as a tab.
 		return Browser{Name: filepath.Base(browserPath), Path: browserPath}, nil
 	}
 	var tried []string
-	for _, c := range f.candidates() {
+	for _, c := range f.openers() {
 		for _, p := range c.paths {
 			tried = append(tried, p)
 			if f.isExecutable(p) {
-				return Browser{Name: c.name, Path: p}, nil
+				return Browser{Name: c.name, Path: p, Prefix: c.prefix}, nil
 			}
 		}
 		for _, n := range c.names {
 			tried = append(tried, n)
-			if f.LookPath == nil {
+			p, err := f.lookPath(n)
+			if err != nil || !f.isExecutable(p) {
 				continue
 			}
-			if p, err := f.LookPath(n); err == nil && f.isExecutable(p) {
-				return Browser{Name: c.name, Path: p}, nil
-			}
+			return Browser{Name: c.name, Path: p, Prefix: c.prefix}, nil
 		}
 	}
 	return Browser{}, &NoBrowserError{Detail: "looked for " + strings.Join(tried, ", ")}
@@ -240,24 +240,19 @@ func (f Finder) Find(browserPath string) (Browser, error) {
 
 // --- launching --------------------------------------------------------------------
 
-// forbiddenArgs must never reach the browser: each one weakens the sandbox or
-// opens a control channel to another process.
+// forbiddenArgs must never reach a browser: each one weakens the sandbox or
+// opens a control channel to another process. Only a URL is passed today, so
+// this guards a browser_path that smuggles arguments in.
 var forbiddenArgs = []string{
 	"--no-sandbox", "--disable-web-security", "--remote-debugging-port", "--remote-debugging-pipe",
 }
 
-// Args returns the exact Chromium arguments. A dedicated --user-data-dir is
-// what makes the launched process the browser process: Chromium's process
-// singleton is keyed by profile directory, so a second window in the user's
-// everyday profile would hand off to the existing process and exit at once.
-func Args(appURL, profileDir string) []string {
-	return []string{
-		"--app=" + appURL,
-		"--new-window",
-		"--user-data-dir=" + profileDir,
-		"--no-first-run",
-		"--no-default-browser-check",
-	}
+// Args returns the exact argv after the executable: the opener's prefix, then
+// the URL.
+func Args(rawURL string, b Browser) []string {
+	args := make([]string, 0, len(b.Prefix)+1)
+	args = append(args, b.Prefix...)
+	return append(args, rawURL)
 }
 
 func validateLaunchURL(raw string) error {
@@ -272,31 +267,26 @@ func validateLaunchURL(raw string) error {
 type Options struct {
 	// URL is the loopback launch URL, fragment included.
 	URL string
-	// BrowserPath is the browser_path config value; empty searches.
+	// BrowserPath is the browser_path config value; empty uses the platform opener.
 	BrowserPath string
-	// ProfileRoot is where the throwaway profile directory is created; empty
-	// uses os.TempDir().
-	ProfileRoot string
 	// Finder overrides discovery (tests).
 	Finder *Finder
 	Logger *slog.Logger
 }
 
-// Window is a running dedicated window and the process that owns it.
+// Window is the opened tab, as far as this process can see it.
 type Window struct {
-	Browser    Browser
-	Args       []string
-	ProfileDir string
+	Browser Browser
+	Args    []string
 
 	cmd    *exec.Cmd
-	done   chan error
 	logger *slog.Logger
 
 	closeOnce sync.Once
 }
 
-// Launch starts the browser against opts.URL. It returns ErrNoBrowser (exit
-// code 3) when none is installed and never opens a tab in another browser.
+// Launch opens opts.URL as a tab. It returns ErrNoBrowser (exit code 3) when
+// no opener resolves.
 func Launch(opts Options) (*Window, error) {
 	if err := validateLaunchURL(opts.URL); err != nil {
 		return nil, err
@@ -309,19 +299,10 @@ func Launch(opts Options) (*Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	root := opts.ProfileRoot
-	if root == "" {
-		root = os.TempDir()
-	}
-	profile, err := os.MkdirTemp(root, "plan-forge-window-*") // 0700
-	if err != nil {
-		return nil, fmt.Errorf("create window profile: %w", err)
-	}
-	args := Args(opts.URL, profile)
+	args := Args(opts.URL, browser)
 	for _, a := range args {
 		for _, bad := range forbiddenArgs {
 			if strings.HasPrefix(a, bad) {
-				_ = os.RemoveAll(profile)
 				return nil, fmt.Errorf("refusing to launch with %s", bad)
 			}
 		}
@@ -332,17 +313,20 @@ func Launch(opts Options) (*Window, error) {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	setProcAttr(cmd)
 	if err := cmd.Start(); err != nil {
-		_ = os.RemoveAll(profile)
 		return nil, fmt.Errorf("start %s: %w", browser.Name, err)
 	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	w := &Window{Browser: browser, Args: args, ProfileDir: profile, cmd: cmd, done: make(chan error, 1), logger: logger}
+	w := &Window{Browser: browser, Args: args, cmd: cmd, logger: logger}
+	// Reap the opener. Its exit says nothing about the tab, so nothing is
+	// published: leaving a zombie for the life of a session would be the only
+	// effect of not waiting.
 	go func() {
-		w.done <- cmd.Wait()
-		close(w.done)
+		if werr := cmd.Wait(); werr != nil {
+			logger.Debug("the tab opener exited with an error", "opener", browser.Name, "err", werr)
+		}
 	}()
 	return w, nil
 }
@@ -360,37 +344,23 @@ func browserEnv(env []string) []string {
 	return out
 }
 
-// Done receives the browser process's exit status once, then closes.
-func (w *Window) Done() <-chan error { return w.done }
+// Done never delivers. The opener exits as soon as the browser has the URL, so
+// its exit is not the tab closing; treating it as one would end a session on
+// the first page refresh. Supervise reads a nil channel as "this signal does
+// not exist" and decides on the WebSocket alone.
+func (w *Window) Done() <-chan error { return nil }
 
-// Terminate stops the browser after the given delay (use PostApprovalClose
-// after an approval, zero to stop at once), then removes the profile.
+// Terminate waits out the given delay and returns. A tab in the user's own
+// browser is theirs to close: this process never kills it, which is also why
+// an explicit browser_path cannot be turned into a way to shut the user's
+// browser down. After an approval the page shows "Approved — safe to close",
+// and the delay is how long the binary stays up to deliver that frame.
 func (w *Window) Terminate(after time.Duration) {
 	w.closeOnce.Do(func() {
 		if after > 0 {
-			select {
-			case <-w.done:
-				w.removeProfile()
-				return
-			case <-time.After(after):
-			}
+			time.Sleep(after)
 		}
-		terminate(w.cmd, terminateGrace, w.done)
-		w.removeProfile()
 	})
-}
-
-// removeProfile deletes the throwaway profile, retrying briefly because the
-// browser may still be flushing files (and Windows holds locks) as it exits.
-func (w *Window) removeProfile() {
-	var err error
-	for range 10 {
-		if err = os.RemoveAll(w.ProfileDir); err == nil {
-			return
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	w.logger.Warn("could not remove window profile", "err", err)
 }
 
 // --- supervision --------------------------------------------------------------------
@@ -402,7 +372,7 @@ type Outcome int
 const (
 	// OutcomeContextDone means the caller's context ended first.
 	OutcomeContextDone Outcome = iota
-	// OutcomeWindowGone means the window closed and did not come back.
+	// OutcomeWindowGone means the tab closed and did not come back.
 	OutcomeWindowGone
 	// OutcomeNeverConnected means the page never opened its WebSocket.
 	OutcomeNeverConnected
@@ -420,22 +390,23 @@ func (o Outcome) String() string {
 	return "unknown"
 }
 
-// Signals are the two inputs to close detection.
+// Signals are the inputs to close detection.
 type Signals struct {
 	// UI carries the loopback bridge's WebSocket state: true when the UI
-	// connected, false when it disconnected. This is the primary signal.
+	// connected, false when it disconnected. This is the only signal a tab has.
 	UI <-chan bool
-	// Process receives the browser process's exit (Window.Done). This is the
-	// secondary signal.
+	// Process receives a launched process's exit. Launch leaves it nil, because
+	// the opener is not the browser; a caller that owns a browser process
+	// itself may still supply one.
 	Process <-chan error
 }
 
-// Supervise decides when the window is gone. The WebSocket is the source of
+// Supervise decides when the tab is gone. The WebSocket is the source of
 // truth: it must stay disconnected for the whole grace period, because a
 // refresh, a crash and a close all look the same at the socket. A process exit
 // while the socket is down needs no grace — nothing can reconnect — and a
-// process exit while the socket is still up (a browser that handed off to
-// another process) changes nothing until the socket drops.
+// process exit while the socket is still up (a launcher that handed off)
+// changes nothing until the socket drops.
 //
 // The returned error is nil only for OutcomeContextDone with a live context.
 func Supervise(ctx context.Context, sig Signals, grace, startupWait time.Duration) (Outcome, error) {
@@ -486,7 +457,7 @@ func Supervise(ctx context.Context, sig Signals, grace, startupWait time.Duratio
 			procGone = true
 			// Before the first connect the socket has not had its say: a
 			// launcher that hands off exits before the page connects, and
-			// the startup timer already covers a window that never shows.
+			// the startup timer already covers a tab that never shows.
 			if everConnected && !connected {
 				return OutcomeWindowGone, ErrWindowClosed
 			}

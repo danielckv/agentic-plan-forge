@@ -39,7 +39,7 @@ type DetachResult struct {
 }
 
 // StartDetached spawns `__session-child` in its own session/process group,
-// waits up to 30 seconds for the dedicated window to connect (PhaseRunning) or
+// waits up to 30 seconds for the browser tab to connect (PhaseRunning) or
 // for the child to reach a terminal state, and returns the session id or the
 // terminal failure.
 func StartDetached(ctx context.Context, opts Options) DetachResult {
@@ -141,7 +141,7 @@ func StartDetached(ctx context.Context, opts Options) DetachResult {
 		}
 		if time.Now().After(deadline) {
 			killGroup(cmd)
-			msg := "startup_timeout: the Plan-Forge window did not connect within 30s"
+			msg := "startup_timeout: the Plan-Forge tab did not connect within 30s"
 			_ = WriteState(SessionState{
 				SessionID: id, PID: childPID, State: PhaseFailed,
 				ExitCode: ExitFailure, Message: msg,
