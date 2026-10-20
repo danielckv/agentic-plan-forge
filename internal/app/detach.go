@@ -84,6 +84,10 @@ func StartDetached(ctx context.Context, opts Options) DetachResult {
 	if opts.Host != "" {
 		childArgs = append(childArgs, "--host", opts.Host)
 	}
+	if opts.BriefPath != "" {
+		// The path, not the brief itself: argv is readable by other local users.
+		childArgs = append(childArgs, "--brief", opts.BriefPath)
+	}
 	cmd := exec.Command(exe, childArgs...)
 	cmd.Dir = repo
 	cmd.Stdin = nil
