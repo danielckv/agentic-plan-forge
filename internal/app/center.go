@@ -18,6 +18,7 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/applock"
 	"github.com/danielckv/agentic-plan-forge/internal/center"
 	"github.com/danielckv/agentic-plan-forge/internal/config"
+	"github.com/danielckv/agentic-plan-forge/internal/livestore"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 	webui "github.com/danielckv/agentic-plan-forge/web"
 )
@@ -473,6 +474,8 @@ type CenterRecord struct {
 	DirtyFiles []string `json:"dirty_files,omitempty"`
 	Kind       string   `json:"kind"`
 	Detail     string   `json:"detail,omitempty"`
+	// Swarm is the harness's swarm snapshot, when it publishes one.
+	Swarm *livestore.Swarm `json:"swarm,omitempty"`
 }
 
 // CenterReport posts one record to a running command center.
@@ -484,8 +487,13 @@ type CenterRecord struct {
 // is refused in about a millisecond and the record is simply dropped.
 func CenterReport(ctx context.Context, rec CenterRecord) error {
 	rec.Repo = strings.TrimSpace(rec.Repo)
-	if rec.Repo == "" || rec.SessionID == "" || rec.Kind == "" {
-		return errors.New("center: repo, session id and kind are required")
+	if rec.Repo == "" || rec.SessionID == "" {
+		return errors.New("center: repo and session id are required")
+	}
+	// A kind is what makes a record an event. A swarm snapshot is state
+	// instead, and is the one record allowed to arrive without one.
+	if rec.Kind == "" && rec.Swarm == nil {
+		return errors.New("center: a record needs an event kind or a swarm snapshot")
 	}
 	held, up := CenterHolder()
 	if !up {

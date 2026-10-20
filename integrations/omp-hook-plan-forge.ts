@@ -20,6 +20,22 @@ const BIN = "{{PLAN_FORGE_BIN}}";
 const STATUS_KEY = "plan-forge";
 const BOARD_CUSTOM_TYPE = "plan-forge-board";
 
+// The oh-my-pi swarm protocol channel this hook consumes. Plan-Forge is a
+// consumer of that protocol, not its owner: the channel name and the payload
+// field names below are the integration surface, and the payload is forwarded
+// to `plan-forge swarm report` as-is rather than restated in Plan-Forge's own
+// vocabulary. An unknown field is ignored, so a harness that adds one does not
+// break this hook.
+const SWARM_STATUS_CHANNEL = "assistant:status";
+
+// Snapshots are published on change, which during a parallel dispatch can mean
+// several in a row. One report per window is enough for a panel a human reads.
+const SWARM_REPORT_INTERVAL_MS = 1_000;
+
+// A snapshot far over this is not the protocol's payload; it is dropped rather
+// than handed to a subprocess argument.
+const SWARM_MAX_JSON = 32 * 1024;
+
 export interface ExecResult {
   code: number;
   stdout: string;
@@ -37,6 +53,8 @@ export interface HookDeps {
   waitRetryDelayMs?: number;
   /** Budget for the command center launch; tests shrink it. */
   centerEnsureMs?: number;
+  /** Window a burst of swarm snapshots coalesces into; tests shrink it. */
+  swarmCoalesceMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -83,6 +101,8 @@ interface PiLike {
   ): void;
   on(event: string, handler: (event: unknown, ctx: CtxLike) => unknown): void;
   sendUserMessage?(text: string): unknown;
+  /** OMP's extension event bus, where the swarm protocol is published. */
+  events?: { on(channel: string, handler: (payload: unknown) => void): void };
 }
 
 interface SyncState {
@@ -97,6 +117,7 @@ export const defaultDeps: HookDeps = {
   syncIntervalMs: 4_000,
   waitTimeout: "50s",
   centerEnsureMs: 3_000,
+  swarmCoalesceMs: SWARM_REPORT_INTERVAL_MS,
 };
 
 const WAIT_MAX_MS = 6 * 60 * 60 * 1000;
@@ -513,6 +534,9 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
   const state: SyncState = { ctx: null, timer: null, inFlight: false, shutdown: false };
   // Recently reported edit paths, for the 10 s activity dedupe.
   const recentEdits = new Map<string, number>();
+  // The coalescing window for swarm snapshots; see the subscription below.
+  let swarmPending: string | null = null;
+  let swarmTimer: ReturnType<typeof setTimeout> | null = null;
 
   pi.on("session_shutdown", () => {
     // Stop the wait loop and drop the (now stale) ctx so no late callback
@@ -525,10 +549,19 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
     }
     state.timer = null;
     state.ctx = null;
+    if (swarmTimer !== null) {
+      clearTimeout(swarmTimer);
+      swarmTimer = null;
+    }
+    swarmPending = null;
   });
 
   pi.on("session_start", async (_event: unknown, ctx: CtxLike) => {
     state.shutdown = false;
+    // Hold the context from the first event, not from the first board sync:
+    // the swarm subscription below reports against it, and a session that
+    // never opens the board still has a swarm worth showing.
+    state.ctx = ctx;
     // Start the command center daemon, without awaiting it: the status banner
     // below can take a moment, and the daemon must not hold it up. No --open:
     // starting a session is not asking to look at a dashboard. The daemon is
@@ -651,6 +684,56 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
       // Capture is best-effort.
     }
   };
+
+  // The swarm panel: forward each `assistant:status` snapshot to the store the
+  // board reads. The protocol already emits on change only; this coalesces a
+  // burst during a parallel dispatch into one report per window, and keeps the
+  // newest snapshot rather than the first, because a panel showing a human
+  // what is running now must not show them what was running a second ago.
+  const flushSwarm = (): void => {
+    swarmTimer = null;
+    const payload = swarmPending;
+    swarmPending = null;
+    const ctx = state.ctx;
+    if (!payload || !ctx || state.shutdown) return;
+    try {
+      execPlanForge(
+        pi,
+        [
+          "swarm", "report",
+          "--repo", ctx.cwd,
+          "--session", `omp:${sessionIdOf(ctx)}`,
+          "--harness", "omp",
+          "--json", payload,
+        ],
+        deps.centerEnsureMs ?? 3_000,
+      ).catch(() => {
+        // The panel is the least important thing in this process.
+      });
+    } catch {
+      // The panel is the least important thing in this process.
+    }
+  };
+  try {
+    pi.events?.on(SWARM_STATUS_CHANNEL, (payload: unknown) => {
+      try {
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+        if (state.shutdown || !state.ctx) return;
+        const json = JSON.stringify(payload);
+        if (!json || json.length > SWARM_MAX_JSON) return;
+        swarmPending = json;
+        if (swarmTimer !== null) return;
+        swarmTimer = setTimeout(flushSwarm, deps.swarmCoalesceMs ?? SWARM_REPORT_INTERVAL_MS);
+        if (typeof swarmTimer === "object" && swarmTimer !== null && "unref" in swarmTimer) {
+          (swarmTimer as { unref(): void }).unref();
+        }
+      } catch {
+        // A snapshot this hook cannot read is not worth a word.
+      }
+    });
+  } catch {
+    // An OMP without the event bus simply has no swarm panel.
+  }
 
   // Skill path: the model ran `plan-forge wait` itself and it approved.
   // Capture path: a successful edit-like tool reports its path to the board.

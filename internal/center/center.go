@@ -483,6 +483,9 @@ type IngestRequest struct {
 	DirtyFiles []string `json:"dirty_files,omitempty"`
 	Kind       string   `json:"kind"`
 	Detail     string   `json:"detail,omitempty"`
+	// Swarm is the harness's own swarm snapshot, when it publishes one. The
+	// store sanitizes and bounds every field of it.
+	Swarm *livestore.Swarm `json:"swarm,omitempty"`
 }
 
 // handleIngest records one report and pushes the new snapshot to every tab.
@@ -504,6 +507,19 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unusable repository path")
 		return
 	}
+	// A report carrying a swarm snapshot and no event kind is a state update:
+	// it refreshes the panel without spending an entry of the bounded log.
+	if req.Swarm != nil && strings.TrimSpace(req.Kind) == "" {
+		if _, err := store.RecordSwarm(req.SessionID, req.Harness, *req.Swarm); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		if snap, serr := s.snapshot(); serr == nil {
+			s.hub.broadcast("snapshot", snap)
+		}
+		return
+	}
 	mode := livestore.Mode(req.Mode)
 	if mode != livestore.ModePlanned {
 		mode = livestore.ModeUnplanned
@@ -512,6 +528,7 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		SessionID: req.SessionID, Harness: req.Harness, Developer: req.Developer,
 		Branch: req.Branch, Mode: mode, TaskID: req.TaskID, Tool: req.Tool,
 		Command: req.Command, DirtyFiles: req.DirtyFiles, Kind: req.Kind, Detail: req.Detail,
+		Swarm: req.Swarm,
 	}); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return

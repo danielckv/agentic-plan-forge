@@ -160,7 +160,10 @@ func TestBoardSnapshotShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertKeys(t, "snapshot", top, "repo", "title", "manifest_sha256", "approved", "status", "verified", "total",
-		"revision", "host", "evaluated_at", "drift", "tasks", "consumers", "discoveries", "coordinator")
+		"revision", "host", "evaluated_at", "drift", "tasks", "consumers", "discoveries", "coordinator", "swarm")
+	if got := top["swarm"].([]any); len(got) != 0 {
+		t.Errorf("swarm = %v, want none: buildBoardSnapshot is pure over the plan, the live sessions are added after it", got)
+	}
 	assertKeys(t, "coordinator", top["coordinator"].(map[string]any), "active", "next_up", "updated_at")
 	if got := top["discoveries"].([]any); len(got) != 0 {
 		t.Errorf("discoveries = %v, want none", got)
