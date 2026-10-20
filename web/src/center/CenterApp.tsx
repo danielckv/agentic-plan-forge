@@ -66,10 +66,8 @@ function Parked(): React.JSX.Element {
         The command center hands each tab a single-use launch ticket, so it will not start a session
         for a tab that arrived on its own. Open one from your terminal:
       </p>
-      <pre className="pf-center-code">plan-forge center ensure --open</pre>
-      <p className="pf-caption">
-        It starts the daemon if it is not running, and reuses the tab you already have open.
-      </p>
+      <pre className="pf-center-code">plan-forge center open</pre>
+      <p className="pf-caption">It starts the daemon if it is not running, then opens a tab on it.</p>
     </div>
   );
 }
