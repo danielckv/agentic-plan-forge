@@ -1,1 +1,0 @@
-{"timestamp":"2026-10-17T22:09:12Z","host":"h-18d50664e1b5","session":"","task_id":"","agent":"claude","branch":"main","subject":"fix(ci): pin web typescript to 5.9.3 to unbreak npm ci","files":[".github/dependabot.yml","web/package-lock.json","web/package.json"],"gate":"UNVERIFIED"}
