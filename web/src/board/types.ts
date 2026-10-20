@@ -92,6 +92,49 @@ export interface BoardConsumer {
   seen_at: string;
 }
 
+/**
+ * Why a session shows no agents. `live`: snapshots are arriving. `silent`: the
+ * harness speaks the swarm protocol but has published nothing yet. `none`: the
+ * harness has no swarm channel to ask — Claude Code reports tool telemetry
+ * only, and an empty swarm there would read as idle rather than as unknown.
+ */
+export type SwarmChannel = "live" | "silent" | "none";
+
+/** One live subagent, as the harness itself reports it. */
+export interface SwarmAgent {
+  id: string;
+  agent: string;
+  employee?: string;
+  task: string;
+}
+
+/** The harness's own view of what it is doing. */
+export interface Swarm {
+  word: string;
+  waiting_on_user: boolean;
+  task_id?: string;
+  stage?: string;
+  dispatch?: string;
+  epic?: string;
+  current_task?: string;
+  active_agents: number;
+  agents: SwarmAgent[];
+  at: string;
+}
+
+/** One live harness session on this machine. */
+export interface BoardSwarmSession {
+  id: string;
+  harness: string;
+  repo: string;
+  branch?: string;
+  this_repo: boolean;
+  stale: boolean;
+  channel: SwarmChannel;
+  /** Present only when `channel` is `live`. */
+  swarm?: Swarm;
+}
+
 export interface BoardSnapshot {
   repo: string;
   title: string;
@@ -110,6 +153,8 @@ export interface BoardSnapshot {
   discoveries: BoardDiscovery[];
   /** C11. Defaults to an empty coordinator when an older server omits it. */
   coordinator: BoardCoordinator;
+  /** Live harness sessions. Defaults to `[]` when an older server omits it. */
+  swarm: BoardSwarmSession[];
 }
 
 export type SnapshotValidation =
@@ -363,6 +408,49 @@ function validConsumer(value: unknown): value is BoardConsumer {
   );
 }
 
+function validSwarmAgent(value: unknown): value is SwarmAgent {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const agent = value as Record<string, unknown>;
+  return (
+    isString(agent.id) &&
+    isString(agent.agent) &&
+    isString(agent.task) &&
+    (agent.employee === undefined || isString(agent.employee))
+  );
+}
+
+function validSwarm(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const swarm = value as Record<string, unknown>;
+  if (!isString(swarm.word) || typeof swarm.waiting_on_user !== "boolean") return false;
+  if (!isNonNegativeInteger(swarm.active_agents) || !isString(swarm.at)) return false;
+  for (const key of ["task_id", "stage", "dispatch", "epic", "current_task"]) {
+    if (swarm[key] !== undefined && !isString(swarm[key])) return false;
+  }
+  const agents: unknown = swarm.agents;
+  if (agents === undefined || agents === null) return true;
+  return Array.isArray(agents) && agents.every(validSwarmAgent);
+}
+
+function validSwarmSession(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const session = value as Record<string, unknown>;
+  if (!isString(session.id) || !isString(session.harness) || !isString(session.repo)) return false;
+  if (typeof session.this_repo !== "boolean" || typeof session.stale !== "boolean") return false;
+  if (session.branch !== undefined && !isString(session.branch)) return false;
+  if (session.channel !== "live" && session.channel !== "silent" && session.channel !== "none") {
+    return false;
+  }
+  if (session.swarm === undefined || session.swarm === null) return true;
+  return validSwarm(session.swarm);
+}
+
+function normalizeSwarmSession(value: Record<string, unknown>): BoardSwarmSession {
+  const { swarm, ...session } = value as unknown as BoardSwarmSession;
+  if (!swarm) return session;
+  return { ...session, swarm: { ...swarm, agents: swarm.agents ?? [] } };
+}
+
 /**
  * Validate every field the fixed C5/C11 snapshot contract exposes before it
  * reaches React. C11 fields are optional (older servers) but strict when sent;
@@ -438,6 +526,15 @@ export function validateBoardSnapshot(value: unknown): SnapshotValidation {
     };
   }
 
+  const rawSwarm: unknown = (value as Record<string, unknown>).swarm;
+  let swarm: BoardSwarmSession[] = [];
+  if (rawSwarm !== undefined && rawSwarm !== null) {
+    if (!Array.isArray(rawSwarm) || !rawSwarm.every(validSwarmSession)) {
+      return { ok: false, error: "swarm is malformed" };
+    }
+    swarm = (rawSwarm as Array<Record<string, unknown>>).map(normalizeSwarmSession);
+  }
+
   return {
     ok: true,
     value: {
@@ -445,6 +542,7 @@ export function validateBoardSnapshot(value: unknown): SnapshotValidation {
       tasks: snapshot.tasks.map(normalizeTask),
       discoveries,
       coordinator,
+      swarm,
     },
   };
 }

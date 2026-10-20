@@ -107,6 +107,7 @@ const GOOD_SNAPSHOT: BoardSnapshot = {
   tasks: TASKS,
   consumers: [{ id: "claude:test", delivered_revision: 6, seen_at: "2026-10-19T12:00:00Z" }],
   discoveries: [],
+  swarm: [],
   coordinator: { active: [], next_up: [], updated_at: "" },
 };
 

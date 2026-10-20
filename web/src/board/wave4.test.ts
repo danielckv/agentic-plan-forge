@@ -64,6 +64,7 @@ function snapshot(extra: Partial<BoardSnapshot> = {}): BoardSnapshot {
     consumers: [],
     discoveries: [discovery("D-1"), discovery("D-2", { kind: "path", status: "dismissed" })],
     coordinator: { active: [], next_up: ["T-1", "T-2"], updated_at: "2026-10-19T11:59:50Z" },
+    swarm: [],
     ...extra,
   };
 }
@@ -77,6 +78,7 @@ function legacyWire(): Record<string, unknown> {
   const wire = JSON.parse(JSON.stringify(snapshot())) as Record<string, unknown>;
   delete wire.discoveries;
   delete wire.coordinator;
+  delete wire.swarm;
   for (const entry of wire.tasks as Array<Record<string, unknown>>) {
     delete entry.live;
     delete entry.awaiting_verification;
