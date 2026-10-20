@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
+### Added
+
+- A brief intake in `/plan-forge`, run before the window opens. The forge deliberates on what it is given, so a vague brief buys a confident plan for the wrong work, and that cost is only visible after a full multi-avatar run. The skill now offers `skip` up front so the interview is never a toll gate, then asks one open question per message in the user's own vocabulary, and closes with a 200-300 word playback that prefixes every inference with `Guess:` and lists the agent's own choices under `My calls:`. Nothing launches until that playback has been answered once.
+- `plan-forge run --brief <file>` seeds the shared PRD document, so the ingestion view opens on the agreed brief and `interpret()` normalizes it instead of a blank page. It is solo-only and says so: a remote session takes its document from the relay, and silently dropping the brief there would be worse than refusing it. `StartDetached` forwards the path rather than the text, because argv is readable by other local users. The file must be non-empty valid UTF-8 under 128 KiB; a requirements corpus still belongs in the ingestion view, which parses and normalizes documents.
+
+### Fixed
+
+- A planning run no longer ends seconds after the avatars start with "the Plan-Forge window was closed without an approval" and exit 130, with the window still open. Four defects chained. `Bridge.Send` destroys the UI socket when its write queue overflows, and every caller discarded the returned `ErrUIBackpressure`, so the room kept writing into a destroyed socket with nothing logged. A page reconnecting while the old socket ran its closing handshake was refused with HTTP 409, burning the supervisor's grace. The resync that repairs a reconnected window replayed up to `replayWindow` frames into a queue a fraction of that depth, destroying the socket it was catching up. A live second window is still refused; only a socket already closing is displaced, and a displaced socket no longer reports a late disconnect over its replacement.
+- Stage payloads are bounded. Output always was, but the user payload was not, so a stage could hand the provider more than the model's context window and be killed mid-call with no diagnosable error — one observed run reached 807,320 tokens against a 922,000-token window. An oversized payload now reports `ErrBound` with the limit and the observed size instead of reaching the provider, and a repair drops the rejected output, whose problems the problem list already names, rather than doubling a payload that is merely large.
+
+### Changed
+
+- The README is a landing page. It had grown to 419 lines and carried version archaeology on the front page of a public repository: which features shipped in which release, and which failures an earlier release still had. That belongs in this file. Install, usage, the command center, the board and configuration moved into `docs/`, and the duplicated local-check block is gone because `CONTRIBUTING.md` already carries a fuller one and is named as the source of truth.
+- `.agents/` is untracked. `.gitignore` had listed it all along, but an ignore rule does not untrack files already committed, so agent state stayed in the tree. The files remain in history; removing them from past commits is a separate, force-pushing operation.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added
@@ -133,7 +150,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.1...v0.1.2
