@@ -248,6 +248,13 @@ func (o *orchestrator) attempt(ctx context.Context, sp stageSpec, req contracts.
 // backoff starting at one second. A failure after partial output is never
 // retried: the caller must ask explicitly, so the same work is not billed twice.
 func (o *orchestrator) generate(ctx context.Context, sp stageSpec, payload json.RawMessage) (json.RawMessage, error) {
+	if len(payload) > contracts.MaxStagePayloadBytes {
+		return nil, &genFailure{Err: &contracts.ErrBound{
+			Name:     sp.avatar + " payload",
+			Limit:    contracts.MaxStagePayloadBytes,
+			Observed: int64(len(payload)),
+		}}
+	}
 	req := o.request(sp, payload)
 	for attemptNo := 0; ; attemptNo++ {
 		if err := ctx.Err(); err != nil {
@@ -331,7 +338,18 @@ func repairPayload(input, previous json.RawMessage, err error) json.RawMessage {
 	if merr != nil {
 		return input
 	}
-	return raw
+	if len(raw) <= contracts.MaxStagePayloadBytes {
+		return raw
+	}
+	// The rejected output is the one droppable part: the problem list already
+	// names every change, so repair still has what it needs. Keeping it here
+	// would push a payload that is merely large past the bound.
+	r.Repair.PreviousOutput, r.Repair.PreviousText = nil, ""
+	trimmed, merr := json.Marshal(r)
+	if merr != nil {
+		return input
+	}
+	return trimmed
 }
 
 // runStage runs one stage: call the provider, validate, and repair once with

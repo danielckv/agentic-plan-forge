@@ -52,6 +52,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -64,7 +65,7 @@ const (
 	bridgeNonceTTL     = 10 * time.Second
 	bridgeAuthDeadline = 5 * time.Second
 	bridgeWriteTimeout = 5 * time.Second
-	bridgeQueueDepth   = 256
+	bridgeQueueDepth   = UIQueueDepth
 	bridgeTokenBytes   = 32
 	bridgeNonceBytes   = 16
 
@@ -153,20 +154,39 @@ type Bridge struct {
 
 // uiConn is the single authenticated UI socket.
 type uiConn struct {
-	conn   *websocket.Conn
-	out    chan []byte
-	ctx    context.Context
-	cancel context.CancelFunc
-	once   sync.Once
+	conn    *websocket.Conn
+	out     chan []byte
+	ctx     context.Context
+	cancel  context.CancelFunc
+	once    sync.Once
+	closing atomic.Bool
 }
 
+// close starts the teardown. It marks the socket closing first, because
+// websocket.Close runs the closing handshake and only returns once the peer
+// answers; a page that reconnects during that window must displace this socket
+// rather than be refused with 409 for a connection that is already gone.
 func (u *uiConn) close(code websocket.StatusCode, reason string) {
 	u.once.Do(func() {
+		u.closing.Store(true)
 		go func() {
 			_ = u.conn.Close(code, reason)
 			u.cancel()
 		}()
 	})
+}
+
+// claimLocked takes the UI slot for conn, displacing a socket that is already
+// tearing down. It reports whether the slot was free. b.mu must be held.
+func (b *Bridge) claimLocked(conn *uiConn) bool {
+	if b.ui != nil && b.ui.closing.Load() {
+		b.ui = nil
+	}
+	if b.ui != nil {
+		return false
+	}
+	b.ui = conn
+	return true
 }
 
 // NewBridge binds 127.0.0.1:0 and prepares the routes. Call LaunchURL to mint
@@ -452,11 +472,12 @@ func (b *Bridge) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b.mu.Lock()
-	busy := b.ui != nil
+	busy := b.ui != nil && !b.ui.closing.Load()
 	b.mu.Unlock()
 	if busy {
 		// One active UI socket: a second window or tab is refused, not
-		// allowed to steal the session.
+		// allowed to steal the session. A socket that is already closing is
+		// not active and does not refuse the page reconnecting onto it.
 		bridgeError(w, http.StatusConflict, "another window is already connected")
 		return
 	}
@@ -490,14 +511,13 @@ func (b *Bridge) handleWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ui := &uiConn{conn: c, out: make(chan []byte, bridgeQueueDepth), ctx: ctx, cancel: cancel}
 	b.mu.Lock()
-	if b.ui != nil {
-		b.mu.Unlock()
+	claimed := b.claimLocked(ui)
+	b.mu.Unlock()
+	if !claimed {
 		cancel()
 		_ = c.Close(websocket.StatusPolicyViolation, "another window is already connected")
 		return
 	}
-	b.ui = ui
-	b.mu.Unlock()
 
 	go b.uiWriter(ui)
 	ui.out <- []byte(`{"type":"auth.ok"}`)
@@ -506,12 +526,18 @@ func (b *Bridge) handleWS(w http.ResponseWriter, r *http.Request) {
 	b.uiReader(ui)
 
 	b.mu.Lock()
-	if b.ui == ui {
+	current := b.ui == ui
+	if current {
 		b.ui = nil
 	}
 	b.mu.Unlock()
 	ui.close(websocket.StatusNormalClosure, "bye")
-	b.emit(false)
+	// A displaced socket must stay silent: its replacement already reported the
+	// window as up, and a late disconnect here would start the supervisor's
+	// grace timer against a live window and end the session at exit 130.
+	if current {
+		b.emit(false)
+	}
 }
 
 func (b *Bridge) uiReader(ui *uiConn) {

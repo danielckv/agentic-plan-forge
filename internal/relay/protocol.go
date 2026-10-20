@@ -23,6 +23,11 @@ import (
 // while still refusing unbounded input.
 const MaxFrameBytes = 4 << 20
 
+// UIQueueDepth is how many frames the loopback bridge queues for the window
+// before it gives up on a page that has stopped draining. Producers that emit
+// a burst must stay under it: overrunning the queue destroys the socket.
+const UIQueueDepth = 256
+
 // SessionMode selects how a session is hosted.
 type SessionMode string
 
