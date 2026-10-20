@@ -51,6 +51,14 @@ type Options struct {
 	// Mode selects Solo or Remote hosting.
 	Mode   relay.SessionMode
 	Config config.Config
+	// Brief seeds the shared PRD document in Solo mode: the text an invoking
+	// skill agreed with the user before launch, so the ingestion view opens on
+	// it instead of a blank page. Remote sessions take their document from the
+	// relay, so the caller is refused rather than silently ignored.
+	Brief string
+	// BriefPath is the file Brief was read from. StartDetached forwards the
+	// path, never the text: argv is readable by other local users.
+	BriefPath string
 	// Detached is true for the __session-child: nothing is printed to a terminal
 	// and the window-startup wait outlasts the parent's.
 	Detached bool
@@ -306,7 +314,7 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 		onMessage, windowGone, onWindowLeft = link.HandleUI, link.windowGone, link.Leave
 		go link.Run(ctx)
 	default:
-		rm := newRoom(id, nil, deliver, log)
+		rm := newRoom(id, nil, deliver, log, opts.Brief)
 		defer rm.close()
 		s.room, s.auth = rm, soloAuthority{rm}
 		execCfg.Auth = s.auth

@@ -135,7 +135,10 @@ type room struct {
 	events  *pump
 }
 
-func newRoom(id string, clock func() time.Time, deliver func([]byte) error, logger *slog.Logger) *room {
+// newRoom builds the Solo authority. brief seeds the shared PRD document, so a
+// brief agreed with the user before launch is what the ingestion view opens on
+// and what interpret() normalizes; empty starts the document blank.
+func newRoom(id string, clock func() time.Time, deliver func([]byte) error, logger *slog.Logger, brief string) *room {
 	if clock == nil {
 		clock = time.Now
 	}
@@ -144,7 +147,7 @@ func newRoom(id string, clock func() time.Time, deliver func([]byte) error, logg
 	}
 	r := &room{
 		id: id, clock: clock, deliver: deliver, logger: logger,
-		reducer: session.New(clock), doc: collab.NewAuthority(""),
+		reducer: session.New(clock), doc: collab.NewAuthority(brief),
 		log: newFrameLog(), local: map[string][]byte{}, events: newPump(),
 	}
 	r.reducer.Join(ownerMemberID, session.RoleOwner)

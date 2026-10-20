@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/danielckv/agentic-plan-forge/internal/app"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
@@ -40,15 +42,17 @@ func parseSessionMode(raw string) (relay.SessionMode, error) {
 
 func runRun(ctx context.Context, args []string) int {
 	var (
-		repoFlag string
-		hostFlag string
-		modeFlag string
-		detach   bool
+		repoFlag  string
+		hostFlag  string
+		modeFlag  string
+		briefFlag string
+		detach    bool
 	)
 	fs, err := parseFlags("run", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&repoFlag, "repo", "", "repository path (default: cwd's repository root)")
 		fs.StringVar(&hostFlag, "host", "", "invoking host kind (claude, omp, agy)")
 		fs.StringVar(&modeFlag, "mode", "solo", "session mode: solo|remote")
+		fs.StringVar(&briefFlag, "brief", "", "Markdown file seeding the shared PRD document (solo mode only)")
 		fs.BoolVar(&detach, "detach", false, "run in a background session and print {\"session_id\":\"...\"}")
 	})
 	if err != nil {
@@ -63,6 +67,18 @@ func runRun(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "run: %v\n", err)
 		return exitUsage
 	}
+	brief, err := readBrief(briefFlag, mode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "run: %v\n", err)
+		return exitUsage
+	}
+	var briefPath string
+	if brief != "" {
+		if briefPath, err = filepath.Abs(briefFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "run: resolve brief path: %v\n", err)
+			return exitUsage
+		}
+	}
 	cfg, err := loadConfig()
 	if err != nil {
 		return fail(err)
@@ -71,6 +87,8 @@ func runRun(ctx context.Context, args []string) int {
 		Repo:              repoFlag,
 		Host:              strings.ToLower(strings.TrimSpace(hostFlag)),
 		Mode:              mode,
+		Brief:             brief,
+		BriefPath:         briefPath,
 		Config:            cfg,
 		Stdout:            os.Stdout,
 		Stderr:            os.Stderr,
@@ -103,12 +121,14 @@ func runSessionChild(ctx context.Context, args []string) int {
 		repoFlag  string
 		hostFlag  string
 		modeFlag  string
+		briefFlag string
 	)
 	fs, err := parseFlags("__session-child", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&sessionID, "session", "", "session UUIDv4")
 		fs.StringVar(&repoFlag, "repo", "", "repository path")
 		fs.StringVar(&hostFlag, "host", "", "invoking host kind")
 		fs.StringVar(&modeFlag, "mode", "solo", "session mode: solo|remote")
+		fs.StringVar(&briefFlag, "brief", "", "Markdown file seeding the shared PRD document")
 	})
 	if err != nil || fs.NArg() != 0 || !app.ValidSessionID(sessionID) {
 		return exitUsage
@@ -116,6 +136,10 @@ func runSessionChild(ctx context.Context, args []string) int {
 	mode, err := parseSessionMode(modeFlag)
 	if err != nil {
 		return exitUsage
+	}
+	brief, err := readBrief(briefFlag, mode)
+	if err != nil {
+		return fail(err)
 	}
 	cfg, err := loadConfig()
 	if err != nil {
@@ -133,6 +157,7 @@ func runSessionChild(ctx context.Context, args []string) int {
 		Repo:      repoFlag,
 		Host:      strings.ToLower(strings.TrimSpace(hostFlag)),
 		Mode:      mode,
+		Brief:     brief,
 		Config:    cfg,
 		Detached:  true,
 		Logger:    logger,
@@ -306,4 +331,41 @@ func runInvite(ctx context.Context, args []string) int {
 		fmt.Println(url)
 	}
 	return exitOK
+}
+
+// maxBriefBytes bounds a --brief file. The brief is a page of prose agreed
+// with the user, not a requirements corpus: documents belong in the ingestion
+// view, which parses and normalizes them.
+const maxBriefBytes = 128 << 10
+
+// readBrief loads the --brief file. Remote sessions take their document from
+// the relay, so a brief there is refused rather than silently dropped.
+func readBrief(path string, mode relay.SessionMode) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", nil
+	}
+	if mode != relay.ModeSolo {
+		return "", errors.New("--brief applies to solo sessions; a remote session takes its document from the relay")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("read brief: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("read brief: %s is a directory", path)
+	}
+	if info.Size() > maxBriefBytes {
+		return "", fmt.Errorf("read brief: %s is %d bytes, over the %d byte limit", path, info.Size(), maxBriefBytes)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read brief: %w", err)
+	}
+	if !utf8.Valid(raw) {
+		return "", fmt.Errorf("read brief: %s is not valid UTF-8", path)
+	}
+	if strings.TrimSpace(string(raw)) == "" {
+		return "", fmt.Errorf("read brief: %s is empty", path)
+	}
+	return string(raw), nil
 }

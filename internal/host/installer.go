@@ -211,7 +211,7 @@ func planModeHint(kind string) string {
 	}
 }
 
-// planModeStep returns the per-host {{PLAN_MODE_STEP}} text for skill step 5:
+// planModeStep returns the per-host {{PLAN_MODE_STEP}} text for skill step 7:
 // how the agent enters plan mode once the forge approves. Claude drives the
 // EnterPlanMode tool itself; OMP gets the plan-mode session from the
 // hook-registered /plan-forge command; AGY keeps the manual hint.

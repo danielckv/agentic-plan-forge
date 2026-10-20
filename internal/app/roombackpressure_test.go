@@ -27,7 +27,7 @@ func TestSendLockedStopsPushingAtAnUnreachableWindow(t *testing.T) {
 			r := newRoom("session", nil, func([]byte) error {
 				calls++
 				return tc.err
-			}, quietLogger())
+			}, quietLogger(), "")
 			defer r.close()
 
 			r.live = true
@@ -44,7 +44,7 @@ func TestSendLockedStopsPushingAtAnUnreachableWindow(t *testing.T) {
 
 // A window that is keeping up stays live.
 func TestSendLockedKeepsALiveWindowLive(t *testing.T) {
-	r := newRoom("session", nil, func([]byte) error { return nil }, quietLogger())
+	r := newRoom("session", nil, func([]byte) error { return nil }, quietLogger(), "")
 	defer r.close()
 
 	r.live = true
@@ -93,5 +93,31 @@ func TestMissedReplaysAShortTailExactly(t *testing.T) {
 	}
 	if got := len(l.missed(2)); got != 3 {
 		t.Fatalf("missed(2) returned %d frames, want the exact tail of 3", got)
+	}
+}
+
+// The brief agreed with the user before launch must be what the ingestion view
+// opens on and what interpret() normalizes, not a blank page.
+func TestNewRoomSeedsTheSharedDocumentWithTheBrief(t *testing.T) {
+	const brief = "# Brief\n\nAdd rate limiting to the public API.\n"
+	r := newRoom("session", nil, func([]byte) error { return nil }, quietLogger(), brief)
+	defer r.close()
+
+	text, version := r.Doc()
+	if text != brief {
+		t.Fatalf("shared document = %q, want the brief", text)
+	}
+	if version != 0 {
+		t.Fatalf("seeded document is at version %d, want 0 so the first edit is version 1", version)
+	}
+}
+
+// No brief still starts blank.
+func TestNewRoomWithoutABriefStartsBlank(t *testing.T) {
+	r := newRoom("session", nil, func([]byte) error { return nil }, quietLogger(), "")
+	defer r.close()
+
+	if text, _ := r.Doc(); text != "" {
+		t.Fatalf("shared document = %q, want empty", text)
 	}
 }
