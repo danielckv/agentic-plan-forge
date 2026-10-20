@@ -1,0 +1,4 @@
+*
+!.gitignore
+!synthesized_spec.md
+!plan_manifest.json
