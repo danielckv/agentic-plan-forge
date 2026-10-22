@@ -1,10 +1,10 @@
 # Plan-Forge requirements catalogue
 
-Catalogue standard: every requirement is a single sentence of the form `{Actor/subsystem} shall {behaviour}`. IDs are `REQ-<AREA>-<nnn>`, stable, three-digit, and never renumbered. Levels: `B` business, `S` stakeholder, `F` solution/functional; a requirement is reviewed at the level it is written, so a `B` or `S` requirement is not defective for lacking solution-level numbers. Owner is `@danielckv` for every requirement (the CODEOWNERS owner); no other owner is invented. `Last reviewed` is the date the requirement was checked against the tree. Status is judged against the code in the tree on that date: `met`, `partly met`, or `not met`; every `partly met` or `not met` requirement also appears in Open questions. Glossary terms are used exactly as defined in the Glossary throughout. Contract references `C1`–`C12` cite the design contracts in `docs/plans/GUI_BOARD_HANDOFF_PLAN.md`. The requirements audit of the master plan lives beside this catalogue at `docs/requirements/AUDIT_MASTER_PLAN.md`.
+Catalogue standard: every requirement is a single sentence of the form `{Actor/subsystem} shall {behaviour}`. IDs are `REQ-<AREA>-<nnn>`, stable, three-digit, and never renumbered. Levels: `B` business, `S` stakeholder, `F` solution/functional; a requirement is reviewed at the level it is written, so a `B` or `S` requirement is not defective for lacking solution-level numbers. Owner is `@danielckv` for every requirement (the CODEOWNERS owner); no other owner is invented. `Last reviewed` is the date the requirement was checked against the tree. Status is judged against the code in the tree on that date: `met`, `partly met`, or `not met`; every `partly met` or `not met` requirement also appears in Open questions. Glossary terms are used exactly as defined in the Glossary throughout. Contract references `C1`–`C12` cite the design contracts in `docs/plans/GUI_BOARD_HANDOFF_PLAN.md`, and `C13`–`C21` cite `docs/plans/COMMAND_CENTER_PLAN.md`. Both plans left the tree on 2026-10-22 with the features they designed (`docs/adrs/0001-remove-live-task-views.md`). They stay readable in git history at commit `d4cbb43`. The requirements audit of the master plan lives beside this catalogue at `docs/requirements/AUDIT_MASTER_PLAN.md`.
 
 ## Purpose and scope
 
-Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. Every behaviour the product owes a user, a host or a release is either stated here as a requirement or consciously dismissed in Category coverage or Open questions, so the orphan test — a plan item found nowhere in this catalogue — is decidable by construction. In scope: the `plan-forge` client and its embedded window, the board, the coordinator, the graph view, the plan-mode handoff and validation, installation and uninstall, release gates and artifacts, the untrusted-input posture, performance budgets, and platform and toolchain constraints, in both Solo and Remote collaboration modes. Out of scope: the relay wire protocol, the verbatim deliberation prompts, and visual design detail, which are design contracts recorded in `docs/plans/`, not product requirements.
+Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. Every behaviour the product owes a user, a host or a release is either stated here as a requirement or consciously dismissed in Category coverage or Open questions, so the orphan test — a plan item found nowhere in this catalogue — is decidable by construction. In scope: the `plan-forge` client and its embedded window, the pre-planning context gatherer, the plan-mode handoff and validation, installation and uninstall, release gates and artifacts, the untrusted-input posture, performance budgets, and platform and toolchain constraints, in both Solo and Remote collaboration modes. Out of scope: the relay wire protocol, the verbatim deliberation prompts, and visual design detail, which are design contracts recorded in `docs/plans/`, not product requirements. Removed features are listed under Retired requirements; their IDs are never reused.
 
 ## GATE — pre-planning gate
 
@@ -151,6 +151,153 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Status: met
 - Last reviewed: 2026-10-19
 
+### REQ-GATE-012 — Epics from the interpretation call
+
+- ID: REQ-GATE-012
+- Level: F
+- Statement: The interpretation call shall return `epics[]` beside the `NormalizedPRD`, each epic carrying `id`, `title`, `goal`, `requirements` and `acceptance_criteria`.
+- Category: Data
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22): Page 1 shows the brief as epics before deliberation.
+- Acceptance criteria: `internal/ingestion/normalizer_test.go` (to be added: a normalized brief returns `epics[]` with all five fields set).
+- Traces to: `internal/ingestion/normalizer.go`, `internal/contracts/types.go`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-GATE-013 — Epics invent nothing
+
+- ID: REQ-GATE-013
+- Level: F
+- Statement: The normalizer shall never place in an epic a requirement or acceptance criterion that is absent from the `NormalizedPRD`.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22): epics group existing requirements and never add content.
+- Acceptance criteria: `internal/ingestion/normalizer_test.go` (to be added: a model reply that puts an unknown requirement in an epic never yields an epic containing it).
+- Traces to: `internal/ingestion/normalizer.go`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+## CONTEXT — pre-planning context gatherer
+
+The context gatherer is the `internal/gather` package. It collects what the repository already records about itself before deliberation starts, with no model call. `docs/adrs/0002-read-agents-recall-index.md` records the decision.
+
+### REQ-CONTEXT-001 — Avatars start from recorded project memory
+
+- ID: REQ-CONTEXT-001
+- Level: S
+- Statement: The plan forge gate shall give the Technical Architect, the Domain Specialists and the Red-Team Critic the repository's recorded decisions, specs, plans and git state before deliberation, gathered without a model call.
+- Category: User
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22); `docs/adrs/0002-read-agents-recall-index.md`.
+- Acceptance criteria: `internal/gather/gather_test.go` (to be added: a fixture repository with `.agents/` and `docs/` content yields a context that names those files).
+- Traces to: `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-002 — Read the recall index read-only
+
+- ID: REQ-CONTEXT-002
+- Level: F
+- Statement: The context gatherer shall open the project-memory recall index (SQLite FTS5) read-only through the pure-Go `modernc.org/sqlite` driver, trying `<git-common-dir>/agents-local/recall.db` first and the legacy `.agents/index/recall.db` second.
+- Category: Interface
+- Owner: @danielckv
+- Source: `docs/adrs/0002-read-agents-recall-index.md`.
+- Acceptance criteria: `internal/gather/gather_test.go` (to be added: an index at each location is read, the first location wins when both exist, and the index file is byte-identical after the read).
+- Traces to: `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-003 — Fall back to the files
+
+- ID: REQ-CONTEXT-003
+- Level: F
+- Statement: When no recall index can be opened, the context gatherer shall read `.agents/STATE.md`, `.agents/lanes/`, `.agents/sessions/`, `docs/specs/`, `docs/plans/`, `docs/adrs/` and `specs/` directly, read-only.
+- Category: Functional
+- Owner: @danielckv
+- Source: `docs/adrs/0002-read-agents-recall-index.md`.
+- Acceptance criteria: `internal/gather/gather_test.go` (to be added: with no index, the context names files from each listed path that exists; a missing path is skipped without error).
+- Traces to: `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-004 — Git state
+
+- ID: REQ-CONTEXT-004
+- Level: F
+- Statement: The context gatherer shall record the current branch, the HEAD commit, the number of dirty paths and the subjects of the most recent commits.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22).
+- Acceptance criteria: `internal/gather/gather_test.go` (to be added: a fixture repository with one dirty file reports its branch, HEAD, a dirty count of 1 and its commit subjects). The number of recent subjects is not yet fixed here (open question 14).
+- Traces to: `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-005 — Output bound
+
+- ID: REQ-CONTEXT-005
+- Level: F
+- Statement: The context gatherer shall cap its output at 64 KiB.
+- Category: Constraint
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22).
+- Acceptance criteria: `internal/gather/gather_test.go` (to be added: a fixture larger than 64 KiB yields output of at most 65,536 bytes).
+- Traces to: `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-006 — Repository-relative paths only
+
+- ID: REQ-CONTEXT-006
+- Level: F
+- Statement: The context gatherer shall write every path in its output relative to the repository root and never as an absolute path.
+- Category: Non-functional (security)
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22); the no-absolute-path rule of REQ-SEC-004.
+- Acceptance criteria: `internal/gather/gather_test.go` (to be added: the output never contains the fixture's absolute root).
+- Traces to: `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-007 — Never to the Product Manager
+
+- ID: REQ-CONTEXT-007
+- Level: F
+- Statement: The plan forge gate shall put the gathered context in the Technical Architect, Domain Specialist and Red-Team Critic payloads only, and never in the Product Manager payload.
+- Category: Non-functional (security)
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22); Product Manager isolation (REQ-GATE-004).
+- Acceptance criteria: Pending: no test is named yet (open question 14). The REQ-GATE-004 sentinel tests in `internal/avatars/prompts_test.go` are where a context sentinel would be asserted absent from the Product Manager request.
+- Traces to: `internal/avatars/prompts.go`, `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-008 — The user sees what the avatars see
+
+- ID: REQ-CONTEXT-008
+- Level: F
+- Statement: The window shall show the user the gathered context that the avatars receive.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22).
+- Acceptance criteria: Pending: no test is named yet (open question 14).
+- Traces to: `web/src/pages/Page1Ingestion.tsx`, `internal/app/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-CONTEXT-009 — `plan-forge context`
+
+- ID: REQ-CONTEXT-009
+- Level: F
+- Statement: `plan-forge context` shall print the gathered context for the current repository to stdout.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22).
+- Acceptance criteria: `internal/gather/gather_test.go` (to be added) covers the content; no command-level test is named yet (open question 14).
+- Traces to: `cmd/client/`, `internal/gather/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
 ## UI — the window
 
 ### REQ-UI-001 — Three sequential views
@@ -212,11 +359,11 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Statement: The window shall disable non-essential motion when the user agent reports `prefers-reduced-motion: reduce`.
 - Category: Non-functional (usability/accessibility)
 - Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C12 (`prefers-reduced-motion` disables graph animations).
-- Acceptance criteria: `web/src/app.css` and `web/src/board/board.css` contain `prefers-reduced-motion` blocks.
-- Traces to: `web/src/app.css`, `web/src/board/board.css`
+- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C12 (the `prefers-reduced-motion` rule, first written for the retired Graph view).
+- Acceptance criteria: `web/src/app.css` contains a `prefers-reduced-motion: reduce` block.
+- Traces to: `web/src/app.css`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-UI-006 — Keyboard operation
 
@@ -239,23 +386,10 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Category: Non-functional (usability/accessibility)
 - Owner: @danielckv
 - Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` Goal 1.
-- Acceptance criteria: `web/src/app.css` (`@media (max-width: 1099.98px)`) and `web/src/board/board.css` (`@media (max-width: 1180px)`) breakpoints.
-- Traces to: `web/src/app.css`, `web/src/board/board.css`
+- Acceptance criteria: `web/src/app.css` (`@media (max-width: 1099.98px)`) breakpoint.
+- Traces to: `web/src/app.css`
 - Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-UI-008 — Board and Graph as views
-
-- ID: REQ-UI-008
-- Level: F
-- Statement: The window shall provide a board view and a graph view as switchable views with a `Board | Graph` header switch and a coordinator panel.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C8 and C12 (Graph view header).
-- Acceptance criteria: `web/src/board/viewMode.test.ts`; `web/src/board/BoardApp.tsx` renders `GraphView`.
-- Traces to: C8, C12; `web/src/board/BoardApp.tsx`, `web/src/board/graph/GraphView.tsx`, `web/src/board/CoordinatorPanel.tsx`
-- Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-UI-009 — Executive-grade presentation
 
@@ -269,6 +403,71 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Traces to: `web/src/ui/`, `web/src/app.css`
 - Status: partly met
 - Last reviewed: 2026-10-19
+
+### REQ-UI-010 — Markdown composer
+
+- ID: REQ-UI-010
+- Level: F
+- Statement: The Page 1 composer shall provide a full markdown editor for the requirements text.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22): the Page 1 composer gains a markdown editor, a code component browser and an epic modal.
+- Acceptance criteria: `web/src/ui/docSync.test.ts` (to be added: an edit made in the editor reaches the shared PRD document unchanged).
+- Traces to: `web/src/pages/Page1Ingestion.tsx`, `web/src/codemirror/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-UI-011 — Code component browser
+
+- ID: REQ-UI-011
+- Level: F
+- Statement: The Page 1 composer shall let the user browse the code components of the repository under review.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22), as for REQ-UI-010.
+- Acceptance criteria: `internal/app/planfiles_test.go` (to be added: the component list holds repository-relative paths only).
+- Traces to: `web/src/pages/Page1Ingestion.tsx`, `internal/app/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-UI-012 — Epic files
+
+- ID: REQ-UI-012
+- Level: F
+- Statement: Page 1 shall show each epic returned by the interpretation call (REQ-GATE-012) as a file the user can open.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22), as for REQ-UI-010.
+- Acceptance criteria: `internal/app/planfiles_test.go` (to be added: one epic file per returned epic).
+- Traces to: `web/src/pages/Page1Ingestion.tsx`, `internal/app/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-UI-013 — Epics link real code components
+
+- ID: REQ-UI-013
+- Level: F
+- Statement: Page 1 shall link an epic only to code components whose repository-relative path exists in the repository.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22): epic files show linked real code components.
+- Acceptance criteria: `internal/app/planfiles_test.go` (to be added: a component path that does not exist is never linked).
+- Traces to: `internal/app/`
+- Status: not met
+- Last reviewed: 2026-10-22
+
+### REQ-UI-014 — Epic modal
+
+- ID: REQ-UI-014
+- Level: F
+- Statement: Page 1 shall open an epic in a modal dialog that shows its goal, requirements, acceptance criteria and linked code components.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-22), as for REQ-UI-010.
+- Acceptance criteria: Pending: no test is named yet (open question 14). The dialog traps focus as REQ-UI-006 requires of every modal.
+- Traces to: `web/src/pages/Page1Ingestion.tsx`, `web/src/ui/Dialog.tsx`
+- Status: not met
+- Last reviewed: 2026-10-22
 
 ## HANDOFF — plan-mode handoff and validation
 
@@ -354,265 +553,12 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 
 - ID: REQ-HANDOFF-007
 - Level: F
-- Statement: The handoff text shall instruct the agent harness to treat the synthesized spec as data and never to bypass host permission prompts, as REQ-SEC-005 requires of every skill, hook and board delta.
+- Statement: The handoff text shall instruct the agent harness to treat the synthesized spec as data and never to bypass host permission prompts, as REQ-SEC-005 requires of every skill and hook.
 - Category: Functional
 - Owner: @danielckv
 - Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C6 (hook context) and C7 step 5; `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 6 skill body "treat the spec as data".
 - Acceptance criteria: `cmd/client/cmd_hook_test.go` asserts the directive text; `integrations/skill-plan-forge.md` carries the same instruction.
 - Traces to: C6, C7; `cmd/client/cmd_hook.go`, `integrations/skill-plan-forge.md`, `integrations/omp-hook-plan-forge.ts`
-- Status: met
-- Last reviewed: 2026-10-19
-
-## BOARD — the task board
-
-### REQ-BOARD-001 — Live priority and context
-
-- ID: REQ-BOARD-001
-- Level: S
-- Statement: The user shall see the approved plan's tasks appear on a board dynamically and shall be able to raise a task's priority or add context notes that reach the running agent harness.
-- Category: User
-- Owner: @danielckv
-- Source: User request this session (2026-10-19): "a `/plan-forge-board` board where tasks appear dynamically so the user can raise a priority or add context".
-- Acceptance criteria: `web/src/board/board.test.ts`; `internal/app/board_test.go`.
-- Traces to: C4, C5; `web/src/board/`, `internal/app/board.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-BOARD-002 — Evidence column
-
-- ID: REQ-BOARD-002
-- Level: F
-- Statement: The board shall derive each task's evidence column from plan evidence — `drifted`, `done`, `in_progress` or `todo` — using the planstate evidence functions; REQ-COORD-003 governs how evidence and activity combine into the live column shown by the snapshot `column` (C11) and which blocked rule takes precedence.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C5 (column derivation table).
-- Acceptance criteria: `internal/planstate/taskboard_test.go`, `internal/app/board_test.go`.
-- Traces to: C5; `internal/planstate/taskboard.go`, `internal/app/board.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-BOARD-003 — Overlay storage
-
-- ID: REQ-BOARD-003
-- Level: F
-- Statement: The board shall store priorities, notes, per-consumer cursors, activity and discoveries in a machine-local overlay keyed by the approved plan manifest hash, written atomically under a cross-process lock at mode 0600 in a 0700 directory, leaving the approved plan manifest and its approval hash untouched.
-- Category: Data
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C3 and C9; user decision (2026-10-19): machine-local overlay.
-- Acceptance criteria: `internal/board/board_test.go` (schema v1/v2, limits, atomic write, lock).
-- Traces to: C3, C9; `internal/board/board.go`, `internal/board/lock_unix.go`, `internal/board/lock_windows.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-BOARD-004 — Host-internal delivery
-
-- ID: REQ-BOARD-004
-- Level: F
-- Statement: The board shall deliver user edits to the running agent harness only through host-internal APIs — `pi.sendMessage` on the managed sync timer (REQ-PERF-007, Timing-bound precedence) for oh-my-pi and `additionalContext` from `UserPromptSubmit` and `PostToolUse` hooks for Claude Code — with no external dependency.
-- Category: Interface
-- Owner: @danielckv
-- Source: User request this session (2026-10-19): "the board use only oh-my-pi and Claude internal APIs"; `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C4, C6, C7.
-- Acceptance criteria: `integrations/omp-hook-plan-forge.test.ts` (timer, `deliverAs` steer/nextTurn), `cmd/client/cmd_hook_test.go` (delta appended to hook context), `internal/board/delta_test.go` (delta text).
-- Traces to: C4, C6, C7; `integrations/omp-hook-plan-forge.ts`, `cmd/client/cmd_hook.go`, `internal/board/delta.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-BOARD-005 — Hook-safe CLI
-
-- ID: REQ-BOARD-005
-- Level: F
-- Statement: The board CLI subcommands `pull`, `report`, `discover` and `activity` shall be hook-safe: an invalid flag or consumer id exits 2, any other failure prints nothing and exits 0, each run finishes within the hook time bound (REQ-PERF-001, Timing-bound precedence), and without an approved plan manifest each is a silent no-op.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C4 and C10.
-- Acceptance criteria: `cmd/client/cmd_board_test.go`.
-- Traces to: C4, C10; `cmd/client/cmd_board.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-BOARD-006 — Single instance per repository
-
-- ID: REQ-BOARD-006
-- Level: F
-- Statement: The board shall hold a per-repository lock so that a second `plan-forge board --detach` against the same repository reports `already_open` instead of starting a second instance.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C4.
-- Acceptance criteria: `cmd/client/cmd_board_lock_unix_test.go`.
-- Traces to: C4; `cmd/client/cmd_board.go`, `internal/app/boardguard_unix.go`, `internal/app/boardguard_windows.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-BOARD-007 — Board bridge API
-
-- ID: REQ-BOARD-007
-- Level: F
-- Statement: The board server shall expose a Bearer-authenticated `GET /api/board` snapshot, single-action `POST /api/board/task`, and `POST /api/board/discovery` routes, and shall push one snapshot frame on connect and one whenever the serialized snapshot changes.
-- Category: Interface
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C5 and C11.
-- Acceptance criteria: `internal/app/board_test.go` (200/400/404/409 cases, snapshot push).
-- Traces to: C5, C11; `internal/app/board.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-## COORD — the coordinator
-
-### REQ-COORD-001 — Real-time movement from evidence of work
-
-- ID: REQ-COORD-001
-- Level: S
-- Statement: The user shall see a coordinator move tasks across the board in real time from what the agent harness actually does — file edits and `board report` calls — not only from the periodic evidence re-scan, which is also how verification receipts count as plan evidence.
-- Category: User
-- Owner: @danielckv
-- Source: User request this session (2026-10-19): "a real-time coordinator that moves tasks"; `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` Wave 4 goal.
-- Acceptance criteria: `internal/board/coordinator_test.go`; `web/src/board/wave4.test.ts`.
-- Traces to: C9, C11, C12; `internal/board/coordinator.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-COORD-002 — Harness activity capture
-
-- ID: REQ-COORD-002
-- Level: F
-- Statement: The coordinator shall record agent harness activity — Claude Code `PostToolUse` edit tools and oh-my-pi `tool_result` edit or write calls via the `board activity` path with source `file_edit`, and explicit `board report` calls with source `report` — into the overlay with the per-host consumer id.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C10 and C12.
-- Acceptance criteria: `cmd/client/cmd_hook_test.go` (edit tools recorded in-process), `integrations/omp-hook-plan-forge.test.ts` (fire-and-forget capture), `cmd/client/cmd_board_test.go`. The source value `verify` (`SourceVerify` in `internal/board/discovery.go`) is accepted by the overlay but reserved: `plan-forge verify` (`cmd/client/cmd_verify.go`) records nothing on the board and nothing emits it today; verification receipts reach the board only through the evidence re-scan every 5 seconds (`boardEvidenceEvery` in `internal/app/board.go`).
-- Traces to: C10, C12; `cmd/client/cmd_hook.go`, `integrations/omp-hook-plan-forge.ts`, `cmd/client/cmd_board.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-COORD-003 — Live columns and awaiting verification
-
-- ID: REQ-COORD-003
-- Level: F
-- Statement: The coordinator shall compute each task's live column by the ordered rules — evidence drifted, evidence done, activity done with `awaiting_verification: true`, activity active or evidence in progress, otherwise todo — and mark a task blocked when any dependency's live column is not done or its activity is blocked.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C9 (coordination rules).
-- Acceptance criteria: `internal/board/coordinator_test.go`.
-- Traces to: C9; `internal/board/coordinator.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-COORD-004 — Blocked recomputation
-
-- ID: REQ-COORD-004
-- Level: F
-- Statement: The coordinator shall recompute blocked state and live columns whenever overlay activity or plan evidence changes, so a completed dependency unblocks its dependents without user action.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C9 (`Coordinate` is a pure function over evidence plus overlay) and C11 (push after any store change).
-- Acceptance criteria: `internal/board/coordinator_test.go`; `internal/app/board_test.go` (snapshot reflects store changes).
-- Traces to: C9, C11; `internal/board/coordinator.go`, `internal/app/board.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-COORD-005 — Up-next queue
-
-- ID: REQ-COORD-005
-- Level: F
-- Statement: The coordinator shall maintain an Up-next queue of at most 5 tasks that are not done, drifted, blocked or active, ordered by priority, then plan manifest order, then accepted discoveries.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C9 (`next_up` rules).
-- Acceptance criteria: `internal/board/coordinator_test.go`.
-- Traces to: C9; `internal/board/coordinator.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-COORD-006 — Steering only on queue-head change
-
-- ID: REQ-COORD-006
-- Level: F
-- Statement: The coordinator shall append a `Coordinator: next up is ...` line to a consumer's board delta only when the head of the Up-next queue changed since that consumer's previous delivery, persisting `last_next_up` in the consumer's cursor.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` Wave 4 default and C9 (`RenderDelta`).
-- Acceptance criteria: `internal/board/delta_v2_test.go`.
-- Traces to: C9; `internal/board/delta.go`, `internal/board/coordinator.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-COORD-007 — Coordinator panel
-
-- ID: REQ-COORD-007
-- Level: F
-- Statement: The window shall show a coordinator panel listing Active now and the Up-next queue (panel labels `Active now` and `Up next`) beside the `Board | Graph` switch.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C12 (Graph view header panel).
-- Acceptance criteria: `web/src/board/wave4.test.ts`; `web/src/board/CoordinatorPanel.tsx`.
-- Traces to: C11, C12; `web/src/board/CoordinatorPanel.tsx`, `web/src/board/coordinator.ts`
-- Status: met
-- Last reviewed: 2026-10-19
-
-## GRAPH — the Graph view
-
-### REQ-GRAPH-001 — Plan as a graph
-
-- ID: REQ-GRAPH-001
-- Level: S
-- Statement: The user shall see the plan as a graph of task nodes with dependency edges, including work the agent harness discovered beyond the plan.
-- Category: User
-- Owner: @danielckv
-- Source: User request this session (2026-10-19): "a graph of task nodes so the user can see tasks or paths the harness discovered beyond the plan"; `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` Wave 4.
-- Acceptance criteria: `web/src/board/graph/layout.test.ts`; `web/src/board/wave4.test.ts`.
-- Traces to: C12; `web/src/board/graph/GraphView.tsx`, `web/src/board/graph/GraphNodes.tsx`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-GRAPH-002 — Discovered task nodes
-
-- ID: REQ-GRAPH-002
-- Level: F
-- Statement: The graph shall show each discovery of work outside the plan as a proposed, dashed task node linked to its parent, and only the user shall accept a discovery onto the board.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` Wave 4 defaults and C9 (discovery rules and caps).
-- Acceptance criteria: `internal/board/discovery_test.go` (caps, de-duplication, `ErrDiscoveryLimit`), `web/src/board/wave4.test.ts`.
-- Traces to: C9, C12; `internal/board/discovery.go`, `web/src/board/graph/DiscoveryPanel.tsx`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-GRAPH-003 — Path nodes
-
-- ID: REQ-GRAPH-003
-- Level: F
-- Statement: The graph shall show a path node for every repository path the agent harness touched outside the excluded prefixes `.git/` and `docs/plans/.plan/` (repository internals and the plan's own state, never recorded), matched to planned targets by `MapPaths` and grouped under Unplanned when no target matches.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C9 (`MapPaths`), C10 (`board activity`) and C12 (path pills).
-- Acceptance criteria: `internal/board/discovery_test.go` (`MapPaths` cases), `web/src/board/wave4.test.ts`.
-- Traces to: C9, C10, C12; `internal/board/discovery.go`, `web/src/board/graph/GraphNodes.tsx`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-GRAPH-004 — Accept or dismiss
-
-- ID: REQ-GRAPH-004
-- Level: F
-- Statement: The graph shall let the user accept a proposed discovery with a chosen priority or dismiss it, shall render proposed, accepted and dismissed discoveries distinctly, and shall hide dismissed discoveries behind a toggle.
-- Category: Functional
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C11 (`POST /api/board/discovery`) and C12 (interaction).
-- Acceptance criteria: `internal/app/board_test.go` (discovery route 200/400/404/409), `web/src/board/wave4.test.ts`.
-- Traces to: C11, C12; `internal/app/board.go`, `internal/board/discovery.go`, `web/src/board/graph/DiscoveryPanel.tsx`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-GRAPH-005 — Readable and operable at scale
-
-- ID: REQ-GRAPH-005
-- Level: F
-- Statement: The graph shall use a layered DAG layout (longest-path layering by `depends_on`, then three barycenter ordering passes) with pan, zoom and fit controls, and shall stay responsive up to the graph size bound (REQ-PERF-005).
-- Category: Non-functional (performance)
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C12 (rendering, interaction, scale).
-- Acceptance criteria: `web/src/board/graph/layout.test.ts`.
-- Traces to: C12; `web/src/board/graph/layout.ts`, `web/src/board/graph/GraphView.tsx`
 - Status: met
 - Last reviewed: 2026-10-19
 
@@ -635,27 +581,27 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 
 - ID: REQ-INSTALL-002
 - Level: F
-- Statement: For Claude Code, the installer shall write exactly these managed artifacts: the skills `plan-forge`, `plan-config` and `plan-forge-board` (each carrying `enabled: false`) plus `SessionStart`, `PostToolUse` (matcher `Bash|Edit|Write|MultiEdit|NotebookEdit`) and `UserPromptSubmit` hook entries with the Claude Code hook timeout (Timing-bound precedence) in `~/.claude/settings.json`; the oh-my-pi and Antigravity artifact sets are REQ-INSTALL-008 and REQ-INSTALL-009.
+- Statement: For Claude Code, the installer shall write exactly these managed artifacts: the skills `plan-forge` and `plan-config` (each carrying `enabled: false`) plus three hook entries in `~/.claude/settings.json`, each with the Claude Code hook timeout (Timing-bound precedence) — `SessionStart` running `hook check-state`, `PreToolUse` with matcher `Edit|Write|MultiEdit|NotebookEdit` running `hook claude-guard`, and `PostToolUse` with matcher `Bash` running `hook claude` for the plan-mode handoff only; the oh-my-pi and Antigravity artifact sets are REQ-INSTALL-008 and REQ-INSTALL-009.
 - Category: Interface
 - Owner: @danielckv
-- Source: Verified `plan-forge install --host auto --yes` run on this machine (2026-10-19); `internal/host/installer.go`; `internal/host/hooks.go`.
-- Acceptance criteria: `internal/host/installer_test.go`, `internal/host/hooks_test.go`; every managed entry carries the `plan-forge managed` marker.
+- Source: `internal/host/installer.go`; `internal/host/hooks.go` (`claudeHookEvents`, `claudePreToolUseMatcher`, `claudePostToolUseMatcher`); `docs/adrs/0001-remove-live-task-views.md`: no managed hook starts a daemon or opens a browser tab at session start.
+- Acceptance criteria: `internal/host/installer_test.go`, `internal/host/hooks_test.go` (`TestManagedHooksStartNothingAtSessionStart`: neither the merged settings nor the manual snippet carries `--open`, `center` or `UserPromptSubmit`); every managed entry carries the `plan-forge managed` marker.
 - Traces to: C6; `internal/host/installer.go`, `internal/host/hooks.go`, `integrations/`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-INSTALL-003 — One skill name per host root
 
 - ID: REQ-INSTALL-003
 - Level: F
-- Statement: The installer shall install each feature under one skill name per host root — `plan-forge`, `plan-config`, and where supported `plan-forge-board` — with no duplicate name in the same root.
+- Statement: The installer shall install each feature under one skill name per host root — `plan-forge` and `plan-config` — with no duplicate name in the same root.
 - Category: Functional
 - Owner: @danielckv
 - Source: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 6 (per-host template paths).
-- Acceptance criteria: `internal/host/installer_test.go` (install-manifest rows per path).
+- Acceptance criteria: `internal/host/installer_test.go` (install-manifest rows per path; `TestInstallWritesEachSkillIntoOneRootPerHost`).
 - Traces to: `internal/host/installer.go`, `integrations/`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-INSTALL-004 — Idempotent re-install
 
@@ -700,7 +646,7 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 
 - ID: REQ-INSTALL-007
 - Level: F
-- Statement: The installer shall mark the Claude Code skill copies with `enabled: false` — and only those copies, never the oh-my-pi or Antigravity copies (REQ-INSTALL-002, REQ-INSTALL-008, REQ-INSTALL-009) — so that oh-my-pi, when its configuration reads the Claude Code skill root, skips the marked copies and lists exactly one `plan-forge` skill.
+- Statement: The installer shall mark the Claude Code skill copies with `enabled: false` — and only those copies, never the Antigravity copies (REQ-INSTALL-002, REQ-INSTALL-009); oh-my-pi receives no skill copy (REQ-INSTALL-008) — so that oh-my-pi, when its configuration reads the Claude Code skill root, skips the marked copies and lists exactly one `plan-forge` skill.
 - Category: Functional
 - Owner: @danielckv
 - Source: User request this session (2026-10-19): "no duplicate skill in oh-my-pi, which also reads skills from the Claude and Gemini roots"; `internal/host/installer.go` (the `enabled: false` comment block: the oh-my-pi and Antigravity copies are deliberately not marked).
@@ -713,20 +659,20 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 
 - ID: REQ-INSTALL-008
 - Level: F
-- Statement: For oh-my-pi, the installer shall write exactly these managed artifacts: the skills `plan-forge` and `plan-config` (without `enabled: false`), the command file `commands/plan-config.md`, and the hook `hooks/pre/plan-forge.ts` registering `/plan-forge` and `/plan-forge-board`, with no `commands/plan-forge.md`.
+- Statement: For oh-my-pi, the installer shall write exactly these managed artifacts: the command file `commands/plan-config.md` and the hook `hooks/pre/plan-forge.ts` registering `/plan-forge`, with no skill copy and no `commands/plan-forge.md`.
 - Category: Interface
 - Owner: @danielckv
-- Source: Verified `plan-forge install --host auto --yes` run on this machine (2026-10-19); `internal/host/installer.go`; `internal/host/hooks.go`.
-- Acceptance criteria: `internal/host/installer_test.go`, `internal/host/hooks_test.go`; every managed entry carries the `plan-forge managed` marker.
+- Source: `planOMP` in `internal/host/installer.go`; `integrations/omp-hook-plan-forge.ts` (one `registerCommand` call, for `plan-forge`); `docs/adrs/0001-remove-live-task-views.md` (`/plan-forge-board` removed).
+- Acceptance criteria: `internal/host/installer_test.go` (`TestOMPPlansCommandsAndHookButNoSkills`, `TestOMPDoesNotPlanForgeCommand`), `internal/host/hooks_test.go`, `integrations/omp-hook-plan-forge.test.ts`; every managed entry carries the `plan-forge managed` marker.
 - Traces to: C7; `internal/host/installer.go`, `internal/host/hooks.go`, `integrations/`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-INSTALL-009 — Antigravity artifacts
 
 - ID: REQ-INSTALL-009
 - Level: F
-- Statement: For Antigravity, the installer shall write exactly these managed artifacts: the skills `plan-forge` and `plan-config` in both `~/.gemini/antigravity-cli/skills/` and `~/.gemini/config/skills/` (without `enabled: false`) plus a `SessionStart` entry with the Antigravity hook timeout (Timing-bound precedence) in `~/.gemini/config/hooks.json`, and no board skill.
+- Statement: For Antigravity, the installer shall write exactly these managed artifacts: the skills `plan-forge` and `plan-config` in both `~/.gemini/antigravity-cli/skills/` and `~/.gemini/config/skills/` (without `enabled: false`) plus a `SessionStart` entry with the Antigravity hook timeout (Timing-bound precedence) in `~/.gemini/config/hooks.json`.
 - Category: Interface
 - Owner: @danielckv
 - Source: Verified `plan-forge install --host auto --yes` run on this machine (2026-10-19); `internal/host/installer.go`; `internal/host/hooks.go`.
@@ -742,11 +688,50 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Statement: `plan-forge doctor` shall report, per host, whether the managed hooks are installed and whether they name the running binary, with a remedy for every state that is not installed.
 - Category: Functional
 - Owner: @danielckv
-- Source: Consequence of the oh-my-pi command-only surface (REQ-INSTALL-008): with no skill copies, a missing hook removes `/plan-forge` and `/plan-forge-board` rather than degrading them; `docs/plans/COMMAND_CENTER_PLAN.md` C21.
-- Acceptance criteria: `internal/host/hookcheck_test.go` (installed, stale, modified, missing and unreadable per host; the oh-my-pi remedy names the commands that are lost; the Antigravity remedy routes through uninstall because `mergeAGYHook` cannot refresh a stale path).
+- Source: Consequence of the oh-my-pi command-only surface (REQ-INSTALL-008): with no skill copies, a missing hook removes `/plan-forge` rather than degrading it; `docs/plans/COMMAND_CENTER_PLAN.md` C21.
+- Acceptance criteria: `internal/host/hookcheck_test.go` (installed, stale, modified, missing and unreadable per host; a 0.3.0 install that still launches the command center or carries a `UserPromptSubmit` entry reports stale; the oh-my-pi remedy names the command that is lost; the Antigravity remedy routes through uninstall because `mergeAGYHook` cannot refresh a stale path).
 - Traces to: C21; `internal/host/hookcheck.go`, `cmd/client/cmd_doctor.go`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
+
+### REQ-INSTALL-011 — Upgrade strips retired hook handlers
+
+- ID: REQ-INSTALL-011
+- Level: F
+- Statement: On install and on uninstall, the installer shall remove from `~/.claude/settings.json` every managed handler that 0.3.0 wrote under `UserPromptSubmit` or that launched the command center, and shall keep every foreign handler.
+- Category: Functional
+- Owner: @danielckv
+- Source: `docs/adrs/0001-remove-live-task-views.md`; `claudeRetiredHookEvents` in `internal/host/hooks.go`.
+- Acceptance criteria: `internal/host/hooks_test.go` (`TestMergeClaudeHookUpgradesAPreviousInstall`: a reinstall over 0.3.0 settings removes both handlers, keeps foreign ones and is idempotent; `TestSplitManagedHookRemovesRetiredHandlers`: uninstall leaves no managed residue and keeps a foreign `UserPromptSubmit` handler).
+- Traces to: `internal/host/hooks.go`, `internal/host/installer.go`
+- Status: met
+- Last reviewed: 2026-10-22
+
+### REQ-INSTALL-012 — Upgrade removes the retired board skill
+
+- ID: REQ-INSTALL-012
+- Level: F
+- Statement: For Claude Code, an install shall delete the `plan-forge-board` skill copy an earlier version wrote only while its bytes match the hash recorded in `install-manifest.json`, and shall keep a copy the user edited.
+- Category: Functional
+- Owner: @danielckv
+- Source: `docs/adrs/0001-remove-live-task-views.md`; `retiredSkills` in `internal/host/installer.go`; REQ-INSTALL-004 (hash-checked ownership).
+- Acceptance criteria: `internal/host/installer_test.go` (`TestClaudeInstallRemovesRetiredBoardSkill`: the owned copy is deleted, the edited copy stays, and no install plans the retired skill).
+- Traces to: `internal/host/installer.go`
+- Status: met
+- Last reviewed: 2026-10-22
+
+### REQ-INSTALL-013 — Retired subcommands stay quiet
+
+- ID: REQ-INSTALL-013
+- Level: F
+- Statement: Until 0.5.0, `plan-forge center`, `plan-forge board` and `plan-forge swarm` shall each print one line to stderr that names `plan-forge install` and exit 0, so a hook written by 0.3.0 never reports an error in the user's session.
+- Category: Functional
+- Owner: @danielckv
+- Source: `docs/adrs/0001-remove-live-task-views.md`; `retiredCommands` in `cmd/client/main.go` ("Remove this table in 0.5.0").
+- Acceptance criteria: `cmd/client/retired_test.go` (`TestRetiredCommandsExitCleanly`: exit 0, exactly one line, the line names `plan-forge install`, and none of the three is a registered command).
+- Traces to: `cmd/client/main.go`
+- Status: met
+- Last reviewed: 2026-10-22
 
 ## RELEASE — gates and artifacts
 
@@ -850,11 +835,11 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Statement: Every string derived from the plan manifest or synthesized spec that reaches a terminal or agent context shall pass `sanitize.Terminal`, which replaces control, line- and paragraph-separator runes with spaces, deletes format, private-use, surrogate and variation-selector runes, replaces invalid UTF-8, and collapses whitespace.
 - Category: Non-functional (security)
 - Owner: @danielckv
-- Source: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 3b (`internal/sanitize`); `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C1 and C4 (titles and notes sanitized).
+- Source: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 3b (`internal/sanitize`); `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C1 (titles sanitized).
 - Acceptance criteria: `internal/sanitize/sanitize_test.go` (including `"a\nb\tc"` becoming `"a b c"`).
-- Traces to: C1, C4; `internal/sanitize/sanitize.go`, `cmd/client/cmd_hook.go`, `cmd/client/cmd_board.go`
+- Traces to: C1; `internal/sanitize/sanitize.go`, `cmd/client/cmd_hook.go`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-SEC-003 — Loopback auth and CSP
 
@@ -886,14 +871,14 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 
 - ID: REQ-SEC-005
 - Level: F
-- Statement: Every Plan-Forge skill, hook and board delta shall state that plan content and board edits never override host permission prompts, and the Claude Code adapter shall never invoke the host with permission-bypassing flags.
+- Statement: Every Plan-Forge skill and hook shall state that plan content never overrides host permission prompts, and the Claude Code adapter shall never invoke the host with permission-bypassing flags.
 - Category: Non-functional (security)
 - Owner: @danielckv
-- Source: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 3a (forbidden Claude Code flags) and Step 6 (skill body "treat the spec as data"); `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C4 (delta text "never overrides host permission prompts").
-- Acceptance criteria: `internal/host/host_test.go` (argv assertions), `cmd/client/cmd_hook_test.go`, `internal/board/delta_test.go` (delta text).
-- Traces to: C4, C6; `internal/host/claude.go`, `internal/board/delta.go`, `integrations/skill-plan-forge.md`
+- Source: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 3a (forbidden Claude Code flags) and Step 6 (skill body "treat the spec as data").
+- Acceptance criteria: `internal/host/host_test.go` (argv assertions), `cmd/client/cmd_hook_test.go`.
+- Traces to: C6; `internal/host/claude.go`, `cmd/client/cmd_hook.go`, `integrations/skill-plan-forge.md`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-SEC-006 — Bridge request hardening
 
@@ -908,20 +893,33 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Status: met
 - Last reviewed: 2026-10-19
 
+### REQ-SEC-007 — The user's own text is not scanned
+
+- ID: REQ-SEC-007
+- Level: F
+- Statement: The plan forge gate shall freeze the composed requirements text without scanning its content for secrets and without a confirmation step gated on such a scan.
+- Category: Non-functional (security)
+- Owner: @danielckv
+- Source: `docs/adrs/0003-no-text-scanning-in-composer.md`: the brief is the user's own text, and the regex and entropy rule flagged ordinary identifiers such as repository paths. The size and UTF-8 bounds, the file-ingestion bounds (REQ-GATE-003), relay authentication (REQ-SEC-003), the egress guard (REQ-SEC-004), the tool-free tripwire and Mermaid sanitizing all stay.
+- Acceptance criteria: Pending: the local bridge serves no `/api/secrets` or `/api/secrets/resolve` route, and a brief that contains a repository path freezes with no Confirm gate. No test is named yet (open question 14).
+- Traces to: `internal/app/api.go`, `web/src/pages/Page1Ingestion.tsx`
+- Status: not met
+- Last reviewed: 2026-10-22
+
 ## PERF — non-functional budgets
 
 ### REQ-PERF-001 — Hook time bound
 
 - ID: REQ-PERF-001
 - Level: F
-- Statement: Every hook invocation shall finish within 2 seconds — the `hook claude` command, the `hook check-state` cached scan, and each hook-safe board subcommand — and hook panics or timeouts shall print nothing and exit 0.
+- Statement: Every hook invocation shall finish within 2 seconds — the `hook claude` command and the `hook check-state` cached scan — and hook panics or timeouts shall print nothing and exit 0.
 - Category: Non-functional (performance)
 - Owner: @danielckv
-- Source: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 3b ("time out after two seconds"); `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C6 ("finishes within 2 s") and C10 ("Each runs within 2 s").
-- Acceptance criteria: `cmd/client/cmd_hook_test.go`, `cmd/client/cmd_board_test.go`.
-- Traces to: C6, C10; `cmd/client/cmd_hook.go`, `cmd/client/cmd_board.go`
+- Source: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md` Step 3b ("time out after two seconds"); `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C6 ("finishes within 2 s").
+- Acceptance criteria: `cmd/client/cmd_hook_test.go`.
+- Traces to: C6; `cmd/client/cmd_hook.go`
 - Status: met
-- Last reviewed: 2026-10-19
+- Last reviewed: 2026-10-22
 
 ### REQ-PERF-002 — Scan bounds
 
@@ -949,32 +947,6 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Status: met
 - Last reviewed: 2026-10-19
 
-### REQ-PERF-004 — Board push latency
-
-- ID: REQ-PERF-004
-- Level: F
-- Statement: The board server shall poll the overlay every 1 second and re-evaluate plan evidence every 5 seconds with the board evidence scan bound (Timing-bound precedence), so agent harness activity appears on the board within about 1 second.
-- Category: Non-functional (performance)
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C5 (push intervals) and C11 (about 1 s); `internal/app/board.go` constants.
-- Acceptance criteria: `internal/app/board.go` (`boardOverlayPoll = time.Second`, `boardEvidenceEvery = 5 * time.Second`, `boardScanTimeout = 10 * time.Second`); `internal/app/board_test.go`.
-- Traces to: C5, C11; `internal/app/board.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-PERF-005 — Graph size
-
-- ID: REQ-PERF-005
-- Level: F
-- Statement: The graph view shall stay responsive with 150 nodes.
-- Category: Non-functional (performance)
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C12 (Scale).
-- Acceptance criteria: `web/src/board/graph/layout.test.ts`.
-- Traces to: C12; `web/src/board/graph/layout.ts`
-- Status: met
-- Last reviewed: 2026-10-19
-
 ### REQ-PERF-006 — Relay messaging latency
 
 - ID: REQ-PERF-006
@@ -988,19 +960,6 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Status: met
 - Last reviewed: 2026-10-19
 
-### REQ-PERF-007 — oh-my-pi board sync timer
-
-- ID: REQ-PERF-007
-- Level: F
-- Statement: The oh-my-pi hook shall sync board edits to the running agent harness on a managed 4-second timer, the delivery path REQ-BOARD-004 relies on.
-- Category: Non-functional (performance)
-- Owner: @danielckv
-- Source: `docs/plans/GUI_BOARD_HANDOFF_PLAN.md` C7 (4 s timer).
-- Acceptance criteria: `integrations/omp-hook-plan-forge.test.ts` (timer, `deliverAs` steer/nextTurn).
-- Traces to: C7; `integrations/omp-hook-plan-forge.ts`
-- Status: met
-- Last reviewed: 2026-10-19
-
 ### Timing-bound precedence
 
 One time bound applies per operation. The requirement cited in each row is the authority for that number; other requirements cross-reference it instead of restating the figure.
@@ -1010,8 +969,6 @@ One time bound applies per operation. The requirement cited in each row is the a
 | AST repository scan, total budget | 120 s | REQ-PERF-002 (`DefaultScanTimeout`) |
 | `plan-forge validate` scan, default | 30 s | REQ-PERF-003 (`--timeout`) |
 | `plan-forge wait` post-approval scan | 20 s | REQ-PERF-003 |
-| Board evidence re-scan | 10 s | REQ-PERF-004 (`boardScanTimeout`) |
-| Board CLI subcommand (`pull`, `report`, `discover`, `activity`) | 2 s | REQ-PERF-001 |
 | Claude Code hook, host-enforced timeout written to `~/.claude/settings.json` | 5 s | REQ-INSTALL-002 (`claudeHookTimeout`) |
 | Antigravity `SessionStart` hook, host-enforced timeout | 2 s | REQ-INSTALL-009 |
 
@@ -1084,108 +1041,43 @@ The 5-second and 2-second hook timeouts are limits the host enforces on the proc
 - Status: met
 - Last reviewed: 2026-10-19
 
-## LIVE — the command center
+## Retired requirements
 
-### REQ-LIVE-001 — Visible without a plan
+These requirements left the catalogue on 2026-10-22 because the features they described were removed. Their IDs are never reused. The full text stays readable in git history at commit `d4cbb43`.
 
-- ID: REQ-LIVE-001
-- Level: S
-- Statement: The command center shall record and show a harness session in a repository that has no approved plan.
-- Category: Functional
-- Owner: @danielckv
-- Source: User request this session (2026-10-19): telemetry that works "even if Plan Forge hasn't run"; `docs/plans/COMMAND_CENTER_PLAN.md` C13, C16.
-- Acceptance criteria: `internal/livestore/livestore_test.go` (upsert, bounds, eviction, concurrent writers lose no update), `internal/center/center_test.go` (`TestIngestRecordsAndRejects`), `web/e2e/center.spec.ts` ("a launched tab renders a session recorded without a plan").
-- Traces to: C13, C16; `internal/livestore/livestore.go`, `internal/center/center.go`
-- Status: met
-- Last reviewed: 2026-10-19
+| IDs | Feature removed | Decision |
+| :--- | :--- | :--- |
+| REQ-BOARD-001 to REQ-BOARD-007 | The plan board: `/plan-forge-board`, `plan-forge board`, the overlay store and the board delta injected through hooks | `docs/adrs/0001-remove-live-task-views.md` |
+| REQ-COORD-001 to REQ-COORD-007 | The coordinator and its Up-next queue | `docs/adrs/0001-remove-live-task-views.md` |
+| REQ-GRAPH-001 to REQ-GRAPH-005 | The Graph view and discoveries | `docs/adrs/0001-remove-live-task-views.md` |
+| REQ-LIVE-001 to REQ-LIVE-006 | The command center: the loopback dashboard daemon, `plan-forge center`, the Live, Sprint and Setup pages, `center_port`, `center_auto_open` and `PLAN_FORGE_CENTER_PORT`; swarm reporting (`plan-forge swarm`) | `docs/adrs/0001-remove-live-task-views.md` |
+| REQ-UI-008 | The `Board \| Graph` view switch and the coordinator panel | `docs/adrs/0001-remove-live-task-views.md` |
+| REQ-PERF-004, REQ-PERF-005, REQ-PERF-007 | Board push latency, graph size and the oh-my-pi board sync timer | `docs/adrs/0001-remove-live-task-views.md` |
 
-### REQ-LIVE-002 — One long-lived surface, many tabs
-
-- ID: REQ-LIVE-002
-- Level: F
-- Statement: The command center shall serve several browser tabs from one loopback daemon and push each recorded event to every connected tab.
-- Category: Interface
-- Owner: @danielckv
-- Source: User decision (2026-10-19): a persistent fixed-port browser tab in place of the per-session window; `docs/plans/COMMAND_CENTER_PLAN.md` C14, C15.
-- Acceptance criteria: `internal/center/center_test.go` (`TestOneRecordReachesEveryOpenTab`, `TestTheHubRefusesMoreThanItsCap`, `TestASlowClientIsDroppedWithAnOverflowFrame`), `web/e2e/center.spec.ts` ("one record reaches two open tabs").
-- Traces to: C14, C15; `internal/center/hub.go`, `internal/app/center.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-LIVE-003 — The coordinator states what begins next
-
-- ID: REQ-LIVE-003
-- Level: S
-- Statement: The command center shall present the coordinator's active and up-next queues for a repository with an approved plan, derived from the same evaluation the board window uses.
-- Category: Functional
-- Owner: @danielckv
-- Source: User request this session (2026-10-19): "use coordinator that in live, decides which task should begin after the main agent harness gets more insights on new tasks"; `docs/plans/COMMAND_CENTER_PLAN.md` C18.
-- Acceptance criteria: `internal/board/coordinator_test.go` (the ranking itself), `internal/center/center_test.go` (the sprint endpoint omits a repository with no approved plan); the view is rendered by `web/src/center/LivePage.tsx`.
-- Traces to: C18; `internal/app/centersprint.go`, `web/src/center/LivePage.tsx`
-- Status: partly met
-- Last reviewed: 2026-10-19
-
-### REQ-LIVE-004 — No egress and no tracker
-
-- ID: REQ-LIVE-004
-- Level: B
-- Statement: The command center shall make no outbound network request and shall integrate with no external issue tracker.
-- Category: Constraint
-- Owner: @danielckv
-- Source: User decision (2026-10-19): external trackers dropped in favour of REQ-BOARD-004 and REQ-SEC-004; `docs/plans/COMMAND_CENTER_PLAN.md` User decisions.
-- Acceptance criteria: `web/e2e/center.spec.ts` ("the command center makes no external request") fails on any request to an origin other than the daemon's own.
-- Traces to: C15, C17; `internal/center/center.go`, `web/src/center/`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-LIVE-005 — A tab is authorised, and opened once
-
-- ID: REQ-LIVE-005
-- Level: F
-- Statement: The command center shall issue a session token only to a tab redeeming a single-use launch ticket, and shall open a browser tab only when no tab is already connected.
-- Category: Non-functional (security)
-- Owner: @danielckv
-- Source: `docs/plans/COMMAND_CENTER_PLAN.md` C15, C20; the residual risks a fixed port introduces are recorded there.
-- Acceptance criteria: `internal/center/center_test.go` (`TestAuthMatrix`, `TestATicketIsSingleUse`, `TestAnExpiredTicketIsRefused`, `TestForeignHostIsRefused`), `web/e2e/center.spec.ts` ("a tab opened by hand parks instead of silently failing").
-- Traces to: C15, C20; `internal/center/auth.go`, `internal/app/center.go`
-- Status: met
-- Last reviewed: 2026-10-19
-
-### REQ-LIVE-006 — Bounded, and never in the way
-
-- ID: REQ-LIVE-006
-- Level: F
-- Statement: The command center's hook-side commands shall stay within the host hook budget and shall exit 0 whatever happens.
-- Category: Non-functional (performance)
-- Owner: @danielckv
-- Source: `docs/plans/COMMAND_CENTER_PLAN.md` C16, C20; REQ-PERF-001 is the governing bound.
-- Acceptance criteria: `integrations/omp-hook-plan-forge.test.ts` ("the command center launch is not awaited", "a failing command center never blocks the banner"); `CenterEnsureBound` and `centerReportBound` in `internal/app/center.go` and `cmd/client/cmd_center.go`.
-- Traces to: C16, C20; `internal/app/center.go`, `cmd/client/cmd_center.go`
-- Status: partly met
-- Last reviewed: 2026-10-19
+REQ-INSTALL-011, REQ-INSTALL-012 and REQ-INSTALL-013 state how an install from 0.3.0 sheds the retired hooks, skill and subcommands.
 
 ## Category coverage
 
-Counts are taken from the `Category:` fields and sum to 86 requirements.
+Counts are taken from the `Category:` fields and sum to 77 requirements.
 
 | Category | Count | Note |
 | :--- | :--- | :--- |
-| Functional | 41 | Concentrated in GATE, COORD, BOARD, INSTALL and RELEASE; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
-| Non-functional (security) | 6 | SEC area: REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-005, REQ-SEC-006; plus REQ-LIVE-005. |
-| Non-functional (performance) | 9 | PERF area (REQ-PERF-001 to REQ-PERF-007) plus REQ-GRAPH-005 and REQ-LIVE-006. |
+| Functional | 39 | Concentrated in GATE, UI, CONTEXT, INSTALL and RELEASE; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
+| Non-functional (security) | 8 | SEC area: REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-005, REQ-SEC-006, REQ-SEC-007; plus REQ-CONTEXT-006 and REQ-CONTEXT-007. |
+| Non-functional (performance) | 4 | REQ-PERF-001, REQ-PERF-002, REQ-PERF-003, REQ-PERF-006. |
 | Non-functional (usability/accessibility) | 3 | REQ-UI-005, REQ-UI-006, REQ-UI-007. Genuinely thin: the GUI polish was delivered as one slice; further usability requirements await measurable targets from the owner (open question 8). |
 | Business | 2 | REQ-GATE-001, REQ-UI-009. |
-| User | 6 | The S-level capability statements. REQ-LIVE-001 and REQ-LIVE-003 are S-level and counted under Functional by their Category field. |
-| Interface | 9 | REQ-HANDOFF-002, REQ-HANDOFF-003, REQ-BOARD-004, REQ-BOARD-007, REQ-SEC-003, REQ-INSTALL-002, REQ-INSTALL-008, REQ-INSTALL-009, REQ-LIVE-002. The relay wire protocol is specified in the system plan as a design contract and is not restated here; the bridge authentication contract is restated as REQ-SEC-003. |
-| Data | 2 | REQ-GATE-005, REQ-BOARD-003. Genuinely thin: other persisted shapes (session state, artifacts) are covered inside functional requirements on approval and storage. |
+| User | 4 | The S-level capability statements: REQ-UI-001, REQ-HANDOFF-001, REQ-INSTALL-001, REQ-CONTEXT-001. |
+| Interface | 7 | REQ-HANDOFF-002, REQ-HANDOFF-003, REQ-SEC-003, REQ-INSTALL-002, REQ-INSTALL-008, REQ-INSTALL-009, REQ-CONTEXT-002. The relay wire protocol is specified in the system plan as a design contract and is not restated here; the bridge authentication contract is restated as REQ-SEC-003. |
+| Data | 2 | REQ-GATE-005, REQ-GATE-012. Genuinely thin: other persisted shapes (session state, artifacts) are covered inside functional requirements on approval and storage. |
 | Regulatory | 0 | Genuinely empty: the product is an open-source local tool with no identified regulatory obligation; security posture lives under Non-functional (security). |
-| Constraint | 8 | Ingestion bounds, Product Manager isolation, SHA pinning, platform and toolchain pins, and the command center no-egress rule: REQ-GATE-003, REQ-GATE-004, REQ-RELEASE-005, REQ-COMPAT-001 to REQ-COMPAT-004, REQ-LIVE-004. |
-| Reliability | 0 | Dismissed as a separate category: journaled commit and crash recovery are stated under REQ-GATE-009 and atomic overlay writes under REQ-BOARD-003; no standalone reliability target has been set. |
-| Scalability | 0 | Genuinely empty: Plan-Forge is a single-user local tool; the only scale bound is the graph node budget under Non-functional (performance) (REQ-PERF-005). |
+| Constraint | 8 | Ingestion bounds, Product Manager isolation, SHA pinning, platform and toolchain pins, and the 64 KiB context bound: REQ-GATE-003, REQ-GATE-004, REQ-RELEASE-005, REQ-COMPAT-001 to REQ-COMPAT-004, REQ-CONTEXT-005. |
+| Reliability | 0 | Dismissed as a separate category: journaled commit and crash recovery are stated under REQ-GATE-009; no standalone reliability target has been set. |
+| Scalability | 0 | Genuinely empty: Plan-Forge is a single-user local tool; the only scale bounds are the ingestion bounds (REQ-GATE-003) and the 64 KiB context bound (REQ-CONTEXT-005). |
 | Maintainability | 0 | Genuinely empty: upheld through repository gates (lint, typecheck, CI under REQ-RELEASE-001) rather than stated as product requirements. |
 | Portability | 0 | Dismissed as a separate category: platform coverage is stated under Constraint (REQ-COMPAT-001, REQ-COMPAT-003, REQ-COMPAT-004); no further portability requirement is identified. |
 | Documentation | 0 | Dismissed as a separate category: the README and skill-install documentation ship as release artifacts (REQ-RELEASE-003), not as product requirements. |
-| Privacy | 0 | Dismissed as a separate category: the egress allowlist and untrusted-input posture are stated under Non-functional (security) (REQ-SEC-001, REQ-SEC-002, REQ-SEC-004). |
+| Privacy | 0 | Dismissed as a separate category: the egress allowlist, the untrusted-input posture, the no-scan rule for the user's own text and the context recipients are stated under Non-functional (security) (REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-007, REQ-CONTEXT-006, REQ-CONTEXT-007). |
 
 ## Glossary
 
@@ -1193,53 +1085,60 @@ Counts are taken from the `Category:` fields and sum to 86 requirements.
 - Product Manager isolation: the property that nothing derived from the repository reaches the Product Manager avatar; the operational posture is stated by REQ-GATE-004.
 - agent harness: the host-mediated coding agent session that receives the approved plan manifest and executes it.
 - host: a supported local agent CLI — Claude Code, oh-my-pi (OMP) or Antigravity (AGY).
-- skill: a named instruction package installed under a host's skill root; Claude Code and Antigravity invoke it as a slash command, while oh-my-pi exposes `skill:plan-forge` alongside the hook-registered `/plan-forge` command.
-- hook: a host-registered callback (session start, pre/post tool use, prompt submit) through which Plan-Forge injects or captures context.
+- skill: a named instruction package installed under a host's skill root; Claude Code and Antigravity invoke it as a slash command, while oh-my-pi receives no skill and reaches Plan-Forge through the hook-registered `/plan-forge` command.
+- hook: a host-registered callback (session start, pre tool use or post tool use) through which Plan-Forge reports plan status, guards edits against a changed plan or hands off to plan mode.
 - plan mode: a mode of the host, not of Plan-Forge — the host's own planning mode, entered after approval, in which the agent plans without editing files.
 - plan manifest: `.plan/plan_manifest.json`, the machine-readable approved plan with task DAG, targets and verification commands.
 - synthesized spec: `.plan/synthesized_spec.md`, the human-readable approved specification consumed by the agent harness as its blueprint.
 - approval ledger: `PlanForgeHome()/approvals.json`, the local record of plan manifest hashes approved on this machine.
-- board: the Plan-Forge surface for the approved plan manifest's tasks: the window view laid out by status column, the overlay store behind it, its per-repository lock and its bridge API.
-- task: one unit of planned work from the plan manifest, identified `T-<n>`, or an accepted discovery `D-<n>`.
-- discovery: an item of work observed outside the plan manifest — a new task or a touched path — in one of three states: proposed, accepted or dismissed; only the user changes the state.
-- path node: a graph node representing a repository path the agent harness touched, linked to its parent task or grouped under Unplanned.
-- coordinator: the board component that records agent harness activity into the overlay and computes the live column, blocked state, awaiting verification and the Up-next queue from plan evidence plus overlay activity, steering the agent harness only when the queue head changes.
-- overlay: the board's machine-local persistence, keyed by the approved plan manifest hash and kept separate from the approved artifacts.
-- consumer: one host connection that pulls board deltas, identified by a per-host consumer id.
-- cursor: a consumer's bookmark in the overlay recording what has already been delivered to that consumer.
-- delta: the text of board changes — priorities, context notes and steering lines — delivered to a consumer since its cursor.
-- live column: the column the coordinator computes for a task from evidence plus activity; the board snapshot shows it and REQ-COORD-003 defines the precedence.
-- evidence: repository state observed by the planstate scan — AST targets and verification receipts — from which the board derives the evidence column (REQ-BOARD-002).
+- task: one unit of planned work from the plan manifest, identified `T-<n>`.
+- evidence: repository state observed by the planstate scan — AST targets and verification receipts — from which plan status is derived.
 - drifted: the state of the plan manifest, or of a task, when the repository no longer matches the approved artifacts — an invalid manifest, a hash mismatch or an invalid target — so evidence cannot be trusted.
 - managed: written by the installer and recorded in the install manifest with the `plan-forge managed` marker, so re-install and uninstall know exactly what Plan-Forge owns.
 - relay: the `plan-forge-relay` server that mirrors session state between clients in Remote collaboration mode.
 - avatar: one deliberation role in the plan forge gate: Product Manager, Technical Architect, Domain Specialist, Red-Team Critic or Lead Synthesizer.
 - AST: abstract syntax tree; the repository grounding produced by the Tree-sitter scan.
-- DAG: directed acyclic graph; the dependency structure of tasks in the plan manifest and the input to the graph view layout.
+- DAG: directed acyclic graph; the dependency structure of tasks in the plan manifest.
 - PRD: product requirements document; the raw or normalized input to the plan forge gate.
 - CSP: content security policy; the response header the local bridge serves the UI under (REQ-SEC-006).
 - PERT: program evaluation and review technique; the three-point estimate input (optimistic, likely, pessimistic) behind the dual effort schedules (REQ-GATE-010).
 - TTY: an interactive terminal; the installer prompts only when stdin and stdout are TTYs (REQ-INSTALL-006).
 - decision card: the prompt the plan forge gate shows when deliberation needs a human choice — two to four options with a recommendation (REQ-GATE-007).
+- composer: the Page 1 editor where the user writes the brief; its text, plus ingested files, becomes the PRD.
+- interpretation call: the normalization model call that turns the composed text and ingested files into a `NormalizedPRD` and its epics (REQ-GATE-002, REQ-GATE-012).
+- epic file: one epic returned by the interpretation call, shown on Page 1 as a file the user can open (REQ-UI-012). It is not the Product Manager's epic of REQ-GATE-005, which deliberation produces later.
+- code component: a repository path, written relative to the repository root, that the component browser lists and an epic file can link (REQ-UI-011, REQ-UI-013).
+- context gatherer: the `internal/gather` package, which reads project memory and git state without a model call and hands the result to the Technical Architect, the Domain Specialists and the Red-Team Critic (REQ-CONTEXT-001).
+- recall index: a SQLite FTS5 database of project memory written by the `agents` tool, at `<git-common-dir>/agents-local/recall.db` or the legacy `.agents/index/recall.db` (REQ-CONTEXT-002).
 
 ## Open questions
 
-1. Release gap versus the one-command install. The one-command install fetches the latest published release, which is `v0.1.1` and predates every feature in the HANDOFF, BOARD, COORD, GRAPH and UI areas of this catalogue (confirmed: `git ls-tree v0.1.1 cmd/client/` has no `cmd_board.go` or `cmd_validate.go`). Whether the README's one-command install is expected to deliver those features, and when a tag carrying them is cut, is undecided. Blocking: release timing. Answerable by: @danielckv.
+1. Release gap versus the one-command install. The one-command install fetches the latest published release, which is `v0.1.1` and predates every feature in the HANDOFF and UI areas of this catalogue (confirmed: `git ls-tree v0.1.1 cmd/client/` has no `cmd_validate.go`). Whether the README's one-command install is expected to deliver those features, and when a tag carrying them is cut, is undecided. Blocking: release timing. Answerable by: @danielckv.
 2. oh-my-pi dual surface. **Settled 2026-10-19:** the skill is dropped and oh-my-pi is command-only (REQ-INSTALL-008). One consequence is open in its place: a skill can be matched from its description and a registered command cannot, so a prose request no longer reaches Plan Forge in oh-my-pi. Whether that is worth a session-start hint line — which would make every session chattier — is undecided. Answerable by: @danielckv.
-3. Command center sprint titles. REQ-LIVE-003 is partly met: `PlanManifest` carries `TaskDAG` but no epic or story titles, which survive approval only as headings in `synthesized_spec.md`, so `/sprint` groups by identifier rather than by title. Whether to parse those headings back out of the spec, or to persist them in the manifest, is undecided. Answerable by: @danielckv.
-4. Command center hook budget. REQ-LIVE-006 is partly met: `CenterEnsureBound` and `centerReportBound` are declared and the oh-my-pi side is covered by tests that prove the launch is not awaited, but no test asserts the Claude-side wall-clock bound the way REQ-PERF-001 does for `hook claude`. Answerable by: @danielckv.
+3. Command center sprint titles. **Closed 2026-10-22:** the command center was removed, so REQ-LIVE-003 is retired (`docs/adrs/0001-remove-live-task-views.md`).
+4. Command center hook budget. **Closed 2026-10-22:** the command center was removed, so REQ-LIVE-006 is retired (`docs/adrs/0001-remove-live-task-views.md`).
 5. Antigravity hook file shape. `internal/host/hooks.go` writes events at the top level of `~/.gemini/config/hooks.json` (`{"SessionStart":[...]}`), while `integrations/agy-locations.md` documents the nested form (`{"plan-forge":{"SessionStart":[...]}}`); the installed file on this machine uses the flat form. Whether Antigravity reads the flat form — and therefore whether the plan-status hook fires at all — is unverified; this is why REQ-INSTALL-009 is partly met. Settled by reading Antigravity's hook documentation or observing the session-start banner. Answerable by: whoever can inspect the Antigravity CLI hooks loader (owner: @danielckv).
 6. Antigravity wait timeout. The `{{WAIT_TIMEOUT}}` template value for AGY is 50 s "until its limit is verified" per the system plan; the actual AGY tool-call limit has not been confirmed. Blocking: AGY documentation or empirical check. Answerable by: @danielckv.
 7. Windows cross-`go vet`. The Windows cross-`go vet` cannot run on this machine because tree-sitter needs cgo; CI covers it. Whether local pre-push verification of the Windows build is required is undecided. Blocking: none for correctness (CI gate exists); a local verification option needs a Windows runner or container. Answerable by: @danielckv.
 8. Subjective polish measure. REQ-UI-009 is verified only by objective proxies (component set shipped, gates green); a measurable usability target (task-completion study, SUS score) has not been set, so REQ-UI-009 is partly met. Blocking: a target from the owner. Answerable by: @danielckv.
 9. Egress check untested. `internal/relay/client_conn.go` implements the egress guard (`NewEgressGuard`, `Contains`, `Redact`, `RedactJSON`) and `internal/app/remote.go` applies it, but no test in the tree exercises it, so REQ-SEC-004 is partly met. Blocking: a test that feeds absolute paths and credential-shaped content through `Redact` and `RedactJSON` and asserts none reaches the wire. Answerable by: @danielckv.
 10. Scan bound untested. The worker cap, the 2-second parse timeout and the 120-second scan budget are defined in `internal/ast/scanner.go` but no test asserts them or the `timed_out` partial result, so REQ-PERF-002 is partly met. Blocking: a scan test with a shortened timeout asserting `coverage.timed_out` and a partial graph. Answerable by: @danielckv.
-11. Reserved `verify` activity source. `SourceVerify` is a valid activity source in `internal/board/discovery.go` but nothing emits it: `plan-forge verify` (`cmd/client/cmd_verify.go`) writes a receipt and records no board activity, so a verification run moves a card only after the next 5-second evidence re-scan. Whether `verify` should emit that activity, or the value should be removed, is undecided; no requirement depends on it. Blocking: a product decision on real-time verification feedback. Answerable by: @danielckv.
+11. Reserved `verify` activity source. **Closed 2026-10-22:** the board and its activity sources were removed (`docs/adrs/0001-remove-live-task-views.md`).
 12. Antigravity automatic plan-mode entry. REQ-HANDOFF-001 delivers automatic plan-mode entry and validation for Claude Code and oh-my-pi only; Antigravity receives the plan-mode hint text (REQ-HANDOFF-006) and the user enters plan mode themselves, so REQ-HANDOFF-001 is partly met. Whether an automatic Antigravity mechanism exists, or the hint is the accepted ceiling, is undecided. Blocking: Antigravity API surface for session mode control. Answerable by: @danielckv.
-13. Remaining compound requirements. The 2026-10-19 audit counted 31 compound requirements; six were split in this pass (REQ-INSTALL-002, REQ-SEC-003, REQ-GATE-007, REQ-PERF-004, REQ-HANDOFF-005, REQ-RELEASE-001). The remaining 25 stay compound until a follow-up pass: REQ-GATE-005, REQ-GATE-006, REQ-GATE-008, REQ-GATE-010, REQ-UI-001, REQ-UI-002, REQ-UI-003, REQ-UI-006, REQ-UI-008, REQ-HANDOFF-001, REQ-HANDOFF-004, REQ-BOARD-001, REQ-BOARD-003, REQ-BOARD-005, REQ-BOARD-007, REQ-COORD-003, REQ-GRAPH-002, REQ-GRAPH-004, REQ-GRAPH-005, REQ-INSTALL-001, REQ-INSTALL-004, REQ-INSTALL-005, REQ-INSTALL-006, REQ-RELEASE-004, REQ-SEC-005. Blocking: a scheduled editorial pass; none is functionally wrong, each just carries more than one intent. Answerable by: @danielckv.
+13. Remaining compound requirements. The 2026-10-19 audit counted 31 compound requirements; six were split in this pass (REQ-INSTALL-002, REQ-SEC-003, REQ-GATE-007, REQ-PERF-004, REQ-HANDOFF-005, REQ-RELEASE-001). Of the remaining 25, nine left with the retired areas on 2026-10-22 (REQ-UI-008, REQ-BOARD-001, REQ-BOARD-003, REQ-BOARD-005, REQ-BOARD-007, REQ-COORD-003, REQ-GRAPH-002, REQ-GRAPH-004, REQ-GRAPH-005). The other 16 stay compound until a follow-up pass: REQ-GATE-005, REQ-GATE-006, REQ-GATE-008, REQ-GATE-010, REQ-UI-001, REQ-UI-002, REQ-UI-003, REQ-UI-006, REQ-HANDOFF-001, REQ-HANDOFF-004, REQ-INSTALL-001, REQ-INSTALL-004, REQ-INSTALL-005, REQ-INSTALL-006, REQ-RELEASE-004, REQ-SEC-005. Blocking: a scheduled editorial pass; none is functionally wrong, each just carries more than one intent. Answerable by: @danielckv.
+14. Context, epics and composer in flight. On 2026-10-22 the maintainer approved the context gatherer, interpretation epics, the Page 1 composer and the removal of the composer secret scan. The code is being written now, so 17 requirements are `not met`: REQ-CONTEXT-001 to REQ-CONTEXT-009, REQ-GATE-012, REQ-GATE-013, REQ-UI-010 to REQ-UI-014 and REQ-SEC-007. Each flips to `met` when its named test lands and passes. Four still name no test: REQ-UI-014 (epic modal), REQ-CONTEXT-007 (never to the Product Manager), REQ-CONTEXT-008 (context shown in the window) and REQ-SEC-007 (no scan, no Confirm gate). REQ-CONTEXT-009 has no command-level test. REQ-CONTEXT-004 does not yet fix how many recent commit subjects the gatherer records. Blocking: the implementation and its tests. Answerable by: @danielckv.
 
 ## Review log
 
+- 2026-10-22 · REQ-BOARD-001..007, REQ-COORD-001..007, REQ-GRAPH-001..005, REQ-LIVE-001..006, REQ-UI-008, REQ-PERF-004, REQ-PERF-005, REQ-PERF-007 · retired: the plan board, the coordinator, the Graph view, discoveries, the command center and swarm reporting were removed; session start no longer starts a daemon or opens a tab; the IDs are listed under Retired requirements and are never reused · evidence: `docs/adrs/0001-remove-live-task-views.md`; `internal/board/`, `internal/center/`, `internal/livestore/`, `internal/planstate/taskboard.go`, `web/src/board/` and `web/src/center/` are deleted from the tree.
+- 2026-10-22 · REQ-INSTALL-002 · the Claude Code hook set is now `SessionStart` (`hook check-state`), `PreToolUse` with matcher `Edit|Write|MultiEdit|NotebookEdit` (`hook claude-guard`) and `PostToolUse` with matcher `Bash` (`hook claude`, plan-mode handoff only); `UserPromptSubmit`, the command center handler and the `plan-forge-board` skill are no longer installed · evidence: `claudeHookEvents`, `claudePreToolUseMatcher` and `claudePostToolUseMatcher` in `internal/host/hooks.go`; `TestManagedHooksStartNothingAtSessionStart`.
+- 2026-10-22 · REQ-INSTALL-003, REQ-INSTALL-007, REQ-INSTALL-008, REQ-INSTALL-009, REQ-INSTALL-010 · `plan-forge-board` and `/plan-forge-board` removed from the statements; REQ-INSTALL-007 and REQ-INSTALL-008 now say oh-my-pi receives no skill copy, which the 2026-10-19 REQ-INSTALL-008 entry below already recorded but the statement still contradicted · evidence: `planOMP` in `internal/host/installer.go`; one `registerCommand` call in `integrations/omp-hook-plan-forge.ts`.
+- 2026-10-22 · REQ-INSTALL-011, REQ-INSTALL-012, REQ-INSTALL-013 · new: an install or uninstall strips the managed handlers 0.3.0 wrote under `UserPromptSubmit` or for the command center; an install deletes an owned `plan-forge-board` skill copy only while its hash matches; `center`, `board` and `swarm` print one stderr line and exit 0 until 0.5.0 · evidence: `TestMergeClaudeHookUpgradesAPreviousInstall`, `TestSplitManagedHookRemovesRetiredHandlers`, `TestClaudeInstallRemovesRetiredBoardSkill`, `TestRetiredCommandsExitCleanly`.
+- 2026-10-22 · REQ-HANDOFF-007, REQ-SEC-002, REQ-SEC-005, REQ-PERF-001, REQ-UI-005, REQ-UI-007, Timing-bound precedence · references to the board delta, the board CLI, `web/src/board/board.css` and the board timing rows removed · evidence: `docs/adrs/0001-remove-live-task-views.md`; `cmd/client/cmd_board.go` and `web/src/board/board.css` are deleted.
+- 2026-10-22 · REQ-SEC-007 · new: the composed requirements text is not scanned for secrets; the regex and entropy scan, `/api/secrets`, `/api/secrets/resolve` and the Confirm gate are removed because the brief is the user's own text and the entropy rule flagged repository paths; size, UTF-8 and file-ingestion bounds, relay authentication, the egress guard, the tool-free tripwire and Mermaid sanitizing stay; status `not met` until the removal lands (open question 14) · evidence: `docs/adrs/0003-no-text-scanning-in-composer.md`.
+- 2026-10-22 · REQ-CONTEXT-001..009 · new area: the context gatherer reads the recall index read-only or falls back to the memory and docs files, adds git state, caps output at 64 KiB with repository-relative paths, feeds the Technical Architect, Domain Specialist and Red-Team Critic payloads only, is shown in the window and is printed by `plan-forge context`; status `not met` until the code and tests land (open question 14) · evidence: `docs/adrs/0002-read-agents-recall-index.md`.
+- 2026-10-22 · REQ-GATE-012, REQ-GATE-013, REQ-UI-010..014 · new: the interpretation call returns `epics[]` grouped from existing requirements; Page 1 gains a markdown editor, a code component browser, epic files linked to real code components and an epic modal; status `not met` until the code and tests land (open question 14) · evidence: maintainer decision 2026-10-22.
+- 2026-10-22 · Purpose and scope, Category coverage, Glossary, Open questions, Traceability · scope names the context gatherer; counts recomputed from the `Category:` fields to 77; glossary drops board, discovery, path node, coordinator, overlay, consumer, cursor, delta and live column, rewrites skill, hook, task, evidence and DAG, and adds composer, interpretation call, epic file, code component, context gatherer and recall index; open questions 3, 4 and 11 closed, 13 trimmed to 16 compound requirements, 14 added; traceability rows follow the same removals and additions · evidence: this change.
 - 2026-10-19 · REQ-LIVE-001..006 · new area added for the command center: a loopback daemon that records harness sessions with or without an approved plan, serves several tabs, and surfaces the coordinator's up-next queue · evidence: `internal/livestore/`, `internal/center/`, `internal/app/center.go`, `web/src/center/`, `web/e2e/center.spec.ts`.
 - 2026-10-19 · REQ-INSTALL-008 · the oh-my-pi artifact set drops both `SKILL.md` copies; oh-my-pi is reached through built-in commands only, and an install removes copies an earlier version wrote · evidence: `planOMP` in `internal/host/installer.go` plans `commands/plan-config.md` and the hook factory only; `TestOMPPlansCommandsAndHookButNoSkills`, `TestApplyRemovesSkillsFromAnEarlierOMPInstall`.
 - 2026-10-19 · REQ-INSTALL-002 · Claude Code's managed `SessionStart` carries two handlers, the plan-status banner and the command center launch · evidence: `claudeCenterCommand` in `internal/host/hooks.go`; `TestMergeClaudeHookSessionStartCarriesBothHandlers`, `TestMergeClaudeHookUpgradesASingleHandlerInstall`.
@@ -1280,13 +1179,10 @@ Counts are taken from the `Category:` fields and sum to 86 requirements.
 | REQ | Contract | Implementing files | Tests |
 | :--- | :--- | :--- | :--- |
 | REQ-HANDOFF-008 | C19 | `cmd/client/cmd_hook_guard.go`, `internal/host/hooks.go` | `cmd/client/cmd_hook_guard_test.go`, `internal/host/hooks_test.go` |
-| REQ-LIVE-001 | C13, C16 | `internal/livestore/livestore.go`, `internal/center/center.go` | `internal/livestore/livestore_test.go`, `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
-| REQ-LIVE-002 | C14, C15 | `internal/center/hub.go`, `internal/app/center.go` | `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
-| REQ-LIVE-003 | C18 | `internal/app/centersprint.go`, `web/src/center/LivePage.tsx` | `internal/board/coordinator_test.go`, `internal/center/center_test.go` |
-| REQ-LIVE-004 | C15, C17 | `internal/center/center.go`, `web/src/center/` | `web/e2e/center.spec.ts` |
-| REQ-LIVE-005 | C15, C20 | `internal/center/auth.go`, `internal/app/center.go` | `internal/center/center_test.go`, `web/e2e/center.spec.ts` |
-| REQ-LIVE-006 | C16, C20 | `internal/app/center.go`, `cmd/client/cmd_center.go` | `integrations/omp-hook-plan-forge.test.ts` |
 | REQ-INSTALL-010 | C21 | `internal/host/hookcheck.go`, `cmd/client/cmd_doctor.go` | `internal/host/hookcheck_test.go` |
+| REQ-INSTALL-011 | — | `internal/host/hooks.go`, `internal/host/installer.go` | `internal/host/hooks_test.go` |
+| REQ-INSTALL-012 | — | `internal/host/installer.go` | `internal/host/installer_test.go` |
+| REQ-INSTALL-013 | — | `cmd/client/main.go` | `cmd/client/retired_test.go` |
 | REQ-GATE-001 | — | `internal/app/`, `web/src/pages/` | `web/e2e/bridge.spec.ts` |
 | REQ-GATE-002 | — | `internal/ingestion/ingest.go`, `internal/ingestion/normalizer.go` | `internal/ingestion/ingest_test.go`, `internal/ingestion/normalizer_test.go`, `internal/ingestion/fixtures_test.go` |
 | REQ-GATE-003 | — | `internal/ingestion/bounds.go` | `internal/ingestion/fixtures_test.go` |
@@ -1298,15 +1194,30 @@ Counts are taken from the `Category:` fields and sum to 86 requirements.
 | REQ-GATE-009 | — | `internal/storage/artifacts.go`, `internal/session/reducer.go` | `internal/storage/storage_test.go`, `internal/session/reducer_test.go`, `web/e2e/bridge.spec.ts` |
 | REQ-GATE-010 | — | `internal/synthesizer/gantt.go` | `internal/synthesizer/synthesizer_test.go` |
 | REQ-GATE-011 | — | `internal/avatars/orchestrator.go`, `internal/avatars/decisions.go` | `internal/avatars/avatars_test.go` |
+| REQ-GATE-012 | — | `internal/ingestion/normalizer.go`, `internal/contracts/types.go` | `internal/ingestion/normalizer_test.go` (to be added) |
+| REQ-GATE-013 | — | `internal/ingestion/normalizer.go` | `internal/ingestion/normalizer_test.go` (to be added) |
+| REQ-CONTEXT-001 | — | `internal/gather/` | `internal/gather/gather_test.go` (to be added) |
+| REQ-CONTEXT-002 | — | `internal/gather/` | `internal/gather/gather_test.go` (to be added) |
+| REQ-CONTEXT-003 | — | `internal/gather/` | `internal/gather/gather_test.go` (to be added) |
+| REQ-CONTEXT-004 | — | `internal/gather/` | `internal/gather/gather_test.go` (to be added) |
+| REQ-CONTEXT-005 | — | `internal/gather/` | `internal/gather/gather_test.go` (to be added) |
+| REQ-CONTEXT-006 | — | `internal/gather/` | `internal/gather/gather_test.go` (to be added) |
+| REQ-CONTEXT-007 | — | `internal/avatars/prompts.go`, `internal/gather/` | None named yet (open question 14) |
+| REQ-CONTEXT-008 | — | `web/src/pages/Page1Ingestion.tsx`, `internal/app/` | None named yet (open question 14) |
+| REQ-CONTEXT-009 | — | `cmd/client/`, `internal/gather/` | `internal/gather/gather_test.go` (to be added); no command-level test named |
 | REQ-UI-001 | C8 | `web/src/App.tsx`, `web/src/pages/`, `web/src/store/syncStore.ts` | `web/src/ui/phase.test.ts`, `web/e2e/bridge.spec.ts` |
 | REQ-UI-002 | — | `internal/window/launch.go` | `internal/window/launch_test.go` |
 | REQ-UI-003 | — | `web/src/ui/PhaseStepper.tsx`, `web/src/components/Sidebar.tsx` | `web/src/ui/phase.test.ts` |
 | REQ-UI-004 | — | `web/src/ui/ThemeSelect.tsx`, `web/src/ui/prefs.ts` | `web/src/ui/prefs.test.ts` |
-| REQ-UI-005 | C12 | `web/src/app.css`, `web/src/board/board.css` | CSS inspection: `prefers-reduced-motion` blocks in both files |
+| REQ-UI-005 | — | `web/src/app.css` | CSS inspection: a `prefers-reduced-motion: reduce` block |
 | REQ-UI-006 | — | `web/src/ui/shortcuts.ts`, `web/src/ui/ShortcutHelp.tsx`, `web/src/ui/focusTrap.ts` | `web/src/ui/shortcuts.test.ts` |
-| REQ-UI-007 | — | `web/src/app.css`, `web/src/board/board.css` | CSS inspection: `@media (max-width: 1099.98px)` and `@media (max-width: 1180px)` breakpoints |
-| REQ-UI-008 | C8, C12 | `web/src/board/BoardApp.tsx`, `web/src/board/graph/GraphView.tsx` | `web/src/board/viewMode.test.ts` |
+| REQ-UI-007 | — | `web/src/app.css` | CSS inspection: `@media (max-width: 1099.98px)` breakpoint |
 | REQ-UI-009 | — | `web/src/ui/`, `web/src/app.css` | `npm --prefix web test` (suite) |
+| REQ-UI-010 | — | `web/src/pages/Page1Ingestion.tsx`, `web/src/codemirror/` | `web/src/ui/docSync.test.ts` (to be added) |
+| REQ-UI-011 | — | `web/src/pages/Page1Ingestion.tsx`, `internal/app/` | `internal/app/planfiles_test.go` (to be added) |
+| REQ-UI-012 | — | `web/src/pages/Page1Ingestion.tsx`, `internal/app/` | `internal/app/planfiles_test.go` (to be added) |
+| REQ-UI-013 | — | `internal/app/` | `internal/app/planfiles_test.go` (to be added) |
+| REQ-UI-014 | — | `web/src/pages/Page1Ingestion.tsx`, `web/src/ui/Dialog.tsx` | None named yet (open question 14) |
 | REQ-HANDOFF-001 | C6, C7 | `cmd/client/cmd_hook.go`, `integrations/omp-hook-plan-forge.ts` | `cmd/client/cmd_hook_test.go`, `integrations/omp-hook-plan-forge.test.ts` |
 | REQ-HANDOFF-002 | C6 | `cmd/client/cmd_hook.go`, `internal/host/hooks.go` | `cmd/client/cmd_hook_test.go` |
 | REQ-HANDOFF-003 | C7 | `integrations/omp-hook-plan-forge.ts` | `integrations/omp-hook-plan-forge.test.ts` |
@@ -1314,25 +1225,6 @@ Counts are taken from the `Category:` fields and sum to 86 requirements.
 | REQ-HANDOFF-005 | C6, C7 | `cmd/client/cmd_hook.go`, `integrations/skill-plan-forge.md` | `cmd/client/cmd_hook_test.go` |
 | REQ-HANDOFF-006 | C6 | `integrations/skill-plan-forge.md`, `internal/host/installer.go` | `internal/host/installer_test.go` |
 | REQ-HANDOFF-007 | C6, C7 | `cmd/client/cmd_hook.go`, `integrations/skill-plan-forge.md`, `integrations/omp-hook-plan-forge.ts` | `cmd/client/cmd_hook_test.go` |
-| REQ-BOARD-001 | C4, C5 | `web/src/board/`, `internal/app/board.go` | `web/src/board/board.test.ts`, `internal/app/board_test.go` |
-| REQ-BOARD-002 | C5 | `internal/planstate/taskboard.go`, `internal/app/board.go` | `internal/planstate/taskboard_test.go`, `internal/app/board_test.go` |
-| REQ-BOARD-003 | C3, C9 | `internal/board/board.go`, `internal/board/lock_unix.go`, `internal/board/lock_windows.go` | `internal/board/board_test.go` |
-| REQ-BOARD-004 | C4, C6, C7 | `integrations/omp-hook-plan-forge.ts`, `cmd/client/cmd_hook.go`, `internal/board/delta.go` | `integrations/omp-hook-plan-forge.test.ts`, `cmd/client/cmd_hook_test.go`, `internal/board/delta_test.go` |
-| REQ-BOARD-005 | C4, C10 | `cmd/client/cmd_board.go` | `cmd/client/cmd_board_test.go` |
-| REQ-BOARD-006 | C4 | `cmd/client/cmd_board.go`, `internal/app/boardguard_unix.go`, `internal/app/boardguard_windows.go` | `cmd/client/cmd_board_lock_unix_test.go` |
-| REQ-BOARD-007 | C5, C11 | `internal/app/board.go` | `internal/app/board_test.go` |
-| REQ-COORD-001 | C9, C11, C12 | `internal/board/coordinator.go` | `internal/board/coordinator_test.go`, `web/src/board/wave4.test.ts` |
-| REQ-COORD-002 | C10, C12 | `cmd/client/cmd_hook.go`, `integrations/omp-hook-plan-forge.ts`, `cmd/client/cmd_board.go` | `cmd/client/cmd_hook_test.go`, `integrations/omp-hook-plan-forge.test.ts`, `cmd/client/cmd_board_test.go` |
-| REQ-COORD-003 | C9 | `internal/board/coordinator.go` | `internal/board/coordinator_test.go` |
-| REQ-COORD-004 | C9, C11 | `internal/board/coordinator.go`, `internal/app/board.go` | `internal/board/coordinator_test.go`, `internal/app/board_test.go` |
-| REQ-COORD-005 | C9 | `internal/board/coordinator.go` | `internal/board/coordinator_test.go` |
-| REQ-COORD-006 | C9 | `internal/board/delta.go`, `internal/board/coordinator.go` | `internal/board/delta_v2_test.go` |
-| REQ-COORD-007 | C11, C12 | `web/src/board/CoordinatorPanel.tsx`, `web/src/board/coordinator.ts` | `web/src/board/wave4.test.ts` |
-| REQ-GRAPH-001 | C12 | `web/src/board/graph/GraphView.tsx`, `web/src/board/graph/GraphNodes.tsx` | `web/src/board/graph/layout.test.ts`, `web/src/board/wave4.test.ts` |
-| REQ-GRAPH-002 | C9, C12 | `internal/board/discovery.go`, `web/src/board/graph/DiscoveryPanel.tsx` | `internal/board/discovery_test.go`, `web/src/board/wave4.test.ts` |
-| REQ-GRAPH-003 | C9, C10, C12 | `internal/board/discovery.go`, `web/src/board/graph/GraphNodes.tsx` | `internal/board/discovery_test.go`, `web/src/board/wave4.test.ts` |
-| REQ-GRAPH-004 | C11, C12 | `internal/app/board.go`, `internal/board/discovery.go`, `web/src/board/graph/DiscoveryPanel.tsx` | `internal/app/board_test.go`, `web/src/board/wave4.test.ts` |
-| REQ-GRAPH-005 | C12 | `web/src/board/graph/layout.ts`, `web/src/board/graph/GraphView.tsx` | `web/src/board/graph/layout.test.ts` |
 | REQ-INSTALL-001 | — | `scripts/install.sh`, `scripts/install.ps1`, `internal/host/installer.go` | `internal/host/installer_test.go` |
 | REQ-INSTALL-002 | C6 | `internal/host/installer.go`, `internal/host/hooks.go`, `integrations/` | `internal/host/installer_test.go`, `internal/host/hooks_test.go` |
 | REQ-INSTALL-003 | — | `internal/host/installer.go`, `integrations/` | `internal/host/installer_test.go` |
@@ -1340,7 +1232,7 @@ Counts are taken from the `Category:` fields and sum to 86 requirements.
 | REQ-INSTALL-005 | — | `internal/host/installer.go`, `cmd/client/cmd_uninstall.go` | `internal/host/installer_test.go` |
 | REQ-INSTALL-006 | — | `internal/host/installer.go`, `cmd/client/cmd_install.go` | `internal/host/installer_test.go` |
 | REQ-INSTALL-007 | — | `internal/host/installer.go` | `internal/host/installer_test.go` |
-| REQ-INSTALL-008 | C7 | `internal/host/installer.go`, `internal/host/hooks.go`, `integrations/` | `internal/host/installer_test.go`, `internal/host/hooks_test.go` |
+| REQ-INSTALL-008 | C7 | `internal/host/installer.go`, `internal/host/hooks.go`, `integrations/` | `internal/host/installer_test.go`, `internal/host/hooks_test.go`, `integrations/omp-hook-plan-forge.test.ts` |
 | REQ-INSTALL-009 | C6 | `internal/host/installer.go`, `internal/host/hooks.go`, `integrations/` | `internal/host/installer_test.go`, `internal/host/hooks_test.go` |
 | REQ-RELEASE-001 | — | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | CI workflow runs |
 | REQ-RELEASE-002 | — | `.github/workflows/release.yml`, `.github/workflows/ci.yml`, `internal/buildguard/`, `cmd/relay/guard.go` | `relay` release job; `go-server` CI job |
@@ -1349,18 +1241,16 @@ Counts are taken from the `Category:` fields and sum to 86 requirements.
 | REQ-RELEASE-005 | — | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | Workflow inspection |
 | REQ-RELEASE-006 | — | `.github/workflows/ci.yml`, `.github/workflows/release.yml` | `needs` chain inspection: `go-client` and `client` need `web` |
 | REQ-SEC-001 | — | `internal/planstate/ledger.go`, `internal/planstate/planstate.go`, `cmd/client/cmd_hook.go` | `internal/planstate/validate_test.go` |
-| REQ-SEC-002 | C1, C4 | `internal/sanitize/sanitize.go`, `cmd/client/cmd_hook.go`, `cmd/client/cmd_board.go` | `internal/sanitize/sanitize_test.go` |
+| REQ-SEC-002 | C1 | `internal/sanitize/sanitize.go`, `cmd/client/cmd_hook.go` | `internal/sanitize/sanitize_test.go` |
 | REQ-SEC-003 | — | `internal/relay/local_ws.go`, `internal/relay/client_conn.go` | `internal/relay/local_ws_test.go`, `web/e2e/bridge.spec.ts` |
 | REQ-SEC-004 | — | `internal/relay/client_conn.go`, `internal/app/remote.go` | None: no dedicated egress test exists; `internal/relay/protocol_test.go` does not cover it |
-| REQ-SEC-005 | C4, C6 | `internal/host/claude.go`, `internal/board/delta.go`, `integrations/skill-plan-forge.md` | `internal/host/host_test.go`, `cmd/client/cmd_hook_test.go`, `internal/board/delta_test.go` |
+| REQ-SEC-005 | C6 | `internal/host/claude.go`, `cmd/client/cmd_hook.go`, `integrations/skill-plan-forge.md` | `internal/host/host_test.go`, `cmd/client/cmd_hook_test.go` |
 | REQ-SEC-006 | — | `internal/relay/local_ws.go`, `internal/relay/client_conn.go` | `internal/relay/local_ws_test.go`, `web/e2e/bridge.spec.ts` |
-| REQ-PERF-001 | C6, C10 | `cmd/client/cmd_hook.go`, `cmd/client/cmd_board.go` | `cmd/client/cmd_hook_test.go`, `cmd/client/cmd_board_test.go` |
+| REQ-SEC-007 | — | `internal/app/api.go`, `web/src/pages/Page1Ingestion.tsx` | None named yet (open question 14) |
+| REQ-PERF-001 | C6 | `cmd/client/cmd_hook.go` | `cmd/client/cmd_hook_test.go` |
 | REQ-PERF-002 | — | `internal/ast/scanner.go`, `internal/ast/parse.go` | None direct: bound defined by constants in `internal/ast/scanner.go`; `internal/ast/symbols_test.go` asserts none of it |
 | REQ-PERF-003 | C1, C2 | `cmd/client/cmd_validate.go`, `cmd/client/cmd_session.go` | `cmd/client/cmd_validate_test.go`, `internal/planstate/validate_test.go` |
-| REQ-PERF-004 | C5, C11 | `internal/app/board.go` | `internal/app/board_test.go` |
-| REQ-PERF-005 | C12 | `web/src/board/graph/layout.ts` | `web/src/board/graph/layout.test.ts` |
 | REQ-PERF-006 | — | `internal/relay/hub.go` | `internal/relay/hub_integration_test.go` |
-| REQ-PERF-007 | C7 | `integrations/omp-hook-plan-forge.ts` | `integrations/omp-hook-plan-forge.test.ts` |
 | REQ-COMPAT-001 | — | `.github/workflows/release.yml` | Release `client` matrix runs |
 | REQ-COMPAT-002 | — | `internal/buildguard/`, `cmd/client/guard.go`, `cmd/relay/guard.go` | `go-server` CI job |
 | REQ-COMPAT-003 | — | `web/.nvmrc`, `web/package.json` | `npm --prefix web run typecheck` in CI |
