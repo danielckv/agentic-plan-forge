@@ -1,7 +1,8 @@
 /**
  * syncStore: native WebSocket state machine (connecting | open | resyncing |
- * offline | closed), OT push/pull through `@codemirror/collab`, durable
- * outbox, recovery panel feed, and phase-driven routing guards.
+ * offline | closed), OT push/pull through the DocClient (one change in
+ * flight, local edits rebased over remote ones), recovery panel feed, and
+ * phase-driven routing guards.
  *
  * Routing follows the authority phase: manual URL jumps to a page the phase
  * has not reached are blocked. The phase shown here is only ever
@@ -9,8 +10,10 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { ChangeSet, Text } from "@codemirror/state";
+import { ChangeSet } from "@codemirror/state";
 import type { ChangeDesc } from "@codemirror/state";
+
+import { DocClient, type RemoteEffect } from "../collab/docClient";
 
 import { decodeFrame } from "../protocol/wire";
 import type { WSEnvelope, WSEventType } from "../protocol/wire";
@@ -55,13 +58,6 @@ export const ROUTE_ORDER: Record<string, number> = {
   "/deliberate": 1,
   "/synthesis": 2,
 };
-
-export interface OutboxEntry {
-  id: string;
-  baseVersion: number;
-  payload: string;
-  attempts: number;
-}
 
 export interface RecoveryItem {
   at: number;
@@ -128,6 +124,13 @@ export interface StatusView {
    * Absent until the first `/api/status` answer, and on older bridges.
    */
   requestedHost?: string;
+  /** The host that runs the avatars, once resolved. */
+  mainHost?: string;
+  /** Project context pill: gathering, ok, none or failed. */
+  context?: "gathering" | "ok" | "none" | "failed";
+  contextDetail?: string;
+  /** Revision of the latest interpretation; 0 before the first one. */
+  interpretation?: number;
 }
 
 export const STATUS_UNKNOWN: StatusView = {
@@ -145,7 +148,10 @@ export interface SyncState {
   route: string;
   docVersion: number;
   docText: string;
-  outbox: OutboxEntry[];
+  /** True while local edits wait for the authority's acknowledgement. */
+  pendingEdits: boolean;
+  /** When this window last edited the document (ms since epoch; 0 = never). */
+  lastLocalEdit: number;
   recovery: RecoveryItem[];
   drafts: DraftSummary[];
   decisions: DecisionCard[];
@@ -172,7 +178,8 @@ let state: SyncState = {
   route: "/ingest",
   docVersion: 0,
   docText: "",
-  outbox: [],
+  pendingEdits: false,
+  lastLocalEdit: 0,
   recovery: [],
   drafts: [],
   decisions: [],
@@ -261,28 +268,37 @@ function commandEnvelope(eventType: WSEventType, payload: Record<string, unknown
   };
 }
 
-/** Push the head outbox entry as one uncomposed `TEXT_DELTA` batch. */
-function pushHeadEdit(): void {
-  const next = state.outbox[0];
-  if (next === undefined) return;
-  send(
-    commandEnvelope("TEXT_DELTA", {
-      document_id: "prd",
-      base_version: String(next.baseVersion),
-      updates: [
-        { client_id: `${state.role}:${localSeq}`, changes: JSON.parse(next.payload) },
-      ],
-    }),
-  );
-  localSeq += 1;
+/**
+ * The shared document's OT client. Local edits, acknowledgements and remote
+ * updates all go through it, so the editor never loses a keystroke to a
+ * concurrent upload or collaborator (see collab/docClient.ts).
+ */
+const remoteListeners = new Set<(effect: RemoteEffect) => void>();
+const docClient = new DocClient({
+  send: (payload) => send(commandEnvelope("TEXT_DELTA", payload)),
+  clientId: () => `${state.role ?? "owner"}:${localSeq++}`,
+  onRemote: (effect) => {
+    for (const l of remoteListeners) l(effect);
+  },
+});
+
+/** Mirror the client's text and version into the store. */
+function syncDoc(extra: Partial<SyncState> = {}): void {
+  setState({
+    docText: docClient.localText,
+    docVersion: docClient.confirmedVersion,
+    pendingEdits: docClient.hasUnconfirmed,
+    ...extra,
+  });
 }
 
 /**
- * Apply a serialized ChangeSet to a text string through CodeMirror `Text`
- * (UTF-16 offsets, matching the central authority's document model).
+ * Subscribe the editor to text that changes under it (remote edits, uploads,
+ * snapshots). Returns the unsubscribe function.
  */
-export function applyChangeSetToText(text: string, json: ChangeDesc): string {
-  return ChangeSet.fromJSON(json).apply(Text.of(text.split("\n"))).toString();
+export function subscribeRemoteEdits(fn: (effect: RemoteEffect) => void): () => void {
+  remoteListeners.add(fn);
+  return () => remoteListeners.delete(fn);
 }
 
 interface SnapshotPayload {
@@ -294,17 +310,17 @@ interface SnapshotPayload {
 }
 
 interface TextUpdatesPayload {
-  updates?: Array<{ changes: ChangeDesc }>;
+  from_version?: string;
+  updates?: Array<{ client_id?: string; changes: ChangeDesc }>;
 }
 
 function handleEnvelope(env: WSEnvelope): void {
   switch (env.event_type as WSEventType) {
     case "STATE_SNAPSHOT": {
       const p = env.payload as SnapshotPayload;
-      setState({
+      if (p.doc_text !== undefined) docClient.reset(p.doc_text, Number(p.doc_version ?? "0"));
+      syncDoc({
         phase: p.phase ?? state.phase,
-        docVersion: Number(p.doc_version ?? "0"),
-        docText: p.doc_text ?? state.docText,
         role: p.role ?? state.role,
         members: p.members ?? state.members,
         route: ROUTE_BY_PHASE[p.phase ?? state.phase],
@@ -321,39 +337,50 @@ function handleEnvelope(env: WSEnvelope): void {
     }
     case "TEXT_ACK": {
       const p = env.payload as { version?: string };
-      setState({ docVersion: Number(p.version ?? env.revision), outbox: [] });
+      docClient.ack(Number(p.version ?? env.revision));
+      syncDoc();
       break;
     }
     case "TEXT_UPDATES": {
       const p = env.payload as TextUpdatesPayload;
-      let text = state.docText;
-      for (const u of p.updates ?? []) {
-        text = applyChangeSetToText(text, u.changes);
+      const from = Number(p.from_version ?? docClient.confirmedVersion);
+      if (!docClient.receive(from, p.updates ?? [])) {
+        // A gap: updates were missed. The snapshot that answers this resets.
+        setState({ conn: "resyncing" });
+        send(commandEnvelope("REPLAY_REQUEST", {}));
+        break;
       }
-      setState({ docText: text, docVersion: state.docVersion + (p.updates?.length ?? 0) });
+      syncDoc();
       break;
     }
     case "TEXT_REJECT": {
-      const p = env.payload as { reason?: string; resync?: boolean };
+      const p = env.payload as {
+        reason?: string;
+        resync?: boolean;
+        updates?: Array<{ client_id?: string; changes: ChangeDesc }>;
+      };
       if (p.resync === true) {
+        // The authority follows with TEXT_SNAPSHOT; unconfirmed typing is kept.
         setState({ conn: "resyncing" });
-        send(commandEnvelope("REPLAY_REQUEST", {}));
+      } else if (p.reason === "stale_base") {
+        docClient.rejectStale(p.updates ?? []);
+        syncDoc();
       } else {
-        toastStore.push("warning", `Edit rejected (${p.reason ?? "unknown"}) — retrying`);
-        setState({
-          outbox: state.outbox.map((e) => ({ ...e, attempts: e.attempts + 1 })),
-        });
+        toastStore.push(
+          "warning",
+          p.reason === "locked"
+            ? "The context is confirmed; the document no longer takes edits"
+            : `Edit rejected (${p.reason ?? "unknown"})`,
+        );
+        docClient.discardUnconfirmed();
+        syncDoc();
       }
       break;
     }
     case "TEXT_SNAPSHOT": {
       const p = env.payload as { version?: string; text?: string };
-      setState({
-        docText: p.text ?? state.docText,
-        docVersion: Number(p.version ?? "0"),
-        conn: "open",
-        outbox: [],
-      });
+      docClient.reset(p.text ?? docClient.localText, Number(p.version ?? "0"));
+      syncDoc({ conn: "open" });
       break;
     }
     case "AVATAR_THOUGHT": {
@@ -573,7 +600,6 @@ function openSocket(token: string | null): void {
         }),
       ),
     );
-    pushHeadEdit();
   };
   ws.onmessage = (ev: MessageEvent) => {
     if (typeof ev.data !== "string") return;
@@ -671,26 +697,28 @@ export function applyStatus(patch: Partial<StatusView>): void {
   setState({ status: { ...state.status, ...patch }, statusLoaded: true });
 }
 
-/** Local edit (composer/editor): filter, queue, push. */
-export function submitEdit(insert: string, from: number, to: number): void {
-  if (!insertAllowed(insert)) {
-    toastStore.push("error", "Rejected: CR or lone surrogate in inserted text");
-    return;
-  }
-  const cs = ChangeSet.of({ from, to, insert }, state.docText.length);
-  setState({
-    docText: state.docText.slice(0, from) + insert + state.docText.slice(to),
-    outbox: [
-      ...state.outbox,
-      {
-        id: crypto.randomUUID(),
-        baseVersion: state.docVersion,
-        payload: JSON.stringify(cs.toJSON()),
-        attempts: 0,
-      },
-    ],
+/**
+ * Local edit from the editor, expressed against the current document text.
+ * Returns false (and changes nothing) when an insert carries a carriage
+ * return or a lone surrogate, which the authority refuses.
+ */
+export function editDocument(changes: ChangeSet): boolean {
+  let allowed = true;
+  changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
+    if (!insertAllowed(inserted.toString())) allowed = false;
   });
-  pushHeadEdit();
+  if (!allowed) {
+    toastStore.push("error", "Rejected: CR or lone surrogate in inserted text");
+    return false;
+  }
+  docClient.edit(changes);
+  syncDoc({ lastLocalEdit: Date.now() });
+  return true;
+}
+
+/** Replace `from..to` of the document with `insert`. */
+export function submitEdit(insert: string, from: number, to: number): boolean {
+  return editDocument(ChangeSet.of({ from, to, insert }, docClient.localText.length));
 }
 
 /** Idle `TEXT_CHECK` heartbeat (sha256 of the current document). */
@@ -749,11 +777,10 @@ export function approve(runId: string, synthesisRev: number, contentSha256: stri
 
 /** Export unconfirmed edits to the recovery panel feed (never silently dropped). */
 export function exportRecovery(): void {
-  if (state.outbox.length === 0) return;
+  if (!state.pendingEdits) return;
   toastStore.push("info", "Unconfirmed edits exported to the recovery panel");
   setState({
     recovery: [...state.recovery, { at: Date.now(), room: state.serverUrl, text: state.docText }],
-    outbox: [],
   });
 }
 
