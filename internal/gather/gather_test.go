@@ -121,6 +121,33 @@ func TestCollectReadsTheRecallIndexForThisWorktreeOnly(t *testing.T) {
 	}
 }
 
+// Plan Forge only reads the index another tool owns: the file is
+// byte-identical after a read.
+func TestCollectLeavesTheRecallIndexUnchanged(t *testing.T) {
+	repo := newRepo(t)
+	db := filepath.Join(repo, ".git", "agents-local", "recall.db")
+	makeIndex(t, db, true, [][3]string{{filepath.Base(repo), "docs/plans/p.md", "Invoices export as CSV."}})
+	before, err := os.ReadFile(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := collect(t, repo, requirements); got.Source != contracts.ContextSourceRecall || len(got.Hits) != 1 {
+		t.Fatalf("context = %+v", got)
+	}
+	after, err := os.ReadFile(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Error("reading the recall index changed the file")
+	}
+	for _, side := range []string{"-wal", "-journal"} {
+		if _, err := os.Stat(db + side); err == nil {
+			t.Errorf("reading the recall index created %s", filepath.Base(db+side))
+		}
+	}
+}
+
 func TestCollectFallsBackToTheLegacyIndex(t *testing.T) {
 	repo := newRepo(t)
 	// A current index with rows for other worktrees only does not answer.

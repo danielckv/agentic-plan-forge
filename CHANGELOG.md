@@ -11,12 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Planning reads what the repository already says. Before deliberation, Plan Forge collects excerpts from the project's notes, specs, plans and decision records that match the requirements, plus the branch and recent commit subjects. It reads the project-memory recall index when one exists (`<git-common-dir>/agents-local/recall.db`, or the older `.agents/index/recall.db`) and the Markdown files directly otherwise. The Architect, Specialists and Critic receive it as `project_context`; the Product Manager never does. Read-only, bounded to 64 KiB, and repository-relative. See [ADR 0002](docs/adrs/0002-read-agents-recall-index.md).
 - `plan-forge context --query "<topic>"` prints the same context. The `/plan-forge` skill runs it before interviewing you, so it skips questions the repository already answers.
+- A Markdown composer on the first page. One large editor with a formatting toolbar, Write/Split/Preview, a `/` menu for headings, epics, stories, checklists, tables and diagrams, and `@` completion over the repository's public declarations, which writes their exact names. Files attach from the toolbar or drop onto the editor.
+- Epic files. The interpretation that runs a few seconds after you stop typing also groups the requirements into epics (`normalized_prd.v1` gains an optional `epics` array; nothing is invented). The right rail shows them as files linked to the components and project notes they match; each opens as a document. Codebase and Notes tabs sit beside them.
+- An avatar room on the second page: the four avatars with what each is doing now, one discussion timeline of statuses, drafts, findings and decisions, and the plan as it takes shape — the Product Manager's epics, the architect's diagram and workstreams, the critic's findings.
 
 ### Changed
 
 - The forge opens as a tab in your default browser. It launched a Chromium `--app` window in a throwaway profile, which meant a second browser with none of your extensions or sessions, and a hard requirement on Chrome, Edge, Brave or Chromium being installed. The URL now goes to the platform opener (`open`, `xdg-open`, the Windows protocol handler); `browser_path` still wins and now names a browser that takes a bare URL, so it opens a tab in the instance you already have running.
 - Because the opener is not the browser — it exits milliseconds after handing the URL over — its exit is no longer treated as the window closing. Publishing it would have ended a session on the first page refresh. The UI WebSocket is now the only close signal, and nothing kills the tab: after an approval the page says it is safe to close, which is also why an explicit `browser_path` cannot be turned into a way to shut your browser down.
 - Starting an agent session no longer starts anything. The Claude Code hooks are now `SessionStart` (plan status), `PreToolUse` (the stale-plan guard) and `PostToolUse` on `Bash` (the plan-mode handoff). The OMP hook reports plan status and registers `/plan-forge`. Run `plan-forge install` once after upgrading; it removes the old handlers and the `plan-forge-board` skill. See [ADR 0001](docs/adrs/0001-remove-live-task-views.md).
+
+- The header lines up. The sidebar brand row and the top bar share one 56 px height (they were 61 px and 52 px), and the sidebar foot matches the page footer. The theme switch and shortcut sheet moved into the top bar, which also shows the branch.
+- A new mark: a "P" whose bowl closes into a ring, with a spark, in the README, the window and the new favicon.
+
+### Fixed
+
+- Typing in the first page's editor never reached the session. Its listener iterated a non-iterable change description, and the editor was rebuilt on every change. Edits now go through an OT client that keeps one change in flight, rebases local typing over uploads and collaborators, resends after a stale rejection, and keeps unconfirmed text across a reconnect.
+- The second and third pages read avatar frames in the wrong shape. Drafts arrive as inline JSON objects and critiques as the whole set (`issues[]`), so drafts, findings and the synthesized specification did not render from a real run.
+- The cycle-limit panel never appeared. It now shows when the run pauses with blocking findings.
 
 ### Removed
 

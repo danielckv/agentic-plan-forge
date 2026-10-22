@@ -440,9 +440,14 @@ func finalizeNormalized(w wireNormalized, text string, sections []textSection, r
 		}
 	}
 
+	// An epic regroups the product view and never adds to it: an item the
+	// model placed in an epic but not in the product view is dropped, and an
+	// epic left with no requirement goes with it.
 	epics := make([]contracts.DraftEpic, 0, len(w.Epics))
 	for _, e := range w.Epics {
-		if strings.TrimSpace(e.Title) == "" {
+		e.Requirements = knownItems(e.Requirements, product.Requirements)
+		e.AcceptanceCriteria = knownItems(e.AcceptanceCriteria, product.AcceptanceCriteria)
+		if strings.TrimSpace(e.Title) == "" || len(e.Requirements) == 0 {
 			continue
 		}
 		e.ID = fmt.Sprintf("E%d", len(epics)+1)
@@ -468,6 +473,18 @@ func finalizeNormalized(w wireNormalized, text string, sections []textSection, r
 	out.Product, out.Epics, out.Ambiguities = nw.Product, nw.Epics, nw.Ambiguities
 	out.SourceRefs = append([]contracts.SourceRef{}, out.SourceRefs...)
 	return out, nil
+}
+
+// knownItems keeps the items of list that also appear in known, compared by
+// normalised text, in list order.
+func knownItems(list, known []string) []string {
+	out := []string{}
+	for _, item := range list {
+		if containsKey(known, item) && !containsKey(out, item) {
+			out = append(out, strings.TrimSpace(item))
+		}
+	}
+	return out
 }
 
 func containsKey(list []string, s string) bool {

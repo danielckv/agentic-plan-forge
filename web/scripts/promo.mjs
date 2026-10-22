@@ -85,10 +85,9 @@ try {
   await page.getByRole("tab", { name: /Codebase/ }).click();
   await page.locator(".pf-block-head", { hasText: "internal/reporting" }).click();
   await page.waitForSelector(".pf-symbol", { state: "visible" });
-  const editor = page.locator(".pf-composer .cm-content");
-  await editor.click();
-  await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.type("\n\nStream rows from @Query");
+  await page.locator(".pf-composer .cm-line", { hasText: "Exports over 10,000 rows" }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Stream rows from @Query");
   await page.waitForSelector(".cm-tooltip-autocomplete", { state: "visible" });
   await page.waitForTimeout(300);
   await shot(page, "codebase-palette");
@@ -124,6 +123,14 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#root figure.pf-mermaid svg").length >= 2);
   await page.waitForTimeout(600);
   await shot(page, "synthesis");
+
+  // The overview diagram, from its HTML template.
+  const overview = await context.newPage();
+  await overview.setViewportSize({ width: 1280, height: 580 });
+  await overview.goto(new URL("./promo/overview.html", import.meta.url).href);
+  await overview.waitForTimeout(200);
+  await shot(overview, "overview");
+  await overview.close();
 
   if (errors.length > 0) throw new Error(`page errors:\n${errors.join("\n")}`);
   if (foreign.length > 0) throw new Error(`requests left the origin: ${foreign.join(", ")}`);

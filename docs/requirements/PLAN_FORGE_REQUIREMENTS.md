@@ -159,9 +159,9 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Category: Data
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22): Page 1 shows the brief as epics before deliberation.
-- Acceptance criteria: `internal/ingestion/normalizer_test.go` (to be added: a normalized brief returns `epics[]` with all five fields set).
-- Traces to: `internal/ingestion/normalizer.go`, `internal/contracts/types.go`
-- Status: not met
+- Acceptance criteria: `internal/ingestion/epics_test.go` (`TestNormalizeReturnsNumberedEpics`: epics numbered `E1`..`En`, a nameless one dropped, the wire form valid against the schema; `TestMergeWireFoldsEpicsAcrossSections`) and the schema fixture `tests/fixtures/schema/valid/normalized_prd.v1__epics.json`.
+- Traces to: `internal/ingestion/normalizer.go`, `internal/contracts/types.go`, `internal/contracts/schema/normalized_prd.v1.json`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-GATE-013 — Epics invent nothing
@@ -172,9 +172,9 @@ Purpose: this catalogue is the normative inventory of what Plan-Forge shall do. 
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22): epics group existing requirements and never add content.
-- Acceptance criteria: `internal/ingestion/normalizer_test.go` (to be added: a model reply that puts an unknown requirement in an epic never yields an epic containing it).
+- Acceptance criteria: `internal/ingestion/epics_test.go` (`TestNormalizeEpicsCarryOnlyKnownRequirements`: an item the model put in an epic but not in the product view is dropped, and an epic left with no requirement goes with it).
 - Traces to: `internal/ingestion/normalizer.go`
-- Status: not met
+- Status: met
 - Last reviewed: 2026-10-22
 
 ## CONTEXT — pre-planning context gatherer
@@ -189,9 +189,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: User
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22); `docs/adrs/0002-read-agents-recall-index.md`.
-- Acceptance criteria: `internal/gather/gather_test.go` (to be added: a fixture repository with `.agents/` and `docs/` content yields a context that names those files).
-- Traces to: `internal/gather/`
-- Status: not met
+- Acceptance criteria: `internal/gather/gather_test.go` (`TestCollectReadsTheRecallIndexForThisWorktreeOnly`, `TestCollectReadsFilesWhenNoIndexAnswers`) and `internal/avatars/context_test.go` (`TestProjectContextReachesTechnicalAvatarsOnly`).
+- Traces to: `internal/gather/`, `internal/app/projectcontext.go`, `internal/avatars/stage.go`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-002 — Read the recall index read-only
@@ -202,9 +202,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Interface
 - Owner: @danielckv
 - Source: `docs/adrs/0002-read-agents-recall-index.md`.
-- Acceptance criteria: `internal/gather/gather_test.go` (to be added: an index at each location is read, the first location wins when both exist, and the index file is byte-identical after the read).
+- Acceptance criteria: `internal/gather/gather_test.go` (`TestCollectReadsTheRecallIndexForThisWorktreeOnly`: only this working tree's rows answer; `TestCollectFallsBackToTheLegacyIndex`: a current index without them falls through to the legacy one; `TestCollectLeavesTheRecallIndexUnchanged`: the file is byte-identical after a read and no journal is created).
 - Traces to: `internal/gather/`
-- Status: not met
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-003 — Fall back to the files
@@ -215,22 +215,22 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: `docs/adrs/0002-read-agents-recall-index.md`.
-- Acceptance criteria: `internal/gather/gather_test.go` (to be added: with no index, the context names files from each listed path that exists; a missing path is skipped without error).
+- Acceptance criteria: `internal/gather/gather_test.go` (`TestCollectReadsFilesWhenNoIndexAnswers`: excerpts come from `.agents/STATE.md` and `docs/adrs/`, and a corrupt index is reported as a note; `TestCollectWithoutSourcesOrText`; `TestCollectSkipsSymlinksOutOfTheRepository`).
 - Traces to: `internal/gather/`
-- Status: not met
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-004 — Git state
 
 - ID: REQ-CONTEXT-004
 - Level: F
-- Statement: The context gatherer shall record the current branch, the HEAD commit, the number of dirty paths and the subjects of the most recent commits.
+- Statement: The context gatherer shall record the current branch, the HEAD commit and up to 20 distinct subjects of the newest commits, using only Git commands that cannot run repository-configured code.
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22).
-- Acceptance criteria: `internal/gather/gather_test.go` (to be added: a fixture repository with one dirty file reports its branch, HEAD, a dirty count of 1 and its commit subjects). The number of recent subjects is not yet fixed here (open question 14).
-- Traces to: `internal/gather/`
-- Status: not met
+- Acceptance criteria: `internal/gather/gather_test.go` (`TestCollectReadsTheRecallIndexForThisWorktreeOnly` checks branch, a 12-character HEAD and the commit subject). The dirty-path count was dropped: `git status` can run a repository-configured file system monitor and filters, which `internal/ast/gitcmd.go` refuses by design.
+- Traces to: `internal/gather/`, `internal/ast/gitcmd.go`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-005 — Output bound
@@ -241,9 +241,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Constraint
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22).
-- Acceptance criteria: `internal/gather/gather_test.go` (to be added: a fixture larger than 64 KiB yields output of at most 65,536 bytes).
+- Acceptance criteria: `internal/gather/gather_test.go` (`TestCollectStaysWithinTheBudget`: the marshalled context stays within the budget given, dropping the lowest-ranked excerpts first and reporting `truncated`).
 - Traces to: `internal/gather/`
-- Status: not met
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-006 — Repository-relative paths only
@@ -254,9 +254,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Non-functional (security)
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22); the no-absolute-path rule of REQ-SEC-004.
-- Acceptance criteria: `internal/gather/gather_test.go` (to be added: the output never contains the fixture's absolute root).
+- Acceptance criteria: `internal/gather/gather_test.go` (`TestCollectNeverLeaksMachinePaths`: the repository root and home directory inside an excerpt are rewritten, not dropped).
 - Traces to: `internal/gather/`
-- Status: not met
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-007 — Never to the Product Manager
@@ -267,9 +267,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Non-functional (security)
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22); Product Manager isolation (REQ-GATE-004).
-- Acceptance criteria: Pending: no test is named yet (open question 14). The REQ-GATE-004 sentinel tests in `internal/avatars/prompts_test.go` are where a context sentinel would be asserted absent from the Product Manager request.
-- Traces to: `internal/avatars/prompts.go`, `internal/gather/`
-- Status: not met
+- Acceptance criteria: `internal/avatars/context_test.go` (`TestProjectContextReachesTechnicalAvatarsOnly`: a sentinel in the context reaches the architect, specialist and critic payloads and never the Product Manager request; `TestEmptyProjectContextIsOmitted`; `TestResumeRevalidatesTheProjectContext`).
+- Traces to: `internal/avatars/stage.go`, `internal/avatars/orchestrator.go`, `internal/avatars/checkpoint.go`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-008 — The user sees what the avatars see
@@ -280,9 +280,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22).
-- Acceptance criteria: Pending: no test is named yet (open question 14).
-- Traces to: `web/src/pages/Page1Ingestion.tsx`, `internal/app/`
-- Status: not met
+- Acceptance criteria: `internal/app/projectcontext_test.go` (`TestRefreshContextNeverLetsAnOlderRunWin`, `TestCollectContextTurnsAnErrorIntoANote`, `TestContextPillWording`) for `GET /api/context` and the status pill; `web/src/pages/composer/notes.test.ts` for the Notes tab preview.
+- Traces to: `internal/app/projectcontext.go`, `web/src/pages/composer/NotesList.tsx`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-CONTEXT-009 — `plan-forge context`
@@ -293,9 +293,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22).
-- Acceptance criteria: `internal/gather/gather_test.go` (to be added) covers the content; no command-level test is named yet (open question 14).
-- Traces to: `cmd/client/`, `internal/gather/`
-- Status: not met
+- Acceptance criteria: `cmd/client/cmd_context_test.go` (`TestContextMarkdownIsReadableAndSanitized`, `TestContextRefusesPositionalArguments`); the content is covered by `internal/gather/gather_test.go`.
+- Traces to: `cmd/client/cmd_context.go`, `internal/gather/`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ## UI — the window
@@ -412,9 +412,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22): the Page 1 composer gains a markdown editor, a code component browser and an epic modal.
-- Acceptance criteria: `web/src/ui/docSync.test.ts` (to be added: an edit made in the editor reaches the shared PRD document unchanged).
-- Traces to: `web/src/pages/Page1Ingestion.tsx`, `web/src/codemirror/`
-- Status: not met
+- Acceptance criteria: `web/src/collab/docClient.test.ts` (an edit reaches the authority unchanged, survives a concurrent upload, a stale rejection and a snapshot) and `web/src/ui/editor/markdownEdits.test.ts` (toolbar and block operations).
+- Traces to: `web/src/ui/editor/MarkdownEditor.tsx`, `web/src/collab/docClient.ts`, `web/src/pages/Page1Ingestion.tsx`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-UI-011 — Code component browser
@@ -425,9 +425,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22), as for REQ-UI-010.
-- Acceptance criteria: `internal/app/planfiles_test.go` (to be added: the component list holds repository-relative paths only).
-- Traces to: `web/src/pages/Page1Ingestion.tsx`, `internal/app/`
-- Status: not met
+- Acceptance criteria: `internal/app/planfiles_test.go` (`TestComponentsListsBlocksThenSymbols`: blocks, one block's public declarations, name search, nothing private; `TestComponentAndPlanFileRoutes`).
+- Traces to: `internal/app/planfiles.go`, `web/src/pages/composer/ComponentBrowser.tsx`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-UI-012 — Epic files
@@ -438,9 +438,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22), as for REQ-UI-010.
-- Acceptance criteria: `internal/app/planfiles_test.go` (to be added: one epic file per returned epic).
-- Traces to: `web/src/pages/Page1Ingestion.tsx`, `internal/app/`
-- Status: not met
+- Acceptance criteria: `internal/app/planfiles_test.go` (`TestPlanFilesLinkEpicsToCodeAndNotes`: one file per epic, with its name, counts and Markdown).
+- Traces to: `internal/app/planfiles.go`, `web/src/pages/composer/PlanRail.tsx`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-UI-013 — Epics link real code components
@@ -451,9 +451,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22): epic files show linked real code components.
-- Acceptance criteria: `internal/app/planfiles_test.go` (to be added: a component path that does not exist is never linked).
-- Traces to: `internal/app/`
-- Status: not met
+- Acceptance criteria: `internal/app/planfiles_test.go` (`TestPlanFilesLinkEpicsToCodeAndNotes`: links come only from the scanned graph, ranked by shared terms; an epic with no match says so). `TestPlanFileTableCellsCannotBreakTheTable` covers the rendering.
+- Traces to: `internal/app/planfiles.go`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ### REQ-UI-014 — Epic modal
@@ -464,9 +464,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22), as for REQ-UI-010.
-- Acceptance criteria: Pending: no test is named yet (open question 14). The dialog traps focus as REQ-UI-006 requires of every modal.
-- Traces to: `web/src/pages/Page1Ingestion.tsx`, `web/src/ui/Dialog.tsx`
-- Status: not met
+- Acceptance criteria: `web/scripts/preview.mjs` checks the modal end to end (Markdown tab, previous and next, focus kept inside on Tab, Esc returns focus to the card). The harness is not part of CI, so the requirement stays `partly met` until a CI test covers it.
+- Traces to: `web/src/components/epics/EpicModal.tsx`, `web/src/ui/Dialog.tsx`
+- Status: partly met
 - Last reviewed: 2026-10-22
 
 ## HANDOFF — plan-mode handoff and validation
@@ -901,9 +901,9 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Non-functional (security)
 - Owner: @danielckv
 - Source: `docs/adrs/0003-no-text-scanning-in-composer.md`: the brief is the user's own text, and the regex and entropy rule flagged ordinary identifiers such as repository paths. The size and UTF-8 bounds, the file-ingestion bounds (REQ-GATE-003), relay authentication (REQ-SEC-003), the egress guard (REQ-SEC-004), the tool-free tripwire and Mermaid sanitizing all stay.
-- Acceptance criteria: Pending: the local bridge serves no `/api/secrets` or `/api/secrets/resolve` route, and a brief that contains a repository path freezes with no Confirm gate. No test is named yet (open question 14).
-- Traces to: `internal/app/api.go`, `web/src/pages/Page1Ingestion.tsx`
-- Status: not met
+- Acceptance criteria: `internal/app/freeze_test.go` (`TestFreezeAcceptsAnyComposedText`: a document holding repository paths, a test name, a commit hash and a vendor example key freezes; it failed with "4 possible secret(s)" before the scan was removed). `internal/app/api.go` registers no `/api/secrets` route.
+- Traces to: `internal/app/room.go`, `internal/app/api.go`, `web/src/pages/Page1Ingestion.tsx`
+- Status: met
 - Last reviewed: 2026-10-22
 
 ## PERF — non-functional budgets
@@ -1126,10 +1126,12 @@ Counts are taken from the `Category:` fields and sum to 77 requirements.
 11. Reserved `verify` activity source. **Closed 2026-10-22:** the board and its activity sources were removed (`docs/adrs/0001-remove-live-task-views.md`).
 12. Antigravity automatic plan-mode entry. REQ-HANDOFF-001 delivers automatic plan-mode entry and validation for Claude Code and oh-my-pi only; Antigravity receives the plan-mode hint text (REQ-HANDOFF-006) and the user enters plan mode themselves, so REQ-HANDOFF-001 is partly met. Whether an automatic Antigravity mechanism exists, or the hint is the accepted ceiling, is undecided. Blocking: Antigravity API surface for session mode control. Answerable by: @danielckv.
 13. Remaining compound requirements. The 2026-10-19 audit counted 31 compound requirements; six were split in this pass (REQ-INSTALL-002, REQ-SEC-003, REQ-GATE-007, REQ-PERF-004, REQ-HANDOFF-005, REQ-RELEASE-001). Of the remaining 25, nine left with the retired areas on 2026-10-22 (REQ-UI-008, REQ-BOARD-001, REQ-BOARD-003, REQ-BOARD-005, REQ-BOARD-007, REQ-COORD-003, REQ-GRAPH-002, REQ-GRAPH-004, REQ-GRAPH-005). The other 16 stay compound until a follow-up pass: REQ-GATE-005, REQ-GATE-006, REQ-GATE-008, REQ-GATE-010, REQ-UI-001, REQ-UI-002, REQ-UI-003, REQ-UI-006, REQ-HANDOFF-001, REQ-HANDOFF-004, REQ-INSTALL-001, REQ-INSTALL-004, REQ-INSTALL-005, REQ-INSTALL-006, REQ-RELEASE-004, REQ-SEC-005. Blocking: a scheduled editorial pass; none is functionally wrong, each just carries more than one intent. Answerable by: @danielckv.
-14. Context, epics and composer in flight. On 2026-10-22 the maintainer approved the context gatherer, interpretation epics, the Page 1 composer and the removal of the composer secret scan. The code is being written now, so 17 requirements are `not met`: REQ-CONTEXT-001 to REQ-CONTEXT-009, REQ-GATE-012, REQ-GATE-013, REQ-UI-010 to REQ-UI-014 and REQ-SEC-007. Each flips to `met` when its named test lands and passes. Four still name no test: REQ-UI-014 (epic modal), REQ-CONTEXT-007 (never to the Product Manager), REQ-CONTEXT-008 (context shown in the window) and REQ-SEC-007 (no scan, no Confirm gate). REQ-CONTEXT-009 has no command-level test. REQ-CONTEXT-004 does not yet fix how many recent commit subjects the gatherer records. Blocking: the implementation and its tests. Answerable by: @danielckv.
+14. Epic modal coverage in CI. REQ-UI-014 is `partly met`: `web/scripts/preview.mjs` checks the epic modal (views, navigation, focus trap, Esc), but that harness does not run in CI. Blocking: a CI-run component or end-to-end test of the modal. Answerable by: @danielckv.
 
 ## Review log
 
+- 2026-10-22 · REQ-CONTEXT-001..009, REQ-GATE-012, REQ-GATE-013, REQ-UI-010..013, REQ-SEC-007 · met: the context gatherer, interpretation epics, the composer, the component browser, epic files and the unscanned freeze landed with the tests named in each entry; REQ-CONTEXT-004 now records branch, HEAD and up to 20 distinct commit subjects and no dirty count, because `git status` can run repository-configured code · evidence: `internal/gather/`, `internal/app/planfiles.go`, `internal/app/projectcontext.go`, `internal/app/freeze_test.go`, `web/src/collab/docClient.ts`.
+- 2026-10-22 · REQ-UI-014 · partly met: the epic modal is checked by `web/scripts/preview.mjs` only, which CI does not run (open question 14).
 - 2026-10-22 · REQ-BOARD-001..007, REQ-COORD-001..007, REQ-GRAPH-001..005, REQ-LIVE-001..006, REQ-UI-008, REQ-PERF-004, REQ-PERF-005, REQ-PERF-007 · retired: the plan board, the coordinator, the Graph view, discoveries, the command center and swarm reporting were removed; session start no longer starts a daemon or opens a tab; the IDs are listed under Retired requirements and are never reused · evidence: `docs/adrs/0001-remove-live-task-views.md`; `internal/board/`, `internal/center/`, `internal/livestore/`, `internal/planstate/taskboard.go`, `web/src/board/` and `web/src/center/` are deleted from the tree.
 - 2026-10-22 · REQ-INSTALL-002 · the Claude Code hook set is now `SessionStart` (`hook check-state`), `PreToolUse` with matcher `Edit|Write|MultiEdit|NotebookEdit` (`hook claude-guard`) and `PostToolUse` with matcher `Bash` (`hook claude`, plan-mode handoff only); `UserPromptSubmit`, the command center handler and the `plan-forge-board` skill are no longer installed · evidence: `claudeHookEvents`, `claudePreToolUseMatcher` and `claudePostToolUseMatcher` in `internal/host/hooks.go`; `TestManagedHooksStartNothingAtSessionStart`.
 - 2026-10-22 · REQ-INSTALL-003, REQ-INSTALL-007, REQ-INSTALL-008, REQ-INSTALL-009, REQ-INSTALL-010 · `plan-forge-board` and `/plan-forge-board` removed from the statements; REQ-INSTALL-007 and REQ-INSTALL-008 now say oh-my-pi receives no skill copy, which the 2026-10-19 REQ-INSTALL-008 entry below already recorded but the statement still contradicted · evidence: `planOMP` in `internal/host/installer.go`; one `registerCommand` call in `integrations/omp-hook-plan-forge.ts`.

@@ -287,7 +287,7 @@ export const MANIFEST = {
             severity: e.id === "E1" ? "HIGH" : "MEDIUM",
             acceptance: s.acceptance_criteria,
             targets: e.id === "E1" ? ["internal/reporting/csv.go"] : e.id === "E2" ? ["internal/audit/log.go"] : ["internal/storage/object.go"],
-            verification: ["go test ./internal/..."],
+            verification: [e.id === "E1" ? "go test ./internal/reporting/..." : e.id === "E2" ? "go test ./internal/audit/..." : "go test ./internal/storage/..."],
             humanEstimate: "1 day (9 hrs)",
             agentEstimate: "~10 mins",
           },

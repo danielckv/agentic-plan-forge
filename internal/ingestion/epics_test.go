@@ -86,3 +86,24 @@ func TestMergeWireFoldsEpicsAcrossSections(t *testing.T) {
 		t.Errorf("merged epic = %+v", e)
 	}
 }
+
+// An epic only regroups the product view. A requirement or criterion the
+// model put in an epic but not in "product" is dropped, and an epic left with
+// no requirement goes with it.
+func TestNormalizeEpicsCarryOnlyKnownRequirements(t *testing.T) {
+	gen := &stubGen{responses: []string{epicResponse(`[` +
+		`{"title":"Invoice export","requirements":["Export invoices for a date range","Export to XLSX too"],"acceptance_criteria":["One month returns every invoice","Runs in 1 ms"]},` +
+		`{"title":"Invented","requirements":["Send a fax"]}]`)}}
+	out, err := Normalize(context.Background(), gen, strings.Repeat("Finance exports invoices monthly. ", 20), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Epics) != 1 {
+		t.Fatalf("epics = %+v, want only the epic with a known requirement", out.Epics)
+	}
+	e := out.Epics[0]
+	if strings.Join(e.Requirements, "|") != "Export invoices for a date range" ||
+		strings.Join(e.AcceptanceCriteria, "|") != "One month returns every invoice" {
+		t.Errorf("epic = %+v, want the invented items dropped", e)
+	}
+}
