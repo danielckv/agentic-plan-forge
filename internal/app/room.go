@@ -570,6 +570,15 @@ const (
 )
 
 func (r *room) onTextDelta(env relay.WSEnvelope) {
+	// An accepted edit schedules a re-interpretation once the lock is
+	// released: deferred calls run last-in first-out, so this one runs after
+	// the unlock below.
+	accepted := false
+	defer func() {
+		if accepted && r.docChanged != nil {
+			r.docChanged()
+		}
+	}()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(env.Payload) > maxTextDeltaPayload {
@@ -611,6 +620,7 @@ func (r *room) onTextDelta(env relay.WSEnvelope) {
 		return
 	}
 	r.unicastLocked(env.EventID, relay.EventTextAck, relay.TextAckPayload{DocumentID: p.DocumentID, Version: pushed.NewVersion})
+	accepted = true
 }
 
 func (r *room) onTextCheck(env relay.WSEnvelope) {

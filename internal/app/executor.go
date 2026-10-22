@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"sync"
 	"time"
@@ -219,6 +220,7 @@ func (e *executor) Start(ctx context.Context) error {
 		if err != nil {
 			text = ""
 		}
+		e.scheduleInitialInterpretation(text)
 		e.refreshContext(ctx, text)
 	}()
 	go e.normalizeLoop(ctx)
@@ -330,6 +332,15 @@ func (e *executor) Reinterpret() { e.trigger(true) }
 // DocChanged schedules re-interpretation after ingestion or an ambiguity
 // resolution, debounced.
 func (e *executor) DocChanged() { e.trigger(false) }
+
+// scheduleInitialInterpretation interprets a document that already has text
+// when the session starts (a brief agreed before the window opened), so its
+// epics appear without waiting for the first edit.
+func (e *executor) scheduleInitialInterpretation(text string) {
+	if strings.TrimSpace(text) != "" {
+		e.trigger(false)
+	}
+}
 
 func (e *executor) trigger(immediate bool) {
 	select {

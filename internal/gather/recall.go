@@ -62,7 +62,7 @@ func queryRecall(ctx context.Context, path, worktree string, terms []string, lim
 		args = append(args, worktree)
 	}
 	searchSQL += " ORDER BY bm25(chunks) LIMIT ?"
-	args = append(args, limit*2)
+	args = append(args, limit*4)
 	res, err := db.QueryContext(ctx, searchSQL, args...)
 	if err != nil {
 		return nil, false, err

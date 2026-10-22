@@ -270,6 +270,20 @@ func TestCollectStaysWithinTheBudget(t *testing.T) {
 	}
 }
 
+// One long document must not crowd out every other source: at most three
+// excerpts come from one file.
+func TestRankHitsKeepsSourcesVaried(t *testing.T) {
+	var hits []contracts.ContextHit
+	for i := range 8 {
+		hits = append(hits, contracts.ContextHit{Path: "docs/plans/big.md", Text: string(rune('a' + i)), Score: float64(20 - i)})
+	}
+	hits = append(hits, contracts.ContextHit{Path: "docs/adrs/0001.md", Text: "adr", Score: 1})
+	got := rankHits(hits, 12)
+	if len(got) != 4 || got[3].Path != "docs/adrs/0001.md" {
+		t.Errorf("ranked = %+v, want three from big.md then the ADR", got)
+	}
+}
+
 func TestQueryTermsRanksByFrequency(t *testing.T) {
 	got := QueryTerms("Invoices export. Export invoices. Export CSV with the tax lines.", 3)
 	want := []string{"export", "invoices", "lines"}

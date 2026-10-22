@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Typing in the first page's editor never reached the session. Its listener iterated a non-iterable change description, and the editor was rebuilt on every change. Edits now go through an OT client that keeps one change in flight, rebases local typing over uploads and collaborators, resends after a stale rejection, and keeps unconfirmed text across a reconnect.
 - The second and third pages read avatar frames in the wrong shape. Drafts arrive as inline JSON objects and critiques as the whole set (`issues[]`), so drafts, findings and the synthesized specification did not render from a real run.
+- Typed requirements were never interpreted. Only an upload or an ambiguity answer scheduled the interpretation, so text written in the editor, and a brief agreed before the window opened, produced no interpretation until a file was added. Every accepted edit now schedules one (debounced 2 s), in Solo and Remote mode, and a seeded brief is interpreted at start.
+- One long document no longer fills the project context: at most three excerpts come from one file.
 - The cycle-limit panel never appeared. It now shows when the run pauses with blocking findings.
 
 ### Removed

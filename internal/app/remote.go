@@ -217,15 +217,12 @@ func (l *remoteLink) onEnvelope(env relay.WSEnvelope) {
 			l.refusedLocked(env)
 			return
 		}
-	case relay.EventTextUpdates:
-		var p relay.TextUpdatesPayload
-		if json.Unmarshal(env.Payload, &p) == nil && l.cfg.DocChanged != nil {
-			for _, u := range p.Updates {
-				if strings.HasPrefix(u.ClientID, "sys:ingest:") {
-					go l.cfg.DocChanged()
-					break
-				}
-			}
+	case relay.EventTextUpdates, relay.EventTextAck:
+		// Any accepted change to the document, from an upload, a collaborator
+		// or the owner's own typing, schedules a re-interpretation; the
+		// executor debounces the burst.
+		if l.cfg.DocChanged != nil {
+			go l.cfg.DocChanged()
 		}
 	case relay.EventAvatarThought:
 		var p struct {

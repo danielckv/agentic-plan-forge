@@ -5,18 +5,14 @@ import { MarkdownView } from "../../components/MarkdownView";
 import type { ContextHit, ProjectContext } from "../../protocol/api";
 import { Dialog } from "../../ui/Dialog";
 
-const SOURCE_LABEL: Record<ProjectContext["source"], string> = {
+/** Where the excerpts came from, as the caption names it; null when nowhere. */
+const SOURCE_LABEL: Record<ProjectContext["source"], string | null> = {
   "recall-index": "the project's recall index",
   "legacy-recall-index": "the project's legacy recall index",
   files: "the project's notes and docs",
-  none: "no project notes yet",
+  none: null,
 };
 
-/**
- * What the repository already says about this work: excerpts from its notes,
- * specs, plans and decision records, and where the branch stands. The
- * technical avatars read exactly this list.
- */
 /** The excerpt as one line of prose: no heading lines, no list or quote markers. */
 export function notePreview(text: string): string {
   return text
@@ -29,6 +25,11 @@ export function notePreview(text: string): string {
     .slice(0, 220);
 }
 
+/**
+ * What the repository already says about this work: excerpts from its notes,
+ * specs, plans and decision records, and where the branch stands. The
+ * technical avatars read exactly this list.
+ */
 export function NotesList({ ctx }: { ctx: ProjectContext | null }): React.ReactElement {
   const [open, setOpen] = useState<ContextHit | null>(null);
   if (ctx === null) {
@@ -41,7 +42,9 @@ export function NotesList({ ctx }: { ctx: ProjectContext | null }): React.ReactE
   return (
     <div className="pf-notes">
       <p className="pf-caption">
-        From {SOURCE_LABEL[ctx.source]}. The architect, specialists and critic read these before they plan.
+        {SOURCE_LABEL[ctx.source] === null
+          ? "The architect, specialists and critic read related project notes from here before they plan."
+          : `From ${SOURCE_LABEL[ctx.source]}. The architect, specialists and critic read these before they plan.`}
       </p>
       {ctx.branch !== undefined && ctx.branch !== "" && (
         <div className="pf-notes-branch">

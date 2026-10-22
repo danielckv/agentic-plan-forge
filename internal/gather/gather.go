@@ -177,7 +177,12 @@ func QueryTerms(text string, limit int) []string {
 	return keywords
 }
 
-// rankHits orders hits best first, with a stable tie-break, and keeps limit.
+// maxPerPath bounds the excerpts taken from one file, so one long document
+// cannot crowd out every other source.
+const maxPerPath = 3
+
+// rankHits orders hits best first, with a stable tie-break, keeps at most
+// maxPerPath per file, and keeps limit.
 func rankHits(hits []contracts.ContextHit, limit int) []contracts.ContextHit {
 	sort.SliceStable(hits, func(i, j int) bool {
 		if hits[i].Score != hits[j].Score {
@@ -188,10 +193,19 @@ func rankHits(hits []contracts.ContextHit, limit int) []contracts.ContextHit {
 		}
 		return hits[i].Text < hits[j].Text
 	})
-	if len(hits) > limit {
-		hits = hits[:limit]
+	perPath := map[string]int{}
+	out := make([]contracts.ContextHit, 0, min(len(hits), limit))
+	for _, h := range hits {
+		if len(out) == limit {
+			break
+		}
+		if perPath[h.Path] == maxPerPath {
+			continue
+		}
+		perPath[h.Path]++
+		out = append(out, h)
 	}
-	return hits
+	return out
 }
 
 // safeRel reports whether p is a clean repository-relative path.
