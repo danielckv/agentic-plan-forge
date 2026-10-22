@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danielckv/agentic-plan-forge/internal/app"
-	"github.com/danielckv/agentic-plan-forge/internal/board"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/sanitize"
 )
@@ -182,11 +180,9 @@ type claudeWaitOutput struct {
 // runHookClaude implements `plan-forge hook claude`: it reads at most 1 MiB
 // of hook JSON from stdin, finishes within bound, prints nothing when it has
 // nothing to add and always exits 0. On PostToolUse it injects the plan-mode
-// handoff after an approved `plan-forge wait`; on PostToolUse and
-// UserPromptSubmit it delivers the board edits this Claude session has not
-// seen yet (consumer `claude:<session_id>`).
+// handoff after an approved `plan-forge wait`. Every other event is ignored,
+// so a UserPromptSubmit entry left by an older install stays harmless.
 func runHookClaude(ctx context.Context, stdin io.Reader, stdout io.Writer, bound time.Duration) int {
-	deadline := time.Now().Add(bound)
 	raw, ok := readHookStdin(ctx, stdin, bound)
 	if !ok {
 		return exitOK
@@ -196,42 +192,27 @@ func runHookClaude(ctx context.Context, stdin io.Reader, stdout io.Writer, bound
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return exitOK // malformed hook JSON: stay quiet
 	}
-	if in.Event != "PostToolUse" && in.Event != "UserPromptSubmit" {
+	if in.Event != "PostToolUse" || in.ToolName != "Bash" || !commandRunsWait(in.ToolInput.Command) {
 		return exitOK
 	}
-	repo := claudeHookRepo(in.Cwd)
-
-	var parts []string
-	if in.Event == "PostToolUse" {
-		claudeRecordActivity(ctx, repo, in, time.Until(deadline)/3)
-		claudeReportToCenter(ctx, repo, in, time.Until(deadline)/3)
+	result, ok := approvedWaitResult(in.ToolResponse)
+	if !ok {
+		return exitOK
 	}
-	if in.Event == "PostToolUse" && in.ToolName == "Bash" && commandRunsWait(in.ToolInput.Command) {
-		if result, ok := approvedWaitResult(in.ToolResponse); ok {
-			if handoff := buildClaudeHandoffContext(result, repo); handoff != "" {
-				parts = append(parts, handoff)
-			}
-		}
-	}
-	delta, ack := claudeBoardDelta(ctx, repo, in.SessionID, time.Until(deadline))
-	if delta != "" {
-		parts = append(parts, delta)
-	}
-	if len(parts) == 0 {
+	handoff := buildClaudeHandoffContext(result, claudeHookRepo(in.Cwd))
+	if handoff == "" {
 		return exitOK
 	}
 	out, err := json.Marshal(map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":     in.Event,
-			"additionalContext": strings.Join(parts, "\n\n"),
+			"additionalContext": handoff,
 		},
 	})
 	if err != nil {
 		return exitOK
 	}
-	if _, err := stdout.Write(append(out, '\n')); err == nil {
-		ack()
-	}
+	_, _ = stdout.Write(append(out, '\n'))
 	return exitOK
 }
 
@@ -277,38 +258,6 @@ func claudeHookRepo(cwd string) string {
 	return ""
 }
 
-// claudeBoardDelta returns the board edits the Claude session has not seen,
-// rendered as the C4 text, and claims them for this session.
-//
-// Two hooks of one session can run at once (parallel tool calls) and both
-// peek the same events, so the claim is the store's compare-and-advance
-// (AckAdvance): only the hook that actually moved the cursor gets the text,
-// and the other one gets "". The claim happens before the caller writes its
-// stdout, so a failed write loses the claimed events; that is the price of a
-// delivery that cannot be duplicated by a race, and the loss is rare (a
-// closed stdout). The returned ack is a no-op kept so callers can confirm a
-// successful write with the same shape as boardDelta's.
-//
-// The claim runs within what is left of budget and never advances the
-// cursor once budget is spent: the events then stay pullable. It returns ""
-// for a missing repository, an invalid session id, no approved plan, no new
-// events, a lost claim, or when budget runs out. Events that render to
-// nothing are consumed all the same.
-func claudeBoardDelta(ctx context.Context, repo, sessionID string, budget time.Duration) (text string, ack func()) {
-	noop := func() {}
-	consumer := "claude:" + sessionID
-	if repo == "" || budget <= 0 || !board.ValidConsumer(consumer) {
-		return "", noop
-	}
-	deadline := time.Now().Add(budget)
-	out, claim := boardDelta(ctx, repo, consumer, "text", budget)
-	moved, _ := ackWithin(ctx, time.Until(deadline), claim)
-	if !moved || out == "" {
-		return "", noop
-	}
-	return strings.TrimSpace(out), noop
-}
-
 // claudeEditTools are the Claude Code tools whose PostToolUse reports a file
 // the agent changed.
 var claudeEditTools = map[string]bool{"Edit": true, "Write": true, "MultiEdit": true, "NotebookEdit": true}
@@ -327,53 +276,6 @@ func claudeEditedPath(in claudeHookInput) string {
 		}
 	}
 	return ""
-}
-
-// claudeRecordActivity feeds an edit tool's file into the C10 `board activity`
-// logic in-process, as consumer claude:<session_id>. It is silent by design:
-// it prints nothing and adds no context. It does nothing for a missing
-// repository, an invalid session id, a tool that is not an edit tool, a path
-// outside the repository, no approved plan, or when budget runs out.
-func claudeRecordActivity(ctx context.Context, repo string, in claudeHookInput, budget time.Duration) {
-	consumer := "claude:" + in.SessionID
-	path := claudeEditedPath(in)
-	if path == "" || repo == "" || budget <= 0 || !board.ValidConsumer(consumer) {
-		return
-	}
-	runBounded(ctx, budget, func() struct{} {
-		_ = boardActivity(repo, consumer, []string{path})
-		return struct{}{}
-	})
-}
-
-// claudeReportToCenter feeds one tool call to a running command center, so a
-// session is visible whether or not a plan governs it. The board covers the
-// planned half and refuses to exist without an approved manifest; this covers
-// the other half.
-//
-// It is silent and best-effort: no daemon means the loopback dial is refused
-// in about a millisecond and the record is dropped. Nothing here may delay or
-// fail the tool call that triggered it.
-func claudeReportToCenter(ctx context.Context, repo string, in claudeHookInput, budget time.Duration) {
-	session := "claude:" + in.SessionID
-	if repo == "" || budget <= 0 || !board.ValidConsumer(session) {
-		return
-	}
-	rec := app.CenterRecord{
-		Repo: repo, SessionID: session, Harness: "claude-code",
-		Tool: hookField(in.ToolName), Kind: "tool",
-	}
-	if path := claudeEditedPath(in); path != "" {
-		rec.Detail = hookField(path)
-	}
-	if in.ToolName == "Bash" && strings.TrimSpace(in.ToolInput.Command) != "" {
-		rec.Command = hookField(in.ToolInput.Command)
-		rec.Kind = "command"
-	}
-	runBounded(ctx, budget, func() struct{} {
-		_ = app.CenterReport(ctx, rec)
-		return struct{}{}
-	})
 }
 
 // commandRunsWait reports whether a Bash command line invokes the plan-forge

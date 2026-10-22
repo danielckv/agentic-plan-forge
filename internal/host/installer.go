@@ -112,7 +112,6 @@ type artifact struct {
 	kind    manifestKind
 	content string
 	handoff string
-	center  string
 	guard   string
 	patch   *patchRecord
 }
@@ -218,20 +217,12 @@ func planModeHint(kind string) string {
 func planModeStep(kind string) string {
 	switch kind {
 	case string(KindClaude):
-		return "Immediately call the `EnterPlanMode` tool, before any edit. In Plan Mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary `wait` printed (valid, status, verified/total, drift), and verify the listed AST file targets. When the validation is invalid or missing, run `\"{{PLAN_FORGE_BIN}}\" validate --repo <repository root>` first. Present the execution checklist and call `ExitPlanMode` for the user's approval. " + boardReportingRules("claude:<your session id if known, else claude:main>")
+		return "Immediately call the `EnterPlanMode` tool, before any edit. In Plan Mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary `wait` printed (valid, status, verified/total, drift), and verify the listed AST file targets. When the validation is invalid or missing, run `\"{{PLAN_FORGE_BIN}}\" validate --repo <repository root>` first. Present the execution checklist and call `ExitPlanMode` for the user's approval."
 	case string(KindOMP):
-		return "The `/plan-forge` command opens a new plan-mode session seeded with the spec and the validation result; continue there. When the session API was unavailable, the hook has prefilled `/plan …` in the editor instead: ask the user to press Enter. In plan mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary, verify the listed AST targets, and present the execution checklist. " + boardReportingRules("omp:main")
+		return "The `/plan-forge` command opens a new plan-mode session seeded with the spec and the validation result; continue there. When the session API was unavailable, the hook has prefilled `/plan …` in the editor instead: ask the user to press Enter. In plan mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary, verify the listed AST targets, and present the execution checklist."
 	default:
 		return "Immediately enter Plan Mode, ingest `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, verify the listed AST file targets, and present the execution checklist. If you cannot switch modes yourself, ask the user to " + planModeHint(kind) + ", then continue."
 	}
-}
-
-// boardReportingRules is the implementation-phase instruction block appended
-// to the Claude and OMP plan-mode steps: report task start/finish to the
-// board, record off-plan work as discoveries, and follow Coordinator lines.
-// {{PLAN_FORGE_BIN}} is pre-substituted by Installer.substitute.
-func boardReportingRules(consumer string) string {
-	return "While implementing, run `\"{{PLAN_FORGE_BIN}}\" board report --repo <root> --consumer " + consumer + " --task <ID> --state started` before each task and `--state done` after it. Run `board discover --title … [--parent <ID>] [--path …] [--reason …]` for work outside the plan. Follow any `Coordinator:` line in hook context."
 }
 
 // substitute renders a template body with the install-time variables.
@@ -379,9 +370,9 @@ func (in *Installer) authLabel(ctx context.Context, kind Kind) (label, cmd strin
 
 func claudeTargets(scope string) []string {
 	if scope == "project" {
-		return []string{".claude/skills/plan-forge, plan-config, plan-forge-board"}
+		return []string{".claude/skills/plan-forge, plan-config"}
 	}
-	return []string{"~/.claude/skills/plan-forge, plan-config, plan-forge-board, SessionStart (status + command center)/PreToolUse/PostToolUse/UserPromptSubmit hooks"}
+	return []string{"~/.claude/skills/plan-forge, plan-config, SessionStart/PreToolUse/PostToolUse hooks"}
 }
 
 func ompTargets(scope string) []string {
@@ -398,8 +389,8 @@ func agyTargets(scope string) []string {
 	return []string{"~/.gemini/antigravity-cli/skills/..., ~/.gemini/config/skills/..."}
 }
 
-// planClaude plans the three SKILL.md files and the managed settings merge
-// (SessionStart, PostToolUse, UserPromptSubmit).
+// planClaude plans the two SKILL.md files and the managed settings merge
+// (SessionStart, PreToolUse, PostToolUse).
 func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, error) {
 	root := filepath.Join(home, ".claude")
 	if opts.Scope == "project" {
@@ -418,7 +409,6 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 	// unaffected. The AGY copies are NOT marked: AGY reads neither key.
 	forge := markHiddenFromOMP(in.substitute(integrations.SkillPlanForge(), string(KindClaude)))
 	conf := markHiddenFromOMP(in.substitute(integrations.SkillPlanConfig(), string(KindClaude)))
-	board := markHiddenFromOMP(in.substitute(integrations.SkillPlanForgeBoard(), string(KindClaude)))
 	arts := []artifact{
 		{
 			path: filepath.Join(root, "skills", "plan-forge", "SKILL.md"),
@@ -428,15 +418,10 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 			path: filepath.Join(root, "skills", "plan-config", "SKILL.md"),
 			host: string(KindClaude), kind: kindSkill, content: conf,
 		},
-		{
-			path: filepath.Join(root, "skills", "plan-forge-board", "SKILL.md"),
-			host: string(KindClaude), kind: kindSkill, content: board,
-		},
 	}
 	if opts.Scope == "user" {
 		hookCommand := strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", in.bin)
 		handoffCommand := strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)
-		centerCommand := strings.ReplaceAll(claudeCenterCommand, "{{PLAN_FORGE_BIN}}", in.bin)
 		guardCommand := strings.ReplaceAll(claudeGuardCommand, "{{PLAN_FORGE_BIN}}", in.bin)
 		arts = append(arts, artifact{
 			path:    filepath.Join(root, "settings.json"),
@@ -444,7 +429,6 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 			kind:    kindSettings,
 			content: hookCommand,
 			handoff: handoffCommand,
-			center:  centerCommand,
 			guard:   guardCommand,
 			patch:   &patchRecord{Anchor: "hooks.SessionStart"},
 		})
@@ -454,7 +438,7 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 
 // planOMP plans the plan-config slash command and the hook factory. OMP
 // reaches Plan Forge through built-in commands, never through skills: the hook
-// registers /plan-forge and /plan-forge-board itself with pi.registerCommand,
+// registers /plan-forge itself with pi.registerCommand,
 // and /plan-config is commands/plan-config.md. Writing no SKILL.md for OMP is
 // what makes a duplicate listing impossible; copies an earlier version
 // installed are removed by Apply.
@@ -763,6 +747,17 @@ func (in *Installer) Apply(arts []artifact, opts InstallOptions) error {
 		if rowReplaced(row.Path, arts) {
 			continue
 		}
+		// The plan-forge-board skill was retired in 0.4.0. Its copy goes on the
+		// next install, under the same hash check as every other sweep.
+		if row.Kind == kindSkill && retiredSkill(row.Path) {
+			gone, err := removeOwnedRow(row)
+			if err != nil {
+				return err
+			}
+			if gone {
+				continue
+			}
+		}
 		if ompPlanned && row.Host == string(KindOMP) &&
 			(row.Kind == kindSkill || (row.Kind == kindCommand && staleCommands[row.Path])) {
 			gone, err := removeOwnedRow(row)
@@ -941,7 +936,7 @@ func (in *Installer) applySettings(art artifact, prev manifestRow, opts InstallO
 	var merged map[string]any
 	var changed bool
 	if art.host == string(KindClaude) {
-		merged, changed, err = mergeClaudeHook(settings, art.content, art.center, art.guard, art.handoff)
+		merged, changed, err = mergeClaudeHook(settings, art.content, art.guard, art.handoff)
 	} else {
 		merged, changed, err = mergeAGYHook(settings, art.content)
 	}
@@ -1192,8 +1187,26 @@ func uninstallRow(row manifestRow, dryRun bool) (line string, keep bool, err err
 	}
 }
 
+// retiredSkills are skill directory names earlier versions installed and this
+// version removes on install.
+var retiredSkills = []string{"plan-forge-board"}
+
+// retiredSkill reports whether path is the SKILL.md of a retired skill.
+func retiredSkill(path string) bool {
+	if filepath.Base(path) != "SKILL.md" {
+		return false
+	}
+	dir := filepath.Base(filepath.Dir(path))
+	for _, name := range retiredSkills {
+		if dir == name {
+			return true
+		}
+	}
+	return false
+}
+
 // managedSkillNames are the skill directory names Plan Forge installs.
-var managedSkillNames = []string{"plan-forge", "plan-config", "plan-forge-board"}
+var managedSkillNames = []string{"plan-forge", "plan-config"}
 
 // SkillRoot is one directory a host reads skills from.
 type SkillRoot struct {

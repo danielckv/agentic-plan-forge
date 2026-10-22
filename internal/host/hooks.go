@@ -22,29 +22,13 @@ const managedMarker = "plan-forge managed"
 // path is substituted before the entry is merged.
 const claudeHookCommand = `"{{PLAN_FORGE_BIN}}" hook check-state --repo "$CLAUDE_PROJECT_DIR" --format claude`
 
-// claudeHandoffCommand is the PostToolUse (matcher claudePostToolUseMatcher)
-// and UserPromptSubmit hook command template: it turns an approved forge wait
-// into plan mode and, on edit tools, reports harness activity to the board.
+// claudeHandoffCommand is the PostToolUse hook command template (matcher
+// claudePostToolUseMatcher): it turns an approved forge wait into plan mode.
 const claudeHandoffCommand = `"{{PLAN_FORGE_BIN}}" hook claude`
 
-// claudeCenterCommand is the second SessionStart hook command template: it
-// makes sure the command center daemon is running. It deliberately does not
-// pass --open. Starting a session is not asking to look at a dashboard, and a
-// tab that appears on every `claude` is noise; the daemon is headless, and it
-// has to be up for a session to be recorded at all, because CenterReport drops
-// every record when nothing is listening.
-//
-// The tab is opened by `plan-forge center open`, on request.
-//
-// It is a separate handler rather than a flag on check-state because
-// check-state returns early when a plan is unchanged and again when there is
-// no plan at all, and the daemon must come up in both of those cases. A second
-// handler makes that question moot and is bounded by the host independently.
-const claudeCenterCommand = `"{{PLAN_FORGE_BIN}}" center ensure --repo "$CLAUDE_PROJECT_DIR"`
-
-// claudePostToolUseMatcher is the managed PostToolUse matcher: Bash for the
-// forge handoff, the edit tools for board activity capture.
-const claudePostToolUseMatcher = "Bash|Edit|Write|MultiEdit|NotebookEdit"
+// claudePostToolUseMatcher is the managed PostToolUse matcher. Only Bash runs
+// `plan-forge wait`, so no other tool needs the hook.
+const claudePostToolUseMatcher = "Bash"
 
 // claudeGuardCommand is the PreToolUse hook command template: it refuses an
 // edit once when the approved plan changed under a running session.
@@ -60,7 +44,12 @@ const claudeGuardCommand = `"{{PLAN_FORGE_BIN}}" hook claude-guard`
 const claudePreToolUseMatcher = "Edit|Write|MultiEdit|NotebookEdit"
 
 // claudeHookEvents are the Claude Code settings events plan-forge manages.
-var claudeHookEvents = []string{"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit"}
+var claudeHookEvents = []string{"SessionStart", "PreToolUse", "PostToolUse"}
+
+// claudeRetiredHookEvents are events earlier versions managed. Install drops
+// their managed handlers and uninstall still strips them; neither adds one.
+// UserPromptSubmit carried the plan board delta, retired in 0.4.0.
+var claudeRetiredHookEvents = []string{"UserPromptSubmit"}
 
 // claudeHookTimeout is the explicit per-handler timeout (seconds) applied to
 // every managed Claude hook handler.
@@ -72,8 +61,10 @@ type settingsMergeError struct{ msg string }
 func (e *settingsMergeError) Error() string { return e.msg }
 
 // mergeClaudeHook merges our managed entries into the parsed
-// ~/.claude/settings.json: SessionStart (check-state), PostToolUse with
-// matcher claudePostToolUseMatcher (hook claude) and UserPromptSubmit (hook claude). Each event
+// ~/.claude/settings.json: SessionStart (check-state), PreToolUse with matcher
+// claudePreToolUseMatcher (hook claude-guard) and PostToolUse with matcher
+// claudePostToolUseMatcher (hook claude). Managed handlers under a retired
+// event are removed; foreign handlers there are kept. Each event
 // is handled independently: an event without a managed entry gains one, and
 // an existing managed entry is refreshed in place when any of its managed
 // handlers differ from the desired handlers (e.g. a stale binary path after
@@ -81,7 +72,7 @@ func (e *settingsMergeError) Error() string { return e.msg }
 // is idempotent per event. Unrelated keys and foreign entries are never
 // rewritten: unknown keys decode into the generic map and are written back
 // unchanged.
-func mergeClaudeHook(settings map[string]any, sessionStartCommand, centerCommand, guardCommand, handoffCommand string) (map[string]any, bool, error) {
+func mergeClaudeHook(settings map[string]any, sessionStartCommand, guardCommand, handoffCommand string) (map[string]any, bool, error) {
 	var hooks map[string]any
 	switch v := settings["hooks"].(type) {
 	case nil:
@@ -102,12 +93,11 @@ func mergeClaudeHook(settings map[string]any, sessionStartCommand, centerCommand
 		}
 	}
 	entries := map[string]map[string]any{
-		"SessionStart":     {"hooks": []any{managed(sessionStartCommand), managed(centerCommand)}},
-		"PreToolUse":       {"matcher": claudePreToolUseMatcher, "hooks": []any{managed(guardCommand)}},
-		"PostToolUse":      {"matcher": claudePostToolUseMatcher, "hooks": []any{managed(handoffCommand)}},
-		"UserPromptSubmit": {"hooks": []any{managed(handoffCommand)}},
+		"SessionStart": {"hooks": []any{managed(sessionStartCommand)}},
+		"PreToolUse":   {"matcher": claudePreToolUseMatcher, "hooks": []any{managed(guardCommand)}},
+		"PostToolUse":  {"matcher": claudePostToolUseMatcher, "hooks": []any{managed(handoffCommand)}},
 	}
-	changed := false
+	changed := stripRetiredClaudeEvents(hooks)
 	for _, event := range claudeHookEvents {
 		var existing []any
 		switch v := hooks[event].(type) {
@@ -160,6 +150,37 @@ func mergeClaudeHook(settings map[string]any, sessionStartCommand, centerCommand
 	}
 	settings["hooks"] = hooks
 	return settings, true, nil
+}
+
+// stripRetiredClaudeEvents removes managed handlers from the retired events,
+// keeping foreign handlers and dropping an event left empty. It reports
+// whether anything changed.
+func stripRetiredClaudeEvents(hooks map[string]any) bool {
+	changed := false
+	for _, event := range claudeRetiredHookEvents {
+		existing, ok := hooks[event].([]any)
+		if !ok {
+			continue
+		}
+		kept := make([]any, 0, len(existing))
+		for _, entry := range existing {
+			rest, ours := stripManagedEntry(entry)
+			if !ours {
+				kept = append(kept, entry)
+				continue
+			}
+			changed = true
+			if rest != nil {
+				kept = append(kept, rest)
+			}
+		}
+		if len(kept) == 0 {
+			delete(hooks, event)
+		} else {
+			hooks[event] = kept
+		}
+	}
+	return changed
 }
 
 // claudeCommandKey is the settings key holding a handler's command.
@@ -343,7 +364,7 @@ func splitManagedHook(raw []byte) (map[string]any, bool, error) {
 	ours := false
 	strip := func(hooks map[string]any) bool {
 		stripped := false
-		for _, event := range claudeHookEvents {
+		for _, event := range append(append([]string{}, claudeHookEvents...), claudeRetiredHookEvents...) {
 			entries, ok := hooks[event].([]any)
 			if !ok {
 				continue
@@ -401,10 +422,6 @@ const manualHookSnippet = `{
           {
             "command": "PLAN_FORGE_BIN hook check-state --repo \"$CLAUDE_PROJECT_DIR\" --format claude",
             "timeout": 5
-          },
-          {
-            "command": "PLAN_FORGE_BIN center ensure --repo \"$CLAUDE_PROJECT_DIR\"",
-            "timeout": 5
           }
         ]
       }
@@ -422,17 +439,7 @@ const manualHookSnippet = `{
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "command": "PLAN_FORGE_BIN hook claude",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
+        "matcher": "Bash",
         "hooks": [
           {
             "command": "PLAN_FORGE_BIN hook claude",

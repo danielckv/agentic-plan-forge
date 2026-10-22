@@ -10,7 +10,7 @@ vi.mock("mermaid", () => ({
   default: { initialize: vi.fn(), parse, render },
 }));
 
-import { reidentifySvg, renderDiagram } from "../components/MermaidSvg";
+import { reidentifySvg, renderDiagram } from "./MermaidSvg";
 
 describe("renderDiagram parse gate", () => {
   it("rejects when mermaid.parse resolves false and shows the source", async () => {

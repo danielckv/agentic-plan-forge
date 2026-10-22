@@ -42,14 +42,14 @@ installed agents and writes the skills, commands and hooks:
 
 | Host | Installed files | Slash commands |
 | :--- | :--- | :--- |
-| Claude Code | `~/.claude/skills/plan-forge/SKILL.md`, `~/.claude/skills/plan-config/SKILL.md` and `~/.claude/skills/plan-forge-board/SKILL.md` | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
-| OMP | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge` and `/plan-forge-board`. No skill files | `/plan-forge`, `/plan-config`, `/plan-forge-board` |
+| Claude Code | `~/.claude/skills/plan-forge/SKILL.md` and `~/.claude/skills/plan-config/SKILL.md` | `/plan-forge`, `/plan-config` |
+| OMP | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge`. No skill files | `/plan-forge`, `/plan-config` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
 
 **OMP installs no skills.** oh-my-pi reaches Plan Forge through built-in commands only: the hook registers `/plan-forge`
-and `/plan-forge-board` with `pi.registerCommand`, and `/plan-config` is `~/.omp/agent/commands/plan-config.md`. Because
-no `SKILL.md` is written for oh-my-pi, a command can never be listed twice. Upgrading removes the `plan-forge` and
-`plan-config` skill copies an earlier version installed, and leaves a copy you edited yourself untouched.
+with `pi.registerCommand`, and `/plan-config` is `~/.omp/agent/commands/plan-config.md`. Because no `SKILL.md` is
+written for oh-my-pi, a command can never be listed twice. Upgrading removes the `plan-forge` and `plan-config` skill
+copies an earlier version installed, and leaves a copy you edited yourself untouched.
 
 Plan Forge still marks the Claude copies `enabled: false`, which oh-my-pi's skill scanners skip. That marker carries the
 whole guarantee on its own: oh-my-pi reads `<repo>/.claude/skills` by default and `~/.claude/skills` on opt-in, and an
@@ -66,22 +66,21 @@ prose to "forge a plan" does not trigger Plan Forge on its own — type `/plan-f
 
 Hooks are registered where the host supports them:
 
-- **Claude Code.** `SessionStart` carries two handlers — one reports a plan that changed since your last session, the
-  other makes sure the command center daemon is running. Neither opens anything: starting a session is not a request to
-  look at a dashboard, and the daemon is headless. Run `plan-forge center open` when you want the tab. `PostToolUse` (matcher
-  `Bash|Edit|Write|MultiEdit|NotebookEdit`) moves the agent into Plan Mode after an approval and reports the tool call.
-  `PreToolUse` (matcher `Edit|Write|MultiEdit|NotebookEdit`) refuses an edit once when the approved plan changed under a
-  running session, and refuses an edit aimed at the approved plan itself. `PostToolUse` and `UserPromptSubmit` deliver
-  board edits. Every entry in `~/.claude/settings.json` carries a `plan-forge managed` marker, and uninstall removes only
-  those.
+- **Claude Code.** Three handlers, and none of them starts a process or opens a tab:
+  - `SessionStart` reports a plan that changed since your last session.
+  - `PreToolUse` (matcher `Edit|Write|MultiEdit|NotebookEdit`) refuses an edit once when the approved plan changed under
+    a running session, and refuses an edit aimed at the approved plan itself.
+  - `PostToolUse` (matcher `Bash`) moves the agent into Plan Mode after `plan-forge wait` approves.
+
+  Every entry in `~/.claude/settings.json` carries a `plan-forge managed` marker, and uninstall removes only those.
+  Reinstalling over 0.3.0 also removes its command center handler and its `UserPromptSubmit` entry.
 
   The guard blocks at most once per change: it records what the session was told, denies once when that changes, and
   immediately records the new state, so your next tool call proceeds. It never blocks in a repository with no approved
   plan, and it never runs a repository scan — it reads two files. `Bash` is deliberately outside the matcher, because
   blocking it would block the `plan-forge validate` run the refusal asks for.
-- **OMP.** The hook reports plan status at session start, opens the command center beside it, runs the forge from
-  `/plan-forge`, opens the board from `/plan-forge-board`, reports tool calls, and pushes board edits into the live
-  session.
+- **OMP.** The hook reports plan status at session start, runs the forge from `/plan-forge`, and opens a plan-mode
+  session once the plan is approved.
 - **Antigravity.** User-scope installs merge a `SessionStart` plan-status entry, carrying the same `plan-forge managed`
   marker, into `~/.gemini/config/hooks.json`; whether Antigravity loads that layout is unverified.
 
@@ -90,6 +89,14 @@ are usually machine-local and should not be committed.
 
 Installation is idempotent: re-running it skips unchanged files, refuses to overwrite files it does not own, and keeps a
 manifest so removal is exact.
+
+### Upgrading from 0.3.0
+
+0.4.0 removed the command center, the plan board and swarm reporting. Run `plan-forge install` once after upgrading. It
+rewrites the hooks and removes the `plan-forge-board` skill, unless you edited that skill yourself. Until you do, the old
+hooks still call `plan-forge center`, `board` or `swarm`. Those commands now print one line on stderr and exit 0, so
+nothing fails in your session. A command center daemon started by 0.3.0 keeps running until you stop it or log out.
+`plan-forge uninstall --purge` removes its leftover state.
 
 ## Manual binary install
 

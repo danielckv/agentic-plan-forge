@@ -17,7 +17,6 @@ func installClaudeSettings(t *testing.T, in *Installer, home, bin string) {
 	t.Helper()
 	merged, _, err := mergeClaudeHook(map[string]any{},
 		strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", bin),
-		strings.ReplaceAll(claudeCenterCommand, "{{PLAN_FORGE_BIN}}", bin),
 		strings.ReplaceAll(claudeGuardCommand, "{{PLAN_FORGE_BIN}}", bin),
 		strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", bin),
 	)
@@ -85,17 +84,26 @@ func TestInspectHooksReportsClaudeInstalledStaleAndMissing(t *testing.T) {
 		}
 	})
 
-	// An install that predates the command center has one SessionStart handler
-	// where two are wanted, which is stale rather than installed.
-	t.Run("one handler where two belong", func(t *testing.T) {
+	// A 0.3.0 install still starts the command center daemon and carries the
+	// plan board's UserPromptSubmit entry. Both make it stale, so doctor tells
+	// the user to reinstall.
+	t.Run("previous install", func(t *testing.T) {
 		in, home := newTestInstaller(t)
-		handler := map[string]any{
-			"type":    "command",
-			"command": strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", in.bin) + " # " + managedMarker,
-			"timeout": claudeHookTimeout,
+		managed := func(cmd string) map[string]any {
+			return map[string]any{
+				"type":    "command",
+				"command": strings.ReplaceAll(cmd, "{{PLAN_FORGE_BIN}}", in.bin) + " # " + managedMarker,
+				"timeout": claudeHookTimeout,
+			}
 		}
 		raw, err := json.Marshal(map[string]any{"hooks": map[string]any{
-			"SessionStart": []any{map[string]any{"hooks": []any{handler}}},
+			"SessionStart": []any{map[string]any{"hooks": []any{
+				managed(claudeHookCommand),
+				managed(`"{{PLAN_FORGE_BIN}}" center ensure --repo "$CLAUDE_PROJECT_DIR"`),
+			}}},
+			"PreToolUse":       []any{map[string]any{"matcher": claudePreToolUseMatcher, "hooks": []any{managed(claudeGuardCommand)}}},
+			"PostToolUse":      []any{map[string]any{"matcher": claudePostToolUseMatcher, "hooks": []any{managed(claudeHandoffCommand)}}},
+			"UserPromptSubmit": []any{map[string]any{"hooks": []any{managed(claudeHandoffCommand)}}},
 		}})
 		if err != nil {
 			t.Fatal(err)
@@ -105,8 +113,8 @@ func TestInspectHooksReportsClaudeInstalledStaleAndMissing(t *testing.T) {
 		if got.State != HookStale {
 			t.Fatalf("state = %q, want stale", got.State)
 		}
-		if len(got.Stale) == 0 || got.Stale[0] != "SessionStart" {
-			t.Errorf("stale = %v, want SessionStart", got.Stale)
+		if strings.Join(got.Stale, ",") != "SessionStart,UserPromptSubmit" {
+			t.Errorf("stale = %v, want SessionStart and UserPromptSubmit", got.Stale)
 		}
 	})
 }
@@ -119,7 +127,7 @@ func TestInspectHooksNamesWhatAMissingOMPHookCosts(t *testing.T) {
 	if got.State != HookMissing {
 		t.Fatalf("state = %q, want missing", got.State)
 	}
-	for _, want := range []string{"/plan-forge", "/plan-forge-board", "no skills"} {
+	for _, want := range []string{"/plan-forge", "no skills"} {
 		if !strings.Contains(got.Remedy, want) {
 			t.Errorf("remedy %q does not mention %q", got.Remedy, want)
 		}

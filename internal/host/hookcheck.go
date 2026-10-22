@@ -39,8 +39,8 @@ type HookStatus struct {
 // point at this binary.
 //
 // It matters most for oh-my-pi. Plan Forge installs no skills there, so the
-// hook is the only thing that registers /plan-forge and /plan-forge-board: a
-// missing hook does not degrade the commands, it removes them. Doctor has to
+// hook is the only thing that registers /plan-forge: a missing hook does not
+// degrade the command, it removes it. Doctor has to
 // say so rather than report a healthy-looking host with no way in.
 //
 // kinds is the set to inspect; repo "" skips project scope.
@@ -93,13 +93,9 @@ func (in *Installer) claudeHookStatus(home string) HookStatus {
 
 	// The commands this binary would install, to compare against.
 	want := map[string][]string{
-		"SessionStart": {
-			strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", in.bin),
-			strings.ReplaceAll(claudeCenterCommand, "{{PLAN_FORGE_BIN}}", in.bin),
-		},
-		"PreToolUse":       {strings.ReplaceAll(claudeGuardCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
-		"PostToolUse":      {strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
-		"UserPromptSubmit": {strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
+		"SessionStart": {strings.ReplaceAll(claudeHookCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
+		"PreToolUse":   {strings.ReplaceAll(claudeGuardCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
+		"PostToolUse":  {strings.ReplaceAll(claudeHandoffCommand, "{{PLAN_FORGE_BIN}}", in.bin)},
 	}
 	for _, event := range claudeHookEvents {
 		managed := managedCommands(hooks[event])
@@ -115,6 +111,13 @@ func (in *Installer) claudeHookStatus(home string) HookStatus {
 			continue
 		}
 		st.Events = append(st.Events, event)
+	}
+	// A managed handler under a retired event is left over from an older
+	// install; reinstalling removes it.
+	for _, event := range claudeRetiredHookEvents {
+		if managed := managedCommands(hooks[event]); len(managed) > 0 {
+			st.Stale = append(st.Stale, event)
+		}
 	}
 	st.State = hookState(len(st.Missing), len(st.Stale))
 	if st.State != HookInstalled {
@@ -136,7 +139,7 @@ func (in *Installer) ompHookStatus(home, repo string) HookStatus {
 		}
 	}
 	st := HookStatus{Host: string(KindOMP), Surface: "hooks/pre/plan-forge.ts", Path: shortHome(home, path)}
-	st.Remedy = "without this hook oh-my-pi has no /plan-forge or /plan-forge-board at all, " +
+	st.Remedy = "without this hook oh-my-pi has no /plan-forge at all, " +
 		"because Plan Forge installs no skills there; run: plan-forge install --host omp"
 
 	raw, err := os.ReadFile(path)

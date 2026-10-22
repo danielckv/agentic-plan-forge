@@ -100,8 +100,6 @@ schedule based on declared parallelism. Estimates are labelled as estimates unle
 | :--- | :--- |
 | [Install](docs/install.md) | Requirements, one-command and manual install, what gets written per host, hooks, update and uninstall |
 | [Usage](docs/usage.md) | The three views, Plan Mode handoff, `plan-forge validate`, solo and remote sessions |
-| [Command center](docs/command-center.md) | The local dashboard of running harnesses and the live sprint board |
-| [Plan board](docs/board.md) | `/plan-forge-board`, the Graph view and the coordinator |
 | [Configuration](docs/configuration.md) | Hosts, models, workday baseline and self-hosting the relay |
 | [Requirements catalogue](docs/requirements/) | Owners, acceptance criteria and traceability for every requirement |
 | [Contributing](CONTRIBUTING.md) | Development workflow and the full local check suite |
