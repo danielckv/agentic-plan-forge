@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
 ### Added
 
 - Planning reads what the repository already says. Before deliberation, Plan Forge collects excerpts from the project's notes, specs, plans and decision records that match the requirements, plus the branch and recent commit subjects. It reads the project-memory recall index when one exists (`<git-common-dir>/agents-local/recall.db`, or the older `.agents/index/recall.db`) and the Markdown files directly otherwise. The Architect, Specialists and Critic receive it as `project_context`; the Product Manager never does. Read-only, bounded to 64 KiB, and repository-relative. See [ADR 0002](docs/adrs/0002-read-agents-recall-index.md).
@@ -19,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The forge opens as a tab in your default browser. It launched a Chromium `--app` window in a throwaway profile, which meant a second browser with none of your extensions or sessions, and a hard requirement on Chrome, Edge, Brave or Chromium being installed. The URL now goes to the platform opener (`open`, `xdg-open`, the Windows protocol handler); `browser_path` still wins and now names a browser that takes a bare URL, so it opens a tab in the instance you already have running.
 - Because the opener is not the browser — it exits milliseconds after handing the URL over — its exit is no longer treated as the window closing. Publishing it would have ended a session on the first page refresh. The UI WebSocket is now the only close signal, and nothing kills the tab: after an approval the page says it is safe to close, which is also why an explicit `browser_path` cannot be turned into a way to shut your browser down.
-- Starting an agent session no longer starts anything. The Claude Code hooks are now `SessionStart` (plan status), `PreToolUse` (the stale-plan guard) and `PostToolUse` on `Bash` (the plan-mode handoff). The OMP hook reports plan status and registers `/plan-forge`. Run `plan-forge install` once after upgrading; it removes the old handlers and the `plan-forge-board` skill. See [ADR 0001](docs/adrs/0001-remove-live-task-views.md).
+- Starting an agent session no longer starts anything. The Claude Code hooks are now `SessionStart` (plan status), `PreToolUse` (the stale-plan guard) and `PostToolUse` on `Bash` (the plan-mode handoff). The OMP hook reports plan status and registers `/plan-forge`. The one-command install refreshes the hooks for you; after any other upgrade, run `plan-forge install` once. It removes the old handlers and the `plan-forge-board` skill. See [ADR 0001](docs/adrs/0001-remove-live-task-views.md).
 
 - The header lines up. The sidebar brand row and the top bar share one 56 px height (they were 61 px and 52 px), and the sidebar foot matches the page footer. The theme switch and shortcut sheet moved into the top bar, which also shows the branch.
 - A new mark: a "P" whose bowl closes into a ring, with a spark, in the README, the window and the new favicon.
@@ -183,7 +185,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.2...v0.1.3

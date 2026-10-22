@@ -92,11 +92,12 @@ manifest so removal is exact.
 
 ### Upgrading from 0.3.0
 
-0.4.0 removed the command center, the plan board and swarm reporting. Run `plan-forge install` once after upgrading. It
-rewrites the hooks and removes the `plan-forge-board` skill, unless you edited that skill yourself. Until you do, the old
-hooks still call `plan-forge center`, `board` or `swarm`. Those commands now print one line on stderr and exit 0, so
-nothing fails in your session. A command center daemon started by 0.3.0 keeps running until you stop it or log out.
-`plan-forge uninstall --purge` removes its leftover state.
+0.4.0 removed the command center, the plan board and swarm reporting. The one-command install runs `plan-forge install`
+for you, which rewrites the hooks and removes the `plan-forge-board` skill, unless you edited that skill yourself. If you
+upgraded another way, run `plan-forge install` once. Until then, the old hooks still call `plan-forge center`, `board`
+or `swarm`; those commands print one line on stderr and exit 0, so nothing fails in your session. A command center
+daemon started by 0.3.0 keeps running until you stop it or log out. `plan-forge uninstall --purge` removes its leftover
+state.
 
 ## Manual binary install
 
