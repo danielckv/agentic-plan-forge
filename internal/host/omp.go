@@ -186,7 +186,7 @@ func (a *OMP) Generate(ctx context.Context, req contracts.GenerateRequest, emit 
 			}
 			seenTerminal = true
 		case "extension_error", "error":
-			return fmt.Errorf("OMP stream reported an error")
+			return fmt.Errorf("OMP stream reported an error: %s", failureDetail(event))
 		}
 		return nil
 	})

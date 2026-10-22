@@ -23,7 +23,19 @@ const NormalizedPRDSchemaID = "normalized_prd.v1"
 const (
 	// MaxSectionChars is the largest amount of Markdown, in characters, sent to
 	// the model in one normalization call. Longer documents are split.
-	MaxSectionChars = 60000
+	//
+	// The bound is the call timeout, not the model's context window: one call
+	// must finish inside contracts.MaxGenerateTimeout (180s) or the host kills
+	// it and the whole interpretation fails. Measured against
+	// claude-opus-5-5-high on OMP, an 18,000-character section took 2m31s and a
+	// 27,000-character one ran past the cap. 8,000 leaves room for a slower
+	// host and for the epic grouping, which makes the model restate every
+	// requirement a second time.
+	MaxSectionChars = 8000
+	// MinSectionChars is the length below which a section that overran the call
+	// timeout is no longer split: at this size the timeout is not a size
+	// problem, so splitting again would only bill the same work twice.
+	MinSectionChars = 1000
 	// SmallInputWords is the word count below which empty product fields are
 	// surfaced as ambiguity chips instead of passing silently.
 	SmallInputWords = 50
@@ -97,8 +109,10 @@ type textSection struct {
 // Normalize classifies the shared document into the product view, the
 // technical appendix and the open ambiguities, using one tool-free MAIN-slot
 // call per section (documents over MaxSectionChars are split at top-level
-// headings and merged deterministically). The model output must satisfy
-// normalized_prd.v1; one schema-repair retry is made before the call fails.
+// headings and merged deterministically). A section that outruns the call
+// timeout is replaced by its halves and retried, down to MinSectionChars. The
+// model output must satisfy normalized_prd.v1; one schema-repair retry is made
+// before the call fails.
 //
 // Ambiguity IDs are derived from the excerpt text, so owner resolutions keep
 // matching across re-interpretations. Resolutions are applied here, not by the
@@ -119,13 +133,22 @@ func Normalize(ctx context.Context, gen contracts.Generator, prdText string, res
 	var parts []wireNormalized
 	if strings.TrimSpace(text) != "" {
 		sections = splitSections(text, MaxSectionChars)
-		for i, sec := range sections {
+		for i := 0; i < len(sections); i++ {
 			if err := ctx.Err(); err != nil {
 				return contracts.NormalizedPRD{}, err
 			}
-			w, err := normalizeSection(ctx, gen, sec, i+1, len(sections))
+			w, err := normalizeSection(ctx, gen, sections[i], i+1, len(sections))
 			if err != nil {
-				return contracts.NormalizedPRD{}, fmt.Errorf("normalize section %d of %d: %w", i+1, len(sections), err)
+				halves, ok := halveSection(sections[i])
+				if !ok || !overranCallTimeout(ctx, err) {
+					return contracts.NormalizedPRD{}, fmt.Errorf("normalize section %d of %d: %w", i+1, len(sections), err)
+				}
+				// The section was too large to classify inside the call
+				// timeout. Replace it with its halves and retry those: the
+				// retry is smaller work, not the same work billed twice.
+				sections = append(sections[:i:i], append(halves, sections[i+1:]...)...)
+				i--
+				continue
 			}
 			parts = append(parts, w)
 		}
@@ -594,6 +617,27 @@ func splitSections(text string, max int) []textSection {
 		out = append(out, textSection{text: c, heading: firstHeading(c)})
 	}
 	return out
+}
+
+// halveSection divides one section at the boundaries splitSections already
+// uses. It reports false when the section is at MinSectionChars or cannot be
+// divided, so a caller retrying a timeout stops instead of looping.
+func halveSection(sec textSection) ([]textSection, bool) {
+	n := utf8.RuneCountInString(sec.text)
+	if n <= MinSectionChars {
+		return nil, false
+	}
+	out := splitSections(sec.text, max(n/2, MinSectionChars))
+	if len(out) < 2 {
+		return nil, false
+	}
+	return out, true
+}
+
+// overranCallTimeout reports whether err is the host killing a call that ran
+// past contracts.MaxGenerateTimeout, rather than the caller ending the run.
+func overranCallTimeout(ctx context.Context, err error) bool {
+	return ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded)
 }
 
 // firstHeading returns the text of the first ATX heading outside code fences.

@@ -227,9 +227,11 @@ func TestNormalizeFailsAfterOneFailedRepair(t *testing.T) {
 }
 
 func TestNormalizeSplitsLongDocumentsAtTopLevelHeadings(t *testing.T) {
+	// Each part is 60% of one section, so no two parts fit together and the
+	// document splits into exactly one section per part.
 	var sb strings.Builder
 	for _, name := range []string{"Part 1", "Part 2", "Part 3"} {
-		sb.WriteString("# " + name + "\n\n" + strings.Repeat("word ", 5000) + "\n\n")
+		sb.WriteString("# " + name + "\n\n" + strings.Repeat("word ", MaxSectionChars*6/10/5) + "\n\n")
 	}
 	text := sb.String()
 	if utf8.RuneCountInString(text) <= MaxSectionChars {
@@ -240,8 +242,8 @@ func TestNormalizeSplitsLongDocumentsAtTopLevelHeadings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(gen.requests) != 2 {
-		t.Fatalf("model called %d times, want 2 sections", len(gen.requests))
+	if len(gen.requests) != 3 {
+		t.Fatalf("model called %d times, want 3 sections", len(gen.requests))
 	}
 	var rebuilt strings.Builder
 	for i := range gen.requests {
@@ -249,7 +251,7 @@ func TestNormalizeSplitsLongDocumentsAtTopLevelHeadings(t *testing.T) {
 		if n := utf8.RuneCountInString(p.DocumentMarkdown); n > MaxSectionChars {
 			t.Errorf("section %d has %d characters, over the %d limit", i+1, n, MaxSectionChars)
 		}
-		if p.Section.Index != i+1 || p.Section.Count != 2 {
+		if p.Section.Index != i+1 || p.Section.Count != 3 {
 			t.Errorf("section info %d = %+v", i, p.Section)
 		}
 		rebuilt.WriteString(p.DocumentMarkdown)
@@ -257,16 +259,16 @@ func TestNormalizeSplitsLongDocumentsAtTopLevelHeadings(t *testing.T) {
 	if rebuilt.String() != text {
 		t.Error("the sections do not reassemble to the original document")
 	}
-	if !containsString(out.Warnings, "document normalized in 2 sections") {
+	if !containsString(out.Warnings, "document normalized in 3 sections") {
 		t.Errorf("warnings = %v", out.Warnings)
 	}
 	if len(out.Product.Goals) != 1 {
-		t.Errorf("identical goals from both sections must merge to one, got %v", out.Product.Goals)
+		t.Errorf("identical goals from every section must merge to one, got %v", out.Product.Goals)
 	}
-	if len(out.Ambiguities) != 1 || !strings.Contains(out.Ambiguities[0].Question, "section 1 of 2") {
+	if len(out.Ambiguities) != 1 || !strings.Contains(out.Ambiguities[0].Question, "section 1 of 3") {
 		t.Errorf("ambiguities = %+v, want one tagged with its section", out.Ambiguities)
 	}
-	if len(out.SourceRefs) != 2 {
+	if len(out.SourceRefs) != 3 {
 		t.Errorf("source refs = %+v, want one per section", out.SourceRefs)
 	}
 }
