@@ -119,8 +119,6 @@ type room struct {
 	deliver func([]byte) error
 	logger  *slog.Logger
 
-	// beforeFreeze runs the secret scan; a non-empty result blocks FREEZE_REQUEST.
-	beforeFreeze func(text string) []SecretHit
 	// docChanged schedules re-interpretation after an ingest append or an
 	// ambiguity resolution.
 	docChanged func()
@@ -411,22 +409,6 @@ func (r *room) Doc() (string, uint64) {
 	return s.Text, s.Version
 }
 
-// EditDoc applies one ChangeSet as the owner member (secret redaction) at the
-// given base version and shows it to the window as a remote update.
-func (r *room) EditDoc(base uint64, changes json.RawMessage, clientSuffix string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	up := collab.Update{ClientID: ownerMemberID + ":" + clientSuffix, Changes: changes}
-	pushed, rej := r.doc.Push(ownerMemberID, base, []collab.Update{up})
-	if rej != nil {
-		return fmt.Errorf("document edit refused: %s", rej.Reason)
-	}
-	r.docFrameLocked(relay.EventTextUpdates, relay.TextUpdatesPayload{
-		DocumentID: contracts.DocumentIDPRD, FromVersion: base, Updates: fromCollab(pushed.Applied),
-	})
-	return nil
-}
-
 func fromCollab(us []collab.Update) []relay.Update {
 	out := make([]relay.Update, len(us))
 	for i, u := range us {
@@ -498,8 +480,6 @@ func (r *room) HandleUI(raw []byte) {
 		r.onIngest(env)
 	case relay.EventPresence:
 		// A Solo session has one member; there is no one to show presence to.
-	case relay.EventFreezeRequest:
-		r.onFreeze(env)
 	default:
 		r.mu.Lock()
 		res := r.applyLocked(ownerMemberID, env.EventID, env.EventType, env.Payload, true)
@@ -763,24 +743,4 @@ func sanitizeLabel(s string) string {
 		out = string(r[:maxLabelRunes])
 	}
 	return out
-}
-
-// onFreeze runs the secret scan before the authority locks the baseline. Hits
-// block the freeze: the owner redacts or dismisses each, then confirms again.
-func (r *room) onFreeze(env relay.WSEnvelope) {
-	if r.beforeFreeze != nil {
-		text, _ := r.Doc()
-		if hits := r.beforeFreeze(text); len(hits) > 0 {
-			r.mu.Lock()
-			r.unicastLocked(env.EventID, relay.EventError, relay.ErrorPayload{
-				Code:    contracts.CodeInvalidPayload,
-				Message: fmt.Sprintf("%d possible secret(s) found in the document: redact or dismiss each before confirming", len(hits)),
-			})
-			r.mu.Unlock()
-			return
-		}
-	}
-	r.mu.Lock()
-	r.applyLocked(ownerMemberID, env.EventID, env.EventType, env.Payload, true)
-	r.mu.Unlock()
 }

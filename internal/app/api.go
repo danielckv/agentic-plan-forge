@@ -34,8 +34,6 @@ const (
 func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/status", s.handleStatus)
 	s.bridge.Handle("POST /api/reinterpret", s.handleReinterpret)
-	s.bridge.Handle("GET /api/secrets", s.handleSecrets)
-	s.bridge.Handle("POST /api/secrets/resolve", s.handleSecretResolve)
 	s.bridge.Handle("GET /api/invite", s.handleInvite)
 	s.bridge.Handle("GET /api/approval", s.handleApproval)
 	s.bridge.Handle("GET /api/relay", s.handleRelay)
@@ -77,44 +75,6 @@ func (s *appSession) handleReinterpret(w http.ResponseWriter, _ *http.Request) {
 		s.exec.Reinterpret()
 	}
 	w.WriteHeader(http.StatusAccepted)
-}
-
-// GET /api/secrets — possible secrets the owner has neither redacted nor
-// dismissed. Offsets and full values never leave this process.
-func (s *appSession) handleSecrets(w http.ResponseWriter, r *http.Request) {
-	if s.exec == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"hits": []SecretHit{}})
-		return
-	}
-	hits, err := s.exec.SecretHits(r.Context())
-	if err != nil {
-		writeAPIError(w, http.StatusBadGateway, notice(err))
-		return
-	}
-	if hits == nil {
-		hits = []SecretHit{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"hits": hits})
-}
-
-// POST /api/secrets/resolve {"id":"…","action":"redact"|"dismiss"}.
-func (s *appSession) handleSecretResolve(w http.ResponseWriter, r *http.Request) {
-	if s.exec == nil {
-		writeAPIError(w, http.StatusUnprocessableEntity, "only the session owner can resolve secrets")
-		return
-	}
-	var req struct {
-		ID     string `json:"id"`
-		Action string `json:"action"`
-	}
-	if !decodeBody(w, r, &req) {
-		return
-	}
-	if err := s.exec.ResolveSecret(r.Context(), req.ID, req.Action); err != nil {
-		writeAPIError(w, http.StatusUnprocessableEntity, notice(err))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // GET /api/invite — the invite URL for the Page 1 header Copy button. Remote

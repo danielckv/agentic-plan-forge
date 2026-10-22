@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The command center (`plan-forge center`, its loopback daemon, the Live, Sprint and Setup pages, `center_port`, `center_auto_open` and `PLAN_FORGE_CENTER_PORT`).
 - The plan board (`/plan-forge-board`, `plan-forge board`, the Board and Graph views, the Coordinator, discoveries and the board updates hooks injected into agent sessions).
 - Swarm reporting (`plan-forge swarm` and the OMP `assistant:status` subscription).
+- The secret scan on the requirements text. Confirming the context ran nine token patterns and an entropy rule over the document and refused on any hit; the entropy rule flagged repository paths, branch names and test names, and the window had no control to clear the refusal. Plan Forge no longer inspects or blocks what you write. Size, encoding and upload bounds stay. See [ADR 0003](docs/adrs/0003-no-text-scanning-in-composer.md).
 - `center`, `board` and `swarm` stay for one release as retired commands. They print one line on stderr and exit 0, so a hook written by 0.3.0 never fails a session before you reinstall.
 
 ## [0.3.0] - 2026-10-20

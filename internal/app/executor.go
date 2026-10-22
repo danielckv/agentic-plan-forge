@@ -61,8 +61,6 @@ type authority interface {
 	Emit(t relay.WSEventType, payload any) error
 	// Doc returns the shared document as the authority holds it.
 	Doc(ctx context.Context) (text string, version uint64, err error)
-	// EditDoc applies one ChangeSet as the owner (secret redaction).
-	EditDoc(ctx context.Context, base uint64, changes json.RawMessage, clientSuffix string) error
 	// Ingest appends parsed or composed Markdown to the shared document.
 	Ingest(p relay.IngestAppendPayload) error
 	// Local publishes a frame that exists only between this process and its
@@ -97,7 +95,6 @@ type StatusView struct {
 	ASTDetail string `json:"astDetail"`
 	DocHealth int    `json:"docHealth"`
 	OCR       string `json:"ocr"`
-	Secrets   int    `json:"secrets"`
 	// Repo names the repository this session plans, so the window states
 	// which project it belongs to. RepoPath is the absolute path; it is shown
 	// only through the loopback bridge and never leaves the machine.
@@ -156,7 +153,6 @@ type executor struct {
 	synthesized *contracts.SynthesisInput
 	synthHash   string
 	resolutions map[string]contracts.AmbiguityResolution
-	dismissed   map[string]bool
 	graph       *contracts.RepoContextGraph
 	scanDone    chan struct{}
 	pills       StatusView
@@ -180,7 +176,6 @@ func newExecutor(cfg executorConfig) *executor {
 		cfg: cfg, log: cfg.Logger, phase: relay.PhaseIngestion,
 		normTrigger: make(chan bool, 1),
 		resolutions: map[string]contracts.AmbiguityResolution{},
-		dismissed:   map[string]bool{},
 		members:     map[string]bool{},
 		synced:      make(chan struct{}, 64),
 		scanDone:    make(chan struct{}),
@@ -294,82 +289,10 @@ func (e *executor) Status() StatusView {
 	e.mu.Lock()
 	v := e.pills
 	e.mu.Unlock()
-	text, _, err := e.cfg.Auth.Doc(context.Background())
-	if err == nil {
-		v.Secrets = len(e.pendingSecrets(text))
-	}
 	v.RepoPath = e.cfg.Repo
 	v.Repo = filepath.Base(e.cfg.Repo)
 	return v
 }
-
-// --- secrets ----------------------------------------------------------------------------------------
-
-func (e *executor) pendingSecrets(text string) []SecretHit {
-	all := ScanSecrets(text)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	out := all[:0:0]
-	for _, h := range all {
-		if !e.dismissed[h.ID] {
-			out = append(out, h)
-		}
-	}
-	return out
-}
-
-// SecretHits lists the possible secrets the owner has neither redacted nor
-// dismissed.
-func (e *executor) SecretHits(ctx context.Context) ([]SecretHit, error) {
-	text, _, err := e.cfg.Auth.Doc(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.pendingSecrets(text), nil
-}
-
-// ResolveSecret redacts or dismisses one possible secret.
-func (e *executor) ResolveSecret(ctx context.Context, id, action string) error {
-	switch action {
-	case "dismiss":
-		e.mu.Lock()
-		e.dismissed[id] = true
-		e.mu.Unlock()
-		return nil
-	case "redact":
-	default:
-		return fmt.Errorf("action must be redact or dismiss, not %q", action)
-	}
-	for range 3 {
-		text, version, err := e.cfg.Auth.Doc(ctx)
-		if err != nil {
-			return err
-		}
-		var hit *SecretHit
-		for _, h := range e.pendingSecrets(text) {
-			if h.ID == id {
-				h := h
-				hit = &h
-				break
-			}
-		}
-		if hit == nil {
-			return errors.New("that possible secret is no longer in the document")
-		}
-		changes, err := redactionChanges(text, hit.Start, hit.End, hit.Kind)
-		if err != nil {
-			return err
-		}
-		if err := e.cfg.Auth.EditDoc(ctx, version, changes, "redact-"+id); err != nil {
-			continue // the document moved; rescan and retry
-		}
-		return nil
-	}
-	return errors.New("the document kept changing; try again")
-}
-
-// beforeFreeze is the room's FREEZE_REQUEST hook.
-func (e *executor) beforeFreeze(text string) []SecretHit { return e.pendingSecrets(text) }
 
 // --- interpretation ---------------------------------------------------------------------------------
 

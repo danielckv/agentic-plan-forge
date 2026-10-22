@@ -179,6 +179,12 @@ func resolveHosts(ctx context.Context, router *host.Router, requested string) (H
 	return sum, nil
 }
 
+// wireSolo connects a Solo room to its executor: every document change
+// schedules a re-interpretation.
+func wireSolo(rm *room, exec *executor) {
+	rm.docChanged = exec.DocChanged
+}
+
 // classify maps a startup failure onto the lifecycle: a missing host, token or
 // browser is a prerequisite (exit 3); anything else is a failure (exit 1).
 func classify(err error) Result {
@@ -309,7 +315,6 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 		execCfg.WaitForSync = true
 		execCfg.Auth = link
 		s.exec = newExecutor(execCfg)
-		link.cfg.BeforeFreeze = s.exec.beforeFreeze
 		link.cfg.DocChanged = s.exec.DocChanged
 		onMessage, windowGone, onWindowLeft = link.HandleUI, link.windowGone, link.Leave
 		go link.Run(ctx)
@@ -319,8 +324,7 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 		s.room, s.auth = rm, soloAuthority{rm}
 		execCfg.Auth = s.auth
 		s.exec = newExecutor(execCfg)
-		rm.beforeFreeze = s.exec.beforeFreeze
-		rm.docChanged = s.exec.DocChanged
+		wireSolo(rm, s.exec)
 		onMessage, windowGone = rm.HandleUI, rm.windowGone
 	}
 

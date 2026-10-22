@@ -56,8 +56,6 @@ type remoteLinkConfig struct {
 	Guard   *relay.EgressGuard
 	Logger  *slog.Logger
 	Clock   func() time.Time
-	// BeforeFreeze runs the secret scan before FREEZE_REQUEST is forwarded.
-	BeforeFreeze func(text string) []SecretHit
 	// DocChanged schedules re-interpretation after an ingest append.
 	DocChanged func()
 	// OnFatal receives the error that ended the relay connection for good.
@@ -322,8 +320,6 @@ func (l *remoteLink) HandleUI(raw []byte) {
 			return
 		}
 		l.startHello(env.EventID, rp.LastSeq, 0)
-	case relay.EventFreezeRequest:
-		go l.freeze(env)
 	default:
 		l.forward(env)
 	}
@@ -411,24 +407,6 @@ func (l *remoteLink) forward(env relay.WSEnvelope) {
 	}
 }
 
-func (l *remoteLink) freeze(env relay.WSEnvelope) {
-	if l.cfg.BeforeFreeze != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), docFetchTimeout)
-		text, _, err := l.fetchDoc(ctx)
-		cancel()
-		if err != nil {
-			l.uiError(env.EventID, contracts.CodeInternal, "could not read the document to scan it: "+notice(err))
-			return
-		}
-		if hits := l.cfg.BeforeFreeze(text); len(hits) > 0 {
-			l.uiError(env.EventID, contracts.CodeInvalidPayload,
-				fmt.Sprintf("%d possible secret(s) found in the document: redact or dismiss each before confirming", len(hits)))
-			return
-		}
-	}
-	l.forward(env)
-}
-
 // --- authority interface (executor side) -------------------------------------------------
 
 func (l *remoteLink) request(ctx context.Context, env relay.WSEnvelope) (relay.WSEnvelope, error) {
@@ -485,33 +463,6 @@ func (l *remoteLink) fetchDoc(ctx context.Context) (string, uint64, error) {
 }
 
 func (l *remoteLink) Doc(ctx context.Context) (string, uint64, error) { return l.fetchDoc(ctx) }
-
-func (l *remoteLink) EditDoc(ctx context.Context, base uint64, changes json.RawMessage, suffix string) error {
-	l.mu.Lock()
-	member := l.memberID
-	l.mu.Unlock()
-	reply, err := l.request(ctx, relay.WSEnvelope{
-		EventType: relay.EventTextDelta,
-		Payload: payloadFor(relay.TextDeltaPayload{
-			DocumentID: contracts.DocumentIDPRD, BaseVersion: base,
-			Updates: []relay.Update{{ClientID: member + ":" + suffix, Changes: changes}},
-		}),
-	})
-	if err != nil {
-		return err
-	}
-	if reply.EventType != relay.EventTextAck {
-		return fmt.Errorf("document edit refused (%s)", reply.EventType)
-	}
-	// The relay confirmed the edit to this connection only, so the window — the
-	// member behind it has no pending update to confirm — is shown it as a remote
-	// update.
-	l.Local(relay.EventTextUpdates, relay.TextUpdatesPayload{
-		DocumentID: contracts.DocumentIDPRD, FromVersion: base,
-		Updates: []relay.Update{{ClientID: member + ":" + suffix, Changes: changes}},
-	}, "")
-	return nil
-}
 
 func (l *remoteLink) Ingest(p relay.IngestAppendPayload) error {
 	err := l.conn.Send(relay.WSEnvelope{EventType: relay.EventIngestAppend, Payload: payloadFor(p)})

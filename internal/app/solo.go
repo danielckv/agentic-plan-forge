@@ -4,7 +4,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -22,10 +21,6 @@ func (s soloAuthority) Emit(t relay.WSEventType, payload any) error { return s.r
 func (s soloAuthority) Doc(context.Context) (string, uint64, error) {
 	text, version := s.r.Doc()
 	return text, version, nil
-}
-
-func (s soloAuthority) EditDoc(_ context.Context, base uint64, changes json.RawMessage, suffix string) error {
-	return s.r.EditDoc(base, changes, suffix)
 }
 
 func (s soloAuthority) Ingest(p relay.IngestAppendPayload) error { return s.r.Ingest(p) }
