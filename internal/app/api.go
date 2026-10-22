@@ -33,6 +33,7 @@ const (
 // POST /api/open-url and POST /api/upload.
 func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/status", s.handleStatus)
+	s.bridge.Handle("GET /api/context", s.handleContext)
 	s.bridge.Handle("POST /api/reinterpret", s.handleReinterpret)
 	s.bridge.Handle("GET /api/invite", s.handleInvite)
 	s.bridge.Handle("GET /api/approval", s.handleApproval)

@@ -102,12 +102,12 @@ func (o *orchestrator) restore(ctx context.Context) error {
 		}
 		o.store.Forget(o.in.RunID)
 		if err := o.thought(ctx, relay.StagePM, 1, statusStale,
-			"The saved drafts no longer match the approved baseline, repository graph or model slots; re-running from the start."); err != nil {
+			"The saved drafts no longer match the approved baseline, repository graph, project context or model slots; re-running from the start."); err != nil {
 			return err
 		}
 	}
 	st := newRunState()
-	st.PRDRevision, st.GraphHash, st.PMHash = o.in.PRD.Revision, o.in.GraphHash, pmHash
+	st.PRDRevision, st.GraphHash, st.ContextHash, st.PMHash = o.in.PRD.Revision, o.in.GraphHash, o.in.ContextHash, pmHash
 	st.Main, st.Judge = o.in.Models.Main, o.in.Models.Judge
 	o.st = st
 	return nil
@@ -397,7 +397,7 @@ func (o *orchestrator) runArchitect(ctx context.Context, c int) error {
 	}
 	payload := mustJSON(architectPayload{
 		Cycle: c, PM: o.pm, TechnicalAppendix: o.in.PRD.TechnicalAppendix, Graph: o.graphForPrompt(),
-		DocDrift: nonNilDrift(o.in.DocDrift), Decisions: decisions, Revision: rev,
+		DocDrift: nonNilDrift(o.in.DocDrift), Context: o.contextForPrompt(), Decisions: decisions, Revision: rev,
 	})
 	doc, raw, err := runStage(o, ctx, sp, payload, o.parseArchitect)
 	if err != nil {
@@ -630,7 +630,7 @@ func (o *orchestrator) runSpecialist(ctx context.Context, c int, ws string, adop
 	payload := mustJSON(specialistPayload{
 		Cycle: c, WorkstreamID: ws, Workstream: w, Workstreams: arch.Workstreams, Summary: arch.Summary,
 		Constraints: nonNil(arch.Constraints), Contracts: relevant, Epics: pm.Epics, Stories: pm.Stories,
-		Graph: o.graphForPrompt(), Decisions: decisions, Adopt: adopt, Revision: rev,
+		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), Decisions: decisions, Adopt: adopt, Revision: rev,
 	})
 	doc, raw, err := runStage(o, ctx, sp, payload, o.parseSpecialist(ws))
 	if err != nil {
@@ -737,7 +737,7 @@ func (o *orchestrator) earlyCritic(ctx context.Context, c int) error {
 	known := o.knownTargetsLocked()
 	payload := mustJSON(criticPayload{
 		Cycle: c, Barrier: false, Architect: o.arch, Specialists: done, NotYetDrafted: pending,
-		Stories: o.pm.Stories, Graph: o.graphForPrompt(), KnownTargets: sortedKeys(known),
+		Stories: o.pm.Stories, Graph: o.graphForPrompt(), Context: o.contextForPrompt(), KnownTargets: sortedKeys(known),
 		Prior: append([]contracts.Critique{}, o.st.Critiques...), Decisions: append([]contracts.Decision{}, o.st.Decisions...),
 	})
 	o.mu.Unlock()
@@ -854,7 +854,7 @@ func (o *orchestrator) criticBarrier(ctx context.Context, c int) error {
 	prior := append([]contracts.Critique{}, o.st.Critiques...)
 	payload := mustJSON(criticPayload{
 		Cycle: c, Barrier: true, Architect: o.arch, Specialists: o.specSliceLocked(), Stories: o.pm.Stories,
-		Graph: o.graphForPrompt(), KnownTargets: sortedKeys(known), Prior: prior, Deterministic: det,
+		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), KnownTargets: sortedKeys(known), Prior: prior, Deterministic: det,
 		Earlier: append([]contracts.Critique{}, o.early...), Decisions: append([]contracts.Decision{}, o.st.Decisions...),
 	})
 	o.mu.Unlock()

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Planning reads what the repository already says. Before deliberation, Plan Forge collects excerpts from the project's notes, specs, plans and decision records that match the requirements, plus the branch and recent commit subjects. It reads the project-memory recall index when one exists (`<git-common-dir>/agents-local/recall.db`, or the older `.agents/index/recall.db`) and the Markdown files directly otherwise. The Architect, Specialists and Critic receive it as `project_context`; the Product Manager never does. Read-only, bounded to 64 KiB, and repository-relative. See [ADR 0002](docs/adrs/0002-read-agents-recall-index.md).
+- `plan-forge context --query "<topic>"` prints the same context. The `/plan-forge` skill runs it before interviewing you, so it skips questions the repository already answers.
+
 ### Changed
 
 - The forge opens as a tab in your default browser. It launched a Chromium `--app` window in a throwaway profile, which meant a second browser with none of your extensions or sessions, and a hard requirement on Chrome, Edge, Brave or Chromium being installed. The URL now goes to the platform opener (`open`, `xdg-open`, the Windows protocol handler); `browser_path` still wins and now names a browser that takes a bare URL, so it opens a tab in the instance you already have running.

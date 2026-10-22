@@ -15,12 +15,9 @@ uploads. Before this change, confirming the context ran a secret scan over `prd`
 
 Any hit refused the confirmation with "N possible secret(s) found". The scan failed in three ways:
 
-1. **It refused ordinary planning text.** The entropy rule flagged repository paths (`github.com/<owner>/<repo>` scores
-   4.30), branch names (4.20) and Go test names (4.07). A plan that names the code it changes trips it.
-2. **The window could not clear it.** The page never called the resolve endpoint, so a refused confirmation stayed
-   refused. The only way out was to delete the text.
-3. **It guarded the wrong boundary.** The text goes to the user's own signed-in agent CLI on the user's machine. The user
-   chose to write it. Remote mode sends it to a relay the user configured.
+1. **It refused ordinary planning text.** The entropy rule flagged repository paths (`github.com/<owner>/<repo>` scores 4.30), branch names (4.20) and Go test names (4.07). A plan that names the code it changes trips it.
+2. **The window could not clear it.** The page never called the resolve endpoint, so a refused confirmation stayed refused. The only way out was to delete the text.
+3. **It guarded the wrong boundary.** The text goes to the user's own signed-in agent CLI on the user's machine. The user chose to write it. Remote mode sends it to a relay the user configured.
 
 The new pre-planning context step adds more repository paths and identifiers to the planning flow. The scan would refuse
 more confirmations still.

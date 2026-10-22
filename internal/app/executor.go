@@ -21,6 +21,7 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/avatars"
 	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
+	"github.com/danielckv/agentic-plan-forge/internal/gather"
 	"github.com/danielckv/agentic-plan-forge/internal/ingestion"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
@@ -95,6 +96,10 @@ type StatusView struct {
 	ASTDetail string `json:"astDetail"`
 	DocHealth int    `json:"docHealth"`
 	OCR       string `json:"ocr"`
+	// Context and ContextDetail report the project context gathered for the
+	// technical avatars: gathering, ok, none or failed.
+	Context       string `json:"context"`
+	ContextDetail string `json:"contextDetail"`
 	// Repo names the repository this session plans, so the window states
 	// which project it belongs to. RepoPath is the absolute path; it is shown
 	// only through the loopback bridge and never leaves the machine.
@@ -128,6 +133,8 @@ type executorConfig struct {
 	Finish func(phase SessionPhase, message string, artifacts []string)
 	// Scan overrides ast.Scan (tests).
 	Scan func(ctx context.Context, opts ast.ScanOptions) (*contracts.RepoContextGraph, error)
+	// Gather overrides gather.Collect (tests).
+	Gather func(ctx context.Context, opts gather.Options) (contracts.ProjectContext, error)
 }
 
 // executor is the one LLM pipeline of a session. It reads the authority's
@@ -155,6 +162,8 @@ type executor struct {
 	resolutions map[string]contracts.AmbiguityResolution
 	graph       *contracts.RepoContextGraph
 	scanDone    chan struct{}
+	projectCtx  *contracts.ProjectContext
+	contextSeq  uint64
 	pills       StatusView
 	norm        *contracts.NormalizedPRD
 	normKey     string
@@ -179,7 +188,10 @@ func newExecutor(cfg executorConfig) *executor {
 		members:     map[string]bool{},
 		synced:      make(chan struct{}, 64),
 		scanDone:    make(chan struct{}),
-		pills:       StatusView{AST: "scanning", ASTDetail: "0 files parsed, 0 symbols indexed", OCR: "unknown", HostSummary: cfg.Hosts},
+		pills: StatusView{
+			AST: "scanning", ASTDetail: "0 files parsed, 0 symbols indexed", OCR: "unknown",
+			Context: contextGathering, ContextDetail: "reading project notes, specs and decisions", HostSummary: cfg.Hosts,
+		},
 	}
 	return e
 }
@@ -197,6 +209,13 @@ func (e *executor) Start(ctx context.Context) error {
 		return err
 	}
 	go e.scan(ctx)
+	go func() {
+		text, _, err := e.cfg.Auth.Doc(ctx)
+		if err != nil {
+			text = ""
+		}
+		e.refreshContext(ctx, text)
+	}()
 	go e.normalizeLoop(ctx)
 	go e.eventLoop(ctx)
 	return nil
@@ -401,6 +420,7 @@ func (e *executor) interpret(ctx context.Context) (contracts.NormalizedPRD, erro
 	e.norm, e.normKey = &norm, key
 	e.mu.Unlock()
 	e.publishNormalized(norm)
+	go e.refreshContext(ctx, normalizedText(norm))
 	return norm, nil
 }
 
@@ -686,9 +706,20 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 		}
 	}
 	snap, _ := ast.Snapshot(g, ast.SnapshotOptions{Keywords: productKeywords(norm.Product)})
+	// The context is gathered again for the frozen PRD, so the avatars never
+	// see notes matched against a draft the user has since changed.
+	pc := e.collectContext(ctx, normalizedText(norm))
+	if ctx.Err() != nil {
+		return
+	}
+	e.mu.Lock()
+	e.projectCtx = &pc
+	e.pills.Context, e.pills.ContextDetail = contextPill(pc)
+	e.mu.Unlock()
 	cfg := e.cfg.Config
 	in := avatars.RunInput{
 		RunID: runID, PRD: norm, Graph: snap, GraphHash: hashJSON(snap), DocDrift: g.DocDriftReports,
+		Context: pc, ContextHash: hashJSON(pc),
 		Models:    avatars.ModelSlots{Main: cfg.DefaultMainModel, Judge: cfg.DefaultJudgeModel},
 		MaxCycles: cfg.MaxCycles, MaxParallel: cfg.MaxParallel, StartCycle: startCycle,
 	}
