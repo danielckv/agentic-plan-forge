@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
+	"github.com/danielckv/agentic-plan-forge/internal/sanitize"
 )
 
 const minimumClaudeVersion = "2.1.259"
@@ -195,7 +196,7 @@ func (a *Claude) generate(
 				return &contracts.ErrCapability{Host: string(KindClaude), Reason: "terminal result arrived without a tool-free init event", Remedy: "run: claude update"}
 			}
 			if failed, _ := event["is_error"].(bool); failed || stringField(event, "subtype") == "error" {
-				return fmt.Errorf("Claude generation failed")
+				return fmt.Errorf("Claude generation failed: %s", failureDetail(event))
 			}
 			terminal = terminalValue(event["result"])
 			if terminal == "" {
@@ -204,7 +205,7 @@ func (a *Claude) generate(
 			mergeUsage(&usage, usageFromEvent(event))
 			seenTerminal = true
 		case "error":
-			return fmt.Errorf("Claude stream reported an error")
+			return fmt.Errorf("Claude stream reported an error: %s", failureDetail(event))
 		}
 		return nil
 	})
@@ -249,6 +250,23 @@ func claudeArgs(rolePath, model string) []string {
 func claudeReceiptArgs(model string) []string {
 	args := claudeArgs("<role.txt>", model)
 	return append([]string{"claude"}, args...)
+}
+
+// maxFailureDetail bounds the provider's own failure text copied into an error.
+const maxFailureDetail = 400
+
+// failureDetail returns what the host said went wrong. Without it every
+// provider refusal reads the same, and the commonest one names its own cause:
+// a model identifier the host does not have reports "There's an issue with the
+// selected model (claude-opus-5-5-high)", which tells the owner exactly what to
+// change. Control characters are stripped and the text is bounded.
+func failureDetail(event map[string]any) string {
+	for _, candidate := range []string{terminalValue(event["result"]), stringField(event, "error"), stringField(event, "message")} {
+		if detail := strings.TrimSpace(candidate); detail != "" {
+			return sanitize.Truncate(sanitize.Terminal(detail), maxFailureDetail)
+		}
+	}
+	return "the host reported no detail"
 }
 
 func terminalValue(value any) string {

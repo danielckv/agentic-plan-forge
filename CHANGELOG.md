@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Interpreting a real document no longer fails with `interpretation failed: normalize section 1 of 1: context deadline exceeded`. One section is one model call and must finish inside 180 seconds, but sections were built up to 60,000 characters. Measured on `claude-opus-5-5-high` through OMP, an 18,039-character section took 2m31s and a 26,979-character one ran past the cap; the epic grouping added in 0.4.0 pushed documents that used to fit over the line, because the model restates every requirement a second time. Sections are now 8,000 characters, and a section that still outruns its call is split in half and retried instead of failing the run. The document that failed above now normalizes in 4 sections. See [ADR 0004](docs/adrs/0004-section-size-and-host-failure-detail.md).
+- A host refusal says what the host said. `Claude generation failed` and `OMP stream reported an error` threw the provider's own message away, including the one that names its own cause: a model identifier the host does not have. With `main_host: agy` — which never serves, because agy exposes no isolated settings mechanism — Plan Forge falls back to Claude Code and sends it agy's `claude-opus-5-5-high`, and the failure now reads `There's an issue with the selected model (claude-opus-5-5-high)` instead.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added
