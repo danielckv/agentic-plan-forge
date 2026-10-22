@@ -3260,6 +3260,388 @@ figure > .pf-diagram-source { border-top: none; }
   }
 }
 
+/* ---------- Page 2: the avatar room ---------- */
+
+.pf-room-page {
+  overflow: hidden;
+}
+
+.pf-room {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  padding: 20px var(--pf-gutter);
+}
+
+.pf-roster {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  flex: none;
+}
+
+.pf-roster-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--pf-border);
+  border-top: 3px solid var(--pf-role);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--pf-dur-fast) ease, border-color var(--pf-dur-fast) ease;
+}
+
+.pf-roster-card:hover {
+  box-shadow: var(--pf-shadow-md);
+}
+
+.pf-roster-card[aria-pressed="true"] {
+  border-color: var(--pf-role);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pf-role) 18%, transparent);
+}
+
+.pf-roster-card:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
+.pf-roster-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-roster-name {
+  color: var(--pf-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pf-roster-job {
+  color: var(--pf-muted);
+  font-size: 12px;
+}
+
+.pf-roster-say {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.pf-roster-main .pf-skeleton-stack {
+  width: 100%;
+}
+
+/* An avatar's face; it gets a pulsing ring while it speaks. */
+.pf-face {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.pf-face[data-speaking="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--pf-face-ring);
+  border-radius: 50%;
+  opacity: 0.7;
+  animation: pf-speak 1.6s var(--pf-ease) infinite;
+}
+
+@keyframes pf-speak {
+  0% { transform: scale(0.92); opacity: 0.8; }
+  70% { transform: scale(1.12); opacity: 0; }
+  100% { transform: scale(1.12); opacity: 0; }
+}
+
+.pf-room-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 16px;
+  min-height: 0;
+}
+
+.pf-room-feed,
+.pf-room-plan {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  overflow: hidden;
+}
+
+.pf-room-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-panel-subtle);
+  color: var(--pf-ink-2);
+}
+
+.pf-room-filter {
+  margin-left: auto;
+  border: none;
+  cursor: pointer;
+}
+
+.pf-room-decisions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 0;
+}
+
+.pf-room-feed > .pf-empty {
+  flex: 1;
+}
+
+.pf-timeline {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 16px 16px;
+  overflow: auto;
+  list-style: none;
+}
+
+.pf-line {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pf-border);
+  animation: pf-route-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+.pf-line:last-child {
+  border-bottom: none;
+}
+
+.pf-line-msg {
+  display: flex;
+  gap: 10px;
+}
+
+.pf-line-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pf-line-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+}
+
+.pf-line-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-line-cycle {
+  color: var(--pf-faint);
+  font-size: 11.5px;
+}
+
+.pf-line-time {
+  margin-left: auto;
+  color: var(--pf-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-line-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--pf-ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pf-line-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pf-accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pf-line-link:hover {
+  text-decoration: underline;
+}
+
+.pf-line-system {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+  font-size: 12.5px;
+}
+
+.pf-line-system--ok {
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+}
+
+.pf-line-system .pf-line-time {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.pf-room-resolved {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* plan panel */
+.pf-arch {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pf-arch-ws,
+.pf-arch-constraints,
+.pf-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-arch-ws li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+}
+
+.pf-arch-ws-id {
+  color: var(--pf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-arch-ws-mods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pf-arch-constraints li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--pf-ink-2);
+  font-size: 13px;
+}
+
+.pf-arch-constraints li::before {
+  content: "";
+  position: absolute;
+  top: 0.6em;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pf-epic);
+}
+
+.pf-finding {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+}
+
+.pf-finding[data-resolved="true"] {
+  opacity: 0.65;
+}
+
+.pf-finding-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pf-finding-head .pf-chip {
+  margin-left: auto;
+}
+
+@media (max-width: 1099.98px) {
+  .pf-room-page {
+    overflow: auto;
+  }
+
+  .pf-room {
+    height: auto;
+  }
+
+  .pf-roster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pf-room-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pf-timeline {
+    max-height: 560px;
+  }
+
+  .pf-room-plan {
+    min-height: 420px;
+  }
+}
+
 /* ---------- misc ---------- */
 
 .pf-mono {

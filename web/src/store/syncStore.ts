@@ -14,6 +14,7 @@ import { ChangeSet } from "@codemirror/state";
 import type { ChangeDesc } from "@codemirror/state";
 
 import { DocClient, type RemoteEffect } from "../collab/docClient";
+import { draftContentText, parseCritique, type Finding } from "../protocol/drafts";
 
 import { decodeFrame } from "../protocol/wire";
 import type { WSEnvelope, WSEventType } from "../protocol/wire";
@@ -70,7 +71,10 @@ export interface DraftSummary {
   schemaId?: string;
   revision: string;
   contentHash?: string;
+  /** The draft as text: inline JSON from the Go side is serialized. */
   content?: string;
+  /** The draft as sent (an object for pm.v1, architect.v1, synthesis.v1). */
+  data?: unknown;
 }
 
 export interface DecisionOption {
@@ -97,14 +101,22 @@ export interface AvatarThought {
   summary: string;
 }
 
-/** A single critic finding carried by AVATAR_CRITIQUE. */
-export interface CritiqueIssue {
-  issueId: string;
-  avatarId: string;
-  severity: "CRITICAL" | "HIGH" | "MEDIUM";
-  summary: string;
-  resolved: boolean;
-}
+/** A critic finding carried by AVATAR_CRITIQUE (see protocol/drafts.ts). */
+export type CritiqueIssue = Finding;
+
+/**
+ * One line of the deliberation timeline Page 2 shows: what each avatar said,
+ * drafted, found or asked, in the order it happened.
+ */
+export type TimelineEntry =
+  | { kind: "thought"; at: number; avatarId: string; cycle: number; status: string; summary: string }
+  | { kind: "draft"; at: number; avatarId: string; schemaId: string; revision: string }
+  | { kind: "critique"; at: number; cycle: number; open: number; blocking: number; total: number }
+  | { kind: "decision"; at: number; decisionId: string; question: string }
+  | { kind: "resolved"; at: number; decisionId: string; optionId: string; actor: string };
+
+/** The timeline keeps the newest entries; older ones scroll off. */
+export const MAX_TIMELINE = 200;
 
 /**
  * GET /api/status, as the bridge answers it (`app.StatusView`). It carries
@@ -157,6 +169,7 @@ export interface SyncState {
   decisions: DecisionCard[];
   thoughts: Record<string, AvatarThought>;
   critiques: CritiqueIssue[];
+  timeline: TimelineEntry[];
   runId: string | null;
   cycle: number;
   leaseHolder: string | null;
@@ -185,6 +198,7 @@ let state: SyncState = {
   decisions: [],
   thoughts: {},
   critiques: [],
+  timeline: [],
   runId: null,
   cycle: 1,
   leaseHolder: null,
@@ -281,6 +295,23 @@ const docClient = new DocClient({
     for (const l of remoteListeners) l(effect);
   },
 });
+
+/**
+ * The highest authority sequence number already on the timeline. A reconnect
+ * replays recent frames; a frame at or below this mark is not added twice.
+ * Window-only frames carry no sequence number and are always added.
+ */
+let timelineSeq = 0;
+
+function appendTimeline(env: WSEnvelope, entry: TimelineEntry): TimelineEntry[] {
+  const seq = Number(env.seq);
+  if (Number.isFinite(seq) && seq > 0) {
+    if (seq <= timelineSeq) return state.timeline;
+    timelineSeq = seq;
+  }
+  const next = [...state.timeline, entry];
+  return next.length > MAX_TIMELINE ? next.slice(next.length - MAX_TIMELINE) : next;
+}
 
 /** Mirror the client's text and version into the store. */
 function syncDoc(extra: Partial<SyncState> = {}): void {
@@ -393,6 +424,14 @@ function handleEnvelope(env: WSEnvelope): void {
       };
       const avatarId = p.avatar_id ?? "?";
       setState({
+        timeline: appendTimeline(env, {
+          kind: "thought",
+          at: Date.now(),
+          avatarId,
+          cycle: p.cycle ?? state.cycle,
+          status: p.status ?? "Thinking",
+          summary: p.public_summary ?? "",
+        }),
         thoughts: {
           ...state.thoughts,
           [avatarId]: {
@@ -408,25 +447,23 @@ function handleEnvelope(env: WSEnvelope): void {
       break;
     }
     case "AVATAR_CRITIQUE": {
-      const p = env.payload as {
-        run_id?: string;
-        avatar_id?: string;
-        issue_id?: string;
-        severity?: string;
-        summary?: string;
-        resolved?: boolean;
-      };
-      const severity =
-        p.severity === "CRITICAL" || p.severity === "HIGH" ? p.severity : "MEDIUM";
-      const issue: CritiqueIssue = {
-        issueId: p.issue_id ?? crypto.randomUUID(),
-        avatarId: p.avatar_id ?? "critic",
-        severity,
-        summary: p.summary ?? "",
-        resolved: p.resolved === true,
-      };
+      // The critic re-lists every finding each time, so the frame is the
+      // current set: findings are replaced by ID, earlier ones kept.
+      const { cycle, findings } = parseCritique(env.payload);
+      const byId = new Map(state.critiques.map((c) => [c.issueId, c]));
+      for (const f of findings) byId.set(f.issueId, f);
+      const open = findings.filter((f) => !f.resolved);
+      const p = env.payload as { run_id?: string };
       setState({
-        critiques: [...state.critiques.filter((c) => c.issueId !== issue.issueId), issue],
+        critiques: [...byId.values()],
+        timeline: appendTimeline(env, {
+          kind: "critique",
+          at: Date.now(),
+          cycle: cycle || state.cycle,
+          open: open.length,
+          blocking: open.filter((f) => f.severity !== "MEDIUM").length,
+          total: findings.length,
+        }),
         runId: state.runId ?? p.run_id ?? null,
       });
       break;
@@ -438,19 +475,34 @@ function handleEnvelope(env: WSEnvelope): void {
         schema_id?: string;
         draft_revision?: string;
         content_hash?: string;
-        content?: string;
+        content?: unknown;
       };
+      const text = draftContentText(p.content);
+      const avatarId = p.avatar_id ?? "?";
+      const revision = p.draft_revision ?? env.revision;
       setState({
         drafts: [
-          ...state.drafts.filter((d) => d.avatarId !== p.avatar_id),
+          ...state.drafts.filter((d) => d.avatarId !== avatarId),
           {
-            avatarId: p.avatar_id ?? "?",
+            avatarId,
             ...(p.schema_id !== undefined ? { schemaId: p.schema_id } : {}),
-            revision: p.draft_revision ?? env.revision,
+            revision,
             ...(p.content_hash !== undefined ? { contentHash: p.content_hash } : {}),
-            ...(p.content !== undefined ? { content: p.content } : {}),
+            ...(text !== undefined ? { content: text, data: p.content } : {}),
           },
         ],
+        // The interpretation draft belongs to Page 1, not the deliberation.
+        ...(avatarId === "ingestion"
+          ? {}
+          : {
+              timeline: appendTimeline(env, {
+                kind: "draft",
+                at: Date.now(),
+                avatarId,
+                schemaId: p.schema_id ?? "",
+                revision,
+              }),
+            }),
         runId: state.runId ?? p.run_id ?? null,
       });
       break;
@@ -463,6 +515,12 @@ function handleEnvelope(env: WSEnvelope): void {
         recommended_option_id?: string;
       };
       setState({
+        timeline: appendTimeline(env, {
+          kind: "decision",
+          at: Date.now(),
+          decisionId: p.decision_id ?? "?",
+          question: p.question ?? "",
+        }),
         decisions: [
           ...state.decisions.filter((d) => d.decisionId !== p.decision_id),
           {
@@ -485,6 +543,13 @@ function handleEnvelope(env: WSEnvelope): void {
     case "DECISION_RESOLVE": {
       const p = env.payload as { decision_id?: string; option_id?: string; actor_id?: string };
       setState({
+        timeline: appendTimeline(env, {
+          kind: "resolved",
+          at: Date.now(),
+          decisionId: p.decision_id ?? "?",
+          optionId: p.option_id ?? "",
+          actor: p.actor_id ?? "",
+        }),
         decisions: state.decisions.map((d) =>
           d.decisionId === p.decision_id
             ? {
@@ -526,7 +591,12 @@ function handleEnvelope(env: WSEnvelope): void {
     }
     case "RUN_ASSIGNED": {
       const p = env.payload as { run_id?: string };
-      setState({ runId: p.run_id ?? state.runId });
+      // A new run (after a baseline edit) starts its own story on Page 2.
+      const fresh = p.run_id !== undefined && state.runId !== null && p.run_id !== state.runId;
+      setState({
+        runId: p.run_id ?? state.runId,
+        ...(fresh ? { timeline: [], critiques: [], thoughts: {}, decisions: [] } : {}),
+      });
       break;
     }
     case "LEASE_GRANTED": {
