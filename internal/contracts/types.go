@@ -90,13 +90,26 @@ const (
 	AmbiguityDismiss   = "dismiss"
 )
 
+// DraftEpic is one unit of work the interpretation groups requirements into,
+// shown on Page 1 before any avatar runs. It only regroups the product
+// requirements; it never adds one. The Product Manager drafts its own epics
+// later and never receives these.
+type DraftEpic struct {
+	ID                 string   `json:"id"`
+	Title              string   `json:"title"`
+	Goal               string   `json:"goal,omitempty"`
+	Requirements       []string `json:"requirements"`
+	AcceptanceCriteria []string `json:"acceptance_criteria"`
+}
+
 // NormalizedPRD is the interpreted requirements document: the product view, the
-// technical appendix, provenance and the open ambiguities.
+// technical appendix, the draft epics, provenance and the open ambiguities.
 type NormalizedPRD struct {
 	SchemaVersion     int         `json:"schema_version"`
 	Revision          uint64      `json:"revision"`
 	Product           ProductPRD  `json:"product"`
 	TechnicalAppendix string      `json:"technical_appendix,omitempty"`
+	Epics             []DraftEpic `json:"epics,omitempty"`
 	SourceRefs        []SourceRef `json:"source_refs"`
 	Ambiguities       []Ambiguity `json:"ambiguities"`
 	Warnings          []string    `json:"warnings,omitempty"`

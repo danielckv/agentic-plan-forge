@@ -34,6 +34,8 @@ const (
 func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/status", s.handleStatus)
 	s.bridge.Handle("GET /api/context", s.handleContext)
+	s.bridge.Handle("GET /api/components", s.handleComponents)
+	s.bridge.Handle("GET /api/plan-files", s.handlePlanFiles)
 	s.bridge.Handle("POST /api/reinterpret", s.handleReinterpret)
 	s.bridge.Handle("GET /api/invite", s.handleInvite)
 	s.bridge.Handle("GET /api/approval", s.handleApproval)

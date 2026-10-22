@@ -173,6 +173,11 @@ func chunkMarkdown(text string) []chunk {
 	return out
 }
 
+// Relevance scores text against terms the way the direct file read does: ten
+// points per distinct term present plus one per repeat, capped at five per
+// term. Zero means no term occurs.
+func Relevance(text string, terms []string) float64 { return scoreText(text, terms) }
+
 // scoreText rewards an excerpt for each distinct term it holds, then for
 // repeats, so breadth outranks one word said many times.
 func scoreText(text string, terms []string) float64 {

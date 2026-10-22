@@ -100,6 +100,9 @@ type StatusView struct {
 	// technical avatars: gathering, ok, none or failed.
 	Context       string `json:"context"`
 	ContextDetail string `json:"contextDetail"`
+	// Interpretation is the revision of the latest interpretation; the window
+	// refetches the plan files when it changes.
+	Interpretation uint64 `json:"interpretation"`
 	// Repo names the repository this session plans, so the window states
 	// which project it belongs to. RepoPath is the absolute path; it is shown
 	// only through the loopback bridge and never leaves the machine.
@@ -307,6 +310,7 @@ func ocrStatus() string {
 func (e *executor) Status() StatusView {
 	e.mu.Lock()
 	v := e.pills
+	v.Interpretation = e.normRev
 	e.mu.Unlock()
 	v.RepoPath = e.cfg.Repo
 	v.Repo = filepath.Base(e.cfg.Repo)

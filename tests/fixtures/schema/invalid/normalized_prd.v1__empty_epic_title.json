@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "product": {
+    "goals": [],
+    "actors": [],
+    "flows": [],
+    "requirements": ["The system shall export invoices for a date range"],
+    "acceptance_criteria": [],
+    "constraints": [],
+    "open_questions": []
+  },
+  "epics": [{ "id": "E1", "title": "", "requirements": [] }],
+  "ambiguities": []
+}
