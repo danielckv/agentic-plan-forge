@@ -2,7 +2,7 @@
 
 Target: `docs/plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md`, 474 lines, read in full. Mode: A — Review, per `skill://make-requirements-great`. Audit date: 2026-10-19. Reviewer: `ReqAuditPlan` (one reviewer). The plan is not edited by this audit.
 
-Catalogue IDs follow `docs/requirements/PLAN_FORGE_REQUIREMENTS.md`. That file did not exist when this audit started and appeared before it finished, so mappings were made by subject first and then checked against the catalogue's headings. A specific ID such as `REQ-GATE-004` means the entry matches that catalogue entry's subject; a family ID such as `REQ-SEC` means the subject fits the family but no single entry matches; where no ID fits, the plan section is cited. The plan defines no IDs of its own, and nothing in it covers `REQ-BOARD`, `REQ-COORD` or `REQ-GRAPH` (see set-level findings, Traceable).
+Catalogue IDs follow `docs/requirements/PLAN_FORGE_REQUIREMENTS.md`. That file did not exist when this audit started and appeared before it finished, so mappings were made by subject first and then checked against the catalogue's headings. A specific ID such as `REQ-GATE-004` means the entry matches that catalogue entry's subject; a family ID such as `REQ-SEC` means the subject fits the family but no single entry matches; where no ID fits, the plan section is cited. The plan defines no IDs of its own, and nothing in it covers `REQ-BOARD`, `REQ-COORD` or `REQ-GRAPH` (see set-level findings, Traceable). Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: those three families were retired with the board, the coordinator and the Graph view.
 
 Quoting rule: every quoted fragment sits in a code span, so characters such as backticks, pipes and asterisks stay exact, and every fragment was checked mechanically against its source file. Facts about the working tree were read at audit time with read-only commands and are labelled as such.
 
@@ -850,6 +850,7 @@ Highest-impact entries: `S3B-1` (the mandatory Architect preamble cannot be impl
 - Failed:
   - Complete — State test — between `FREEZE_REQUEST` and the owner's redact or dismiss decisions, the phase is undefined: the reducer maps `FREEZE_REQUEST` straight to DELIBERATION, but the baseline locks only after the chips are cleared.
 - Rewrite: The client shall run the secret scan when the owner clicks Confirm, and shall send `FREEZE_REQUEST` only when no "possible secret" chip is unresolved.
+- Superseded 2026-10-22 by `docs/adrs/0003-no-text-scanning-in-composer.md`: the secret scan and its Confirm gate were removed, so the composed text freezes without a scan (catalogue REQ-SEC-007).
 
 #### S5-5 — CTA label promises an injection the plan does not perform
 
@@ -1193,7 +1194,7 @@ Fails. Technique: trace plausible changes.
 Fails in both directions.
 
 - Backward: the source specification is unlinked (`CTX-1`); `(user decision)` appears 4 times undated (`ASM-1`); neither this plan nor `GUI_BOARD_HANDOFF_PLAN.md` mentions the other.
-- Backward, catalogue: `REQ-BOARD`, `REQ-COORD` and `REQ-GRAPH` have no statement in this plan. A search finds "graph nodes" only in the Mermaid IR rule, and `RepoContextGraph` only as the repository graph. Those requirements live in the companion plan's Wave 4.
+- Backward, catalogue: `REQ-BOARD`, `REQ-COORD` and `REQ-GRAPH` have no statement in this plan. A search finds "graph nodes" only in the Mermaid IR rule, and `RepoContextGraph` only as the repository graph. Those requirements live in the companion plan's Wave 4. Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the three families were retired, so this gap no longer applies.
 - Forward: the identifiers below appear in normative statements and in no Verification text. Absence of an identifier is evidence, not proof, since a test might cover a behaviour without naming it.
 
 | Statement | Search term in Verification | Found |
@@ -1201,7 +1202,7 @@ Fails in both directions.
 | Config bounds on hours, cycles, concurrency | `workday` | no |
 | Lease TTL 15 s, renew 5 s | `TTL` | no |
 | Relay refuses `--auth-token` | `--auth-token` | no |
-| Page 1 secret scan | `secret scan` | no |
+| Page 1 secret scan (superseded 2026-10-22 by `docs/adrs/0003-no-text-scanning-in-composer.md`: the scan was removed) | `secret scan` | no |
 | Relay rate limits | `rate limit` | no |
 | TLS or proxy requirement | `--behind-proxy` | no |
 | `MISSING_DOC` cap of 50 | `MISSING_DOC` | no |
@@ -1247,7 +1248,7 @@ CRUD check. Create, read, update, delete: yes, no, or indirect (only through a r
 | --- | --- | --- | --- | --- | --- |
 | requirement | yes (`Normalize`) | yes (Page 1 tab) | indirect (edit `prd`, re-interpret) | indirect | none beyond indirect edit |
 | epic, story, workstream | yes (PM, Architect) | yes (Page 3) | no after approval | no | G-5 |
-| task | yes | yes | no | no | G-5; the companion plan's board covers priority and context |
+| task | yes | yes | no | no | G-5; the companion plan's board covers priority and context (superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the board was removed) |
 | target | yes | yes (hook, Page 3) | no | no | G-5 |
 | verification command | yes (manifest) | yes (`verify` shows argv) | no | no | G-5 |
 | decision | yes | yes (card) | yes, once | not applicable | G-1: no reopen after resolution |
@@ -1277,11 +1278,11 @@ Gaps found, with the technique that found each.
 | G-2 | CRUD (approval) | No revocation of one approval; the approval ledger has no pruning. |
 | G-3 | CRUD and lifecycle (receipt, session) | No retention rule for `.plan/verification/`, `sessions/<id>.{json,log}` or `recovery/`. |
 | G-4 | CRUD (manifest, spec) | No way to retire the current approved pair; `--purge` never touches `.plan/`. |
-| G-5 | CRUD (task, target, command) | No update path after approval other than a new run; priority and context editing is absent here and present in the companion plan. |
+| G-5 | CRUD (task, target, command) | No update path after approval other than a new run; priority and context editing is absent here and present in the companion plan. Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the board that carried priority and context editing was removed, so the gap is open again. |
 | G-6 | CRUD and trace (invite, member) | `INVITE_REVOKE` and `MEMBER_REMOVE` have no initiator; the invite command is ambiguous (`S1-14`, `S4-10`). |
 | G-7 | Lifecycle (owner) | No owner succession; the consequence of an unrecoverable owner machine is unstated. |
 | G-8 | Lifecycle (relay operator) | No relay-token rotation or revocation; no room capacity; restart behaviour (`S4-8`). |
-| G-9 | Lifecycle (session) | No resume entry point (`S3B-12`); no phase for a pending secret review (`S5-4`). |
+| G-9 | Lifecycle (session) | No resume entry point (`S3B-12`); no phase for a pending secret review (`S5-4`). Superseded 2026-10-22 by `docs/adrs/0003-no-text-scanning-in-composer.md`: the secret review was removed, so only the resume gap remains. |
 | G-10 | Category checklist (usability) | No accessibility, keyboard, responsive or visual design-language requirement, although Pages 1–3 are the product's main surface. |
 | G-11 | Category checklist (compatibility) | No minimum OS, browser, OMP or Antigravity versions. |
 | G-12 | Category checklist (operations) | No relay metrics, service level or deployment reference. |

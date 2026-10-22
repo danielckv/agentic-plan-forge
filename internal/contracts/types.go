@@ -90,13 +90,26 @@ const (
 	AmbiguityDismiss   = "dismiss"
 )
 
+// DraftEpic is one unit of work the interpretation groups requirements into,
+// shown on Page 1 before any avatar runs. It only regroups the product
+// requirements; it never adds one. The Product Manager drafts its own epics
+// later and never receives these.
+type DraftEpic struct {
+	ID                 string   `json:"id"`
+	Title              string   `json:"title"`
+	Goal               string   `json:"goal,omitempty"`
+	Requirements       []string `json:"requirements"`
+	AcceptanceCriteria []string `json:"acceptance_criteria"`
+}
+
 // NormalizedPRD is the interpreted requirements document: the product view, the
-// technical appendix, provenance and the open ambiguities.
+// technical appendix, the draft epics, provenance and the open ambiguities.
 type NormalizedPRD struct {
 	SchemaVersion     int         `json:"schema_version"`
 	Revision          uint64      `json:"revision"`
 	Product           ProductPRD  `json:"product"`
 	TechnicalAppendix string      `json:"technical_appendix,omitempty"`
+	Epics             []DraftEpic `json:"epics,omitempty"`
 	SourceRefs        []SourceRef `json:"source_refs"`
 	Ambiguities       []Ambiguity `json:"ambiguities"`
 	Warnings          []string    `json:"warnings,omitempty"`
@@ -179,6 +192,46 @@ type RepoContextGraph struct {
 	Routes          []RouteEvidence     `json:"routes,omitempty"`
 	DocDriftReports []DocDriftItem      `json:"doc_drift_reports"`
 	Coverage        Coverage            `json:"coverage"`
+}
+
+// Project context sources, in the order the gatherer tries them.
+const (
+	// ContextSourceRecall is the project-memory recall index under the Git
+	// common directory (agents-local/recall.db).
+	ContextSourceRecall = "recall-index"
+	// ContextSourceLegacyRecall is the older recall index at
+	// .agents/index/recall.db.
+	ContextSourceLegacyRecall = "legacy-recall-index"
+	// ContextSourceFiles is a direct read of the notes, specs, plans and ADRs.
+	ContextSourceFiles = "files"
+	// ContextSourceNone means no source held anything to read.
+	ContextSourceNone = "none"
+)
+
+// ProjectContext is what the repository already says about itself before a
+// plan starts: excerpts from its notes, specs, plans and decision records,
+// plus where the branch stands. The technical avatars receive it; the Product
+// Manager never does. Every path is repository-relative.
+type ProjectContext struct {
+	Source string       `json:"source"`
+	Hits   []ContextHit `json:"hits"`
+	// Branch and Head locate the working tree; Recent holds the newest commit
+	// subjects, newest first.
+	Branch string   `json:"branch,omitempty"`
+	Head   string   `json:"head,omitempty"`
+	Recent []string `json:"recent_commits,omitempty"`
+	// Truncated reports that the byte budget dropped hits or commits.
+	Truncated bool `json:"truncated,omitempty"`
+	// Notes explain a source that was present but could not be read.
+	Notes []string `json:"notes,omitempty"`
+}
+
+// ContextHit is one excerpt, ranked by how well it matches the requirements.
+type ContextHit struct {
+	Path    string  `json:"path"`
+	Heading string  `json:"heading,omitempty"`
+	Text    string  `json:"text"`
+	Score   float64 `json:"score"`
 }
 
 // DocDriftItem is one documentation claim that no longer matches the code.

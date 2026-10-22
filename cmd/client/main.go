@@ -14,6 +14,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 
@@ -80,6 +81,9 @@ func main() {
 		args = []string{"version"}
 	}
 
+	if note, ok := retiredCommands[args[0]]; ok {
+		os.Exit(runRetired(os.Stderr, args[0], note))
+	}
 	cmd, ok := registry[args[0]]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "plan-forge: unknown command %q\n\n", args[0])
@@ -87,6 +91,23 @@ func main() {
 		os.Exit(exitUsage)
 	}
 	os.Exit(cmd.run(ctx, args[1:]))
+}
+
+// retiredCommands are subcommands removed in 0.4.0. Hooks written by an older
+// install still call them at every session start until `plan-forge install`
+// runs again. They are not in the registry and not in the usage text: running
+// one prints why it is gone and exits 0, so an old hook never reports an error
+// in the user's session. Remove this table in 0.5.0.
+var retiredCommands = map[string]string{
+	"center": "the command center was removed in 0.4.0",
+	"board":  "the plan board was removed in 0.4.0",
+	"swarm":  "swarm reporting was removed in 0.4.0",
+}
+
+// runRetired explains a retired subcommand and returns exitOK.
+func runRetired(w io.Writer, name, note string) int {
+	fmt.Fprintf(w, "plan-forge %s: %s; run \"plan-forge install\" to refresh your hooks\n", name, note)
+	return exitOK
 }
 
 func usage(w *os.File) {

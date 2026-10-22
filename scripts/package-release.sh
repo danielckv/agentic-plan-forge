@@ -54,8 +54,7 @@ die() {
 # Fills a fresh temp directory (left in $stage) with the client archive layout:
 # plan-forge[.exe], LICENSE, README.md, install.sh (Windows: install.ps1),
 # commands/plan-forge.md, commands/plan-config.md, hooks/post-merge.sh,
-# integrations/ (per-host templates, including skill-plan-forge-board.md and
-# the OMP hook, never the hook's test). Tar and zip archives both use it, so
+# integrations/ (per-host templates and the OMP hook, never the hook's test). Tar and zip archives both use it, so
 # every client archive renders identical commands and hooks.
 stage_client() {
     name=$1
@@ -84,7 +83,6 @@ stage_client() {
     sed -e "s#{{PLAN_FORGE_BIN}}#\$(command -v plan-forge | tr -d '\n')#g" \
         "$root/integrations/git-hook-post-merge.txt" >"$stage/hooks/post-merge.sh" || die "render hook failed"
     # The OMP hook ships as a template; its node --test file stays in the repo.
-    [ -f "$root/integrations/skill-plan-forge-board.md" ] || die "integrations/skill-plan-forge-board.md is missing"
     cp "$root"/integrations/*.md "$root/integrations/omp-hook-plan-forge.ts" "$root"/integrations/*.txt "$stage/integrations/" || die "copy integrations failed"
 }
 

@@ -24,6 +24,22 @@
       }
     },
     "technical_appendix": { "type": "string", "maxLength": 200000 },
+    "epics": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "requirements"],
+        "properties": {
+          "id": { "type": "string", "maxLength": 64 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "goal": { "type": "string", "maxLength": 2000 },
+          "requirements": { "type": "array", "items": { "type": "string", "maxLength": 4000 }, "maxItems": 200 },
+          "acceptance_criteria": { "type": "array", "items": { "type": "string", "maxLength": 4000 }, "maxItems": 200 }
+        }
+      }
+    },
     "ambiguities": {
       "type": "array",
       "maxItems": 200,

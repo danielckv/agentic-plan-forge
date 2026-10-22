@@ -1,21 +1,81 @@
 # Using Plan Forge
 
-Type `/plan-forge` in your agent. The skill opens a tab in your default browser and waits, so the agent's terminal
-stays blocked until you approve a plan. Closing the tab without approving ends the session.
+Type `/plan-forge` in your agent. Before it opens anything, the skill reads what the repository already says about your
+request (`plan-forge context`, below) and asks a few questions to agree a short brief. It then opens a tab in your
+default browser and waits, so the agent's terminal stays blocked until you approve a plan. Closing the tab without
+approving ends the session.
 
-## The three views
+## The three pages
 
-The UI has three sequential views, with a phase stepper, a collapsible sidebar (`[`), a System/Light/Dark theme switch
-and a shortcut sheet (`?`):
+The window has three pages in order. The top bar shows the project, its branch, the phase, who is here, the
+connection, a System/Light/Dark switch and the shortcut sheet (`?`). The sidebar collapses with `[`.
 
-1. **Ingestion.** Add `.docx`, `.pdf` or `.md` files, or paste text. Status pills show the repository scan and the
-  documentation health check. The interpretation is editable Markdown, shared live with any collaborators.
-2. **Deliberation.** Avatar cards show each role's status, public progress summaries, drafts, diagrams and critiques.
-  Cross-avatar conflicts are highlighted, and trade-offs that need judgement become A/B decision cards instead of silent
-  choices by a model.
-3. **Synthesis.** A Confluence-style specification with diagrams, Jira-style epics and subtasks, documentation-sync tasks
-  and the two effort schedules. The table of contents follows your scroll. The task matrix can be filtered by ID, title
-  or target file. Diagrams expand to full screen.
+### 1. Ingestion: the composer
+
+Write what you want to build in the editor. It is one shared Markdown document; collaborators in a remote session see
+each other's edits live.
+
+- **Formatting.** The toolbar sets headings, bold, italic, inline code, lists, checklists, quotes and tables. `⌘B`, `⌘I`
+  and `⌘E` work too, and Enter continues a list.
+- **Blocks.** Type `/` at the start of a line for a heading, an epic section, a user story, a checklist, a table, a code
+  block or a Mermaid diagram.
+- **Components.** Type `@` to search the repository's public declarations, such as functions, types and routes. Choosing
+  one writes its exact name as inline code. A bare `@` lists the blocks (directories). Technical names go to the
+  technical appendix, which the architect reads and the Product Manager never sees.
+- **Files.** Attach `.docx`, `.pdf` or `.md` files from the toolbar, or drop them on the editor: up to 5 files, 25 MiB
+  each. They are parsed on this machine and added as a `## Source:` section.
+- **Write, Split, Preview.** The switch under the editor shows the rendered document beside or instead of the source.
+
+The right rail shows the plan as it forms:
+
+- **Epics.** A few seconds after you stop typing, the interpretation groups your requirements into epics. Each shows as a
+  file such as `e1-csv-invoice-export.md`, with its requirements, acceptance criteria and the existing components whose
+  names match it. Click one to read it as a document or copy its Markdown.
+- **Codebase.** The repository's blocks and their public declarations, with search. Click a name to write it into the
+  requirements.
+- **Notes.** The project context the technical avatars will read (see below).
+
+The footer shows whether the code is indexed, whether any documentation is stale and whether related notes were found.
+**Confirm Context & Launch Avatars** freezes the document and starts the run. Plan Forge does not scan or block what you
+write.
+
+### 2. Deliberation: the avatar room
+
+The four avatars sit across the top with what each is doing now. Click one to show only its lines.
+
+- **Discussion.** Every status, draft, critic finding and decision in the order it happened. Decisions the avatars cannot
+  make wait at the top as A/B cards; synthesis waits until you choose.
+- **Plan taking shape.** The Product Manager's epics as files, the architect's diagram and workstreams, and the critic's
+  findings by severity.
+
+**Synthesize Master Spec** unlocks once every avatar has finished the cycle, no CRITICAL or HIGH finding is open and no
+decision waits. A run that reaches the cycle limit with blocking findings pauses and offers to retry the architect or
+revise the requirements.
+
+### 3. Synthesis: the specification
+
+A Confluence-style specification with diagrams, Jira-style epics and subtasks, documentation-sync tasks and the two
+effort schedules. The table of contents follows your scroll. The task matrix can be filtered by ID, title or target
+file. Diagrams expand to full screen.
+
+## Project context
+
+Before planning, Plan Forge collects excerpts from the project's own notes, specs, plans and decision records that match
+the requirements, plus the branch, `HEAD` and recent commit subjects. The Architect, Specialists and Critic receive them;
+the Product Manager does not. Sources, in order:
+
+1. The recall index at `<git-common-dir>/agents-local/recall.db`, rows for this working tree only.
+2. The older index at `.agents/index/recall.db`.
+3. The files those indexes cover: `.agents/STATE.md`, `.agents/lanes/`, `.agents/sessions/`, `docs/specs/`, `docs/plans/`, `docs/adrs/` and `specs/`.
+
+Everything is read-only, bounded to 12 excerpts and 64 KiB, and repository-relative. Print the same context yourself:
+
+```sh
+plan-forge context --query "invoice exports"          # Markdown
+plan-forge context --query "invoice exports" --json   # for scripts
+```
+
+[ADR 0002](adrs/0002-read-agents-recall-index.md) records the design.
 
 ## Plan Mode handoff and validation
 

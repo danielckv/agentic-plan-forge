@@ -1,16 +1,14 @@
 /**
- * The Plan Forge mark: the pre-planning gate, drawn.
- *
- * Two bars narrow into a struck diamond — many inputs entering the gate, one
- * verified specification leaving it. That is the product in a glyph, and it
- * stays readable at 16px where an anvil or a hammer turns to mush.
+ * The Plan Forge mark: a "P" whose bowl closes into a ring — the gate a plan
+ * passes through — and a spark beside it for the specification that comes
+ * out. It stays readable at 16px.
  *
  * It is drawn rather than loaded as an image for three reasons. The bundle is
  * served under a Content-Security-Policy with `default-src 'self'`, so an
  * inline SVG needs no exception; it takes its colours from the theme tokens,
  * so light and dark need no second asset; and it stays crisp at every size the
- * UI uses. docs/logo.svg is the same geometry with the colours baked in, for
- * the README, where CSS variables do not resolve.
+ * UI uses. docs/logo.svg and web/public/favicon.svg are the same geometry with
+ * the colours baked in, for places where CSS variables do not resolve.
  */
 
 const GRADIENT_ID = "pf-brand-grad";
@@ -41,15 +39,23 @@ export function BrandMark({
         </linearGradient>
       </defs>
 
-      {/* The billet the mark sits on. */}
       <rect width="32" height="32" rx="8" fill={`url(#${GRADIENT_ID})`} />
 
-      {/* Two bars narrowing: what enters the gate. */}
-      <g fill="var(--pf-accent-ink)">
-        <rect x="7" y="7.8" width="18" height="3" rx="1.5" />
-        <rect x="10.2" y="12.6" width="11.6" height="3" rx="1.5" />
-        {/* The forged result. */}
-        <path d="M16 17 20.2 21.2 16 25.4 11.8 21.2Z" />
+      <g transform="translate(-1.4 0)">
+        {/* The P: its bowl is a closed ring, the gate. */}
+        <path
+          d="M11 24.5V7.75h5.75a5.5 5.5 0 0 1 0 11H11"
+          fill="none"
+          stroke="var(--pf-accent-ink)"
+          strokeWidth="3.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* The spark: the verified specification. */}
+        <path
+          d="M23.6 19.4l.95 2.15 2.15.95-2.15.95-.95 2.15-.95-2.15-2.15-.95 2.15-.95z"
+          fill="var(--pf-accent-ink)"
+        />
       </g>
     </svg>
   );

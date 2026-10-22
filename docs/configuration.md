@@ -13,9 +13,9 @@ The `/plan-config` slash command reviews and changes the same settings from insi
 
 | Key | Default | Effect |
 | :--- | :--- | :--- |
-| `browser_path` | unset | The executable that opens the forge and board tabs. Unset uses the platform URL opener, so the tab lands in your default browser. Set it to a browser executable to send the tab there instead. A value that is not executable is an error, never a silent fall-back to a browser you did not choose. |
-| `center_auto_open` | `false` | Whether starting a harness session may open a command center tab. Off by default: starting a session is not a request to look at a dashboard. `plan-forge center open` ignores this and always opens one. |
-| `center_port` | `8420` | The loopback port the command center binds. `PLAN_FORGE_CENTER_PORT` overrides it. A port already in use is reported rather than worked around, because a dashboard that moves breaks every bookmark. |
+| `browser_path` | unset | The executable that opens the forge tab. Unset uses the platform URL opener, so the tab lands in your default browser. Set it to a browser executable to send the tab there instead. A value that is not executable is an error, never a silent fall-back to a browser you did not choose. |
+
+The tab opens only when you run `/plan-forge`. Starting an agent session never opens it.
 
 ## Self-host the relay on Cloud Run
 

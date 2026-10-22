@@ -1,43 +1,46 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
-  ChevronRight,
-  Compass,
   Crown,
-  DraftingCompass,
+  FileText,
+  Layers,
   LoaderCircle,
+  MessagesSquare,
+  Network,
   ShieldAlert,
-  Sparkles,
   TriangleAlert,
   WifiOff,
+  X,
 } from "lucide-react";
 
-import {
-  useSync,
-  cancelSession,
-  retryStage,
-  resolveDecision,
-  synthesize,
-  editBaseline,
-} from "../store/syncStore";
-import type { CritiqueIssue, DecisionCard } from "../store/syncStore";
+import { AvatarBadge, MAIN_AVATARS, avatarSpec } from "../components/avatars/AvatarBadge";
+import { EpicCard } from "../components/epics/EpicCard";
+import { EpicModal } from "../components/epics/EpicModal";
 import { MermaidSvg } from "../components/MermaidSvg";
-import { Collapse } from "../ui/Collapse";
+import {
+  architectureMermaid,
+  parseArchitectDraft,
+  parsePMDraft,
+  pmEpicMarkdown,
+  type ArchitectDraft,
+  type PMDraft,
+} from "../protocol/drafts";
+import { cancelSession, editBaseline, resolveDecision, retryStage, synthesize, useSync } from "../store/syncStore";
+import type { CritiqueIssue, DecisionCard, SyncState, TimelineEntry } from "../store/syncStore";
 import { SkeletonCard, SkeletonLines } from "../ui/Skeleton";
 
 /**
- * Page 2 — Avatar deliberation canvas.
+ * Page 2 — the avatar room.
  *
- * Top bar: cycle progress, lease holder, run state. Avatar cards (PM,
- * Architect, Critic, Synthesizer) with lucide icons and role colors; statuses
- * Idle/Thinking/Drafting/Critiquing/Revising/Synced/Failed/Cancelled/Stale,
- * each shown as a chip that animates when the status changes. Expanding a card
- * shows "Live output and rationale" (public summaries + draft deltas — the
- * label never says reasoning). Decision cards with 2-4 options, tradeoffs,
- * recommended badge. Controls: cancel run (owner), retry stage, run superseded
- * notice, executor lost notice, max-cycles panel. Footer: Synthesize Master
- * Spec, enabled only when every avatar has finished the cycle, all contracts
- * validate, no CRITICAL/HIGH is open, and no decision is pending.
+ * The four avatars sit across the top with what each is doing now. Below,
+ * the discussion: every status, draft, critique and decision in the order it
+ * happened, filterable by avatar, with open decisions pinned first. Beside
+ * it, the plan as it takes shape: the Product Manager's epics as files, the
+ * architect's diagram and workstreams, and the critic's findings.
+ *
+ * Footer: Cancel, and Synthesize Master Spec, enabled once every avatar has
+ * finished the cycle, no CRITICAL or HIGH finding is open, and no decision
+ * waits.
  */
 
 const CYCLE_STEPS: Array<{ n: number; label: string }> = [
@@ -58,24 +61,9 @@ export type AvatarStatus =
   | "Cancelled"
   | "Stale";
 
-interface AvatarCardSpec {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ size?: number | string; strokeWidth?: number | string }>;
-  color: string;
-  soft: string;
-}
-
-const AVATAR_CARDS: AvatarCardSpec[] = [
-  { id: "pm", label: "Product Manager", icon: Compass, color: "var(--pf-accent)", soft: "var(--pf-accent-soft)" },
-  { id: "architect", label: "Technical Architect", icon: DraftingCompass, color: "var(--pf-epic)", soft: "var(--pf-epic-soft)" },
-  { id: "critic", label: "Red-Team Critic", icon: ShieldAlert, color: "var(--pf-danger-bright)", soft: "var(--pf-danger-soft)" },
-  { id: "synthesizer", label: "Lead Synthesizer", icon: Sparkles, color: "var(--pf-ok-bright)", soft: "var(--pf-ok-soft)" },
-];
-
 const STATUS_CHIP: Record<AvatarStatus, string> = {
   Idle: "",
-  Queued: "pf-chip--accent pf-chip--live",
+  Queued: "",
   Thinking: "pf-chip--accent pf-chip--live",
   Drafting: "pf-chip--accent pf-chip--live",
   Critiquing: "pf-chip--danger pf-chip--live",
@@ -86,83 +74,53 @@ const STATUS_CHIP: Record<AvatarStatus, string> = {
   Stale: "pf-chip--warn",
 };
 
-const KNOWN_STATUS: Record<string, true> = {
-  Idle: true,
-  Thinking: true,
-  Drafting: true,
-  Critiquing: true,
-  Revising: true,
-  Synced: true,
-  Failed: true,
-  Cancelled: true,
-  Stale: true,
-};
+const KNOWN_STATUS = new Set<string>(["Idle", "Thinking", "Drafting", "Critiquing", "Revising", "Synced", "Failed", "Cancelled", "Stale"]);
 
 /**
- * Statuses that mean the avatar is working right now. The run chip and the
- * card skeletons key off these: an avatar with no output yet still has to
- * look busy, or a cycle that takes minutes reads as a frozen page.
+ * Statuses that mean the avatar is working right now. The run chip, the
+ * speaking ring and the footer key off these.
  */
-const WORKING_STATUS: Record<string, true> = {
-  Queued: true,
-  Thinking: true,
-  Drafting: true,
-  Critiquing: true,
-  Revising: true,
-};
+const WORKING_STATUS = new Set<string>(["Queued", "Thinking", "Drafting", "Critiquing", "Revising"]);
 
-const MERMAID_HEAD = /^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|mindmap|timeline)\b/;
+type PlanTab = "epics" | "architecture" | "findings";
 
 export function Page2AvatarCanvas(): React.ReactElement {
   const sync = useSync();
   const cycle = sync.cycle;
   const runId = sync.runId;
-  const [maxCyclesReached] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
+  const [planTab, setPlanTab] = useState<PlanTab>("epics");
 
-  const openBlockers = sync.drafts.filter((d) => d.revision === "failed");
-  const openCritiques = sync.critiques.filter(
-    (c) => !c.resolved && (c.severity === "CRITICAL" || c.severity === "HIGH"),
-  );
-  const openDecisions = sync.decisions.filter(
-    (d) => d.resolvedOptionId === undefined && !d.stale,
-  );
-
-  // Synthesis reads every avatar's draft, so it cannot start while any of
-  // them is still producing one: `working` is computed below, once statusFor
-  // exists.
-
-  // A run is in flight: an avatar the authority has not reported on yet is
-  // queued behind the ones that are working, not idle.
   const runActive = runId !== null;
-
   const statusFor = (avatarId: string): AvatarStatus => {
     const t = sync.thoughts[avatarId];
-    if (t !== undefined && KNOWN_STATUS[t.status] === true) return t.status as AvatarStatus;
+    if (t !== undefined && KNOWN_STATUS.has(t.status)) return t.status as AvatarStatus;
     if (sync.drafts.some((d) => d.avatarId === avatarId)) return "Synced";
     return runActive ? "Queued" : "Idle";
   };
+  // Specialists work under the architect: any specialist at work keeps the
+  // cycle open even though it has no card of its own.
+  const specialistsWorking = Object.values(sync.thoughts).filter(
+    (t) => t.avatarId.startsWith("specialist:") && WORKING_STATUS.has(t.status),
+  ).length;
+  const working = MAIN_AVATARS.filter((a) => WORKING_STATUS.has(statusFor(a.id))).map((a) => a.name);
+  const workingCount = working.length + specialistsWorking;
 
-  const working = AVATAR_CARDS.filter((c) => WORKING_STATUS[statusFor(c.id)] === true);
+  const openCritiques = sync.critiques.filter((c) => !c.resolved && c.severity !== "MEDIUM");
+  const openDecisions = sync.decisions.filter((d) => d.resolvedOptionId === undefined && !d.stale);
+  // The orchestrator pauses a run that reaches the cycle cap with blocking
+  // findings, and says so with a Stale critic status.
+  const paused = sync.thoughts.critic?.status === "Stale" && openCritiques.length > 0 && workingCount === 0;
 
   const synthesizeEnabled =
-    sync.role === "owner" &&
-    working.length === 0 &&
-    openBlockers.length === 0 &&
-    openCritiques.length === 0 &&
-    openDecisions.length === 0 &&
-    !maxCyclesReached;
-
-  // The authority is the source of progress; while the socket is away the
-  // page keeps its last state and says so rather than claiming work stalled.
+    sync.role === "owner" && workingCount === 0 && openCritiques.length === 0 && openDecisions.length === 0 && !paused;
   const linkDown = sync.conn !== "open";
 
-  const noOutputYet =
-    sync.decisions.length === 0 && sync.critiques.length === 0 && sync.drafts.length === 0;
+  const pm = useMemo(() => parsePMDraft(sync.drafts.find((d) => d.avatarId === "pm")?.data), [sync.drafts]);
+  const arch = useMemo(() => parseArchitectDraft(sync.drafts.find((d) => d.avatarId === "architect")?.data), [sync.drafts]);
 
   return (
     <div className="pf-page">
-      {/* Top bar: cycle progress, lease, run state */}
       <div className="pf-subbar">
         <div className="pf-stepper" role="list" aria-label="Deliberation cycle">
           {CYCLE_STEPS.map((s, i) => (
@@ -179,7 +137,6 @@ export function Page2AvatarCanvas(): React.ReactElement {
             </span>
           ))}
         </div>
-
         <div className="pf-subbar-right">
           <span className="pf-chip pf-chip--accent">
             <Crown size={12} />
@@ -190,10 +147,10 @@ export function Page2AvatarCanvas(): React.ReactElement {
               <WifiOff size={12} />
               Reconnecting — last known state
             </span>
-          ) : working.length > 0 ? (
+          ) : workingCount > 0 ? (
             <span className="pf-chip pf-chip--accent pf-chip--live">
               <LoaderCircle size={12} className="pf-spin" />
-              Cycle {cycle} running — {working.length} of {AVATAR_CARDS.length} working
+              Cycle {cycle} running — {workingCount} working
             </span>
           ) : runActive ? (
             <span className="pf-chip pf-chip--ok">
@@ -201,229 +158,122 @@ export function Page2AvatarCanvas(): React.ReactElement {
               Cycle {cycle} settled
             </span>
           ) : null}
-          {maxCyclesReached && (
-            <span className="pf-chip pf-chip--warn">
-              <TriangleAlert size={12} />
-              Max cycles reached
-            </span>
-          )}
         </div>
       </div>
 
-      <div className="pf-page-body">
-        <div className="pf-container py-7">
-          <header className="pf-page-header mb-6">
+      <div className="pf-page-body pf-room-page">
+        <div className="pf-room">
+          <header className="pf-page-header">
             <h1 className="pf-title">Avatar deliberation</h1>
             <p className="pf-caption">
-              Cycle {cycle} of 3 — each avatar works from the frozen baseline; public
-              output streams below.
+              Four avatars plan from the frozen requirements, the code and the project's notes. Cycle {cycle} of 3.
             </p>
           </header>
 
-          {/* Avatar cards */}
-          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {AVATAR_CARDS.map((spec) => {
-              const draft = sync.drafts.find((d) => d.avatarId === spec.id);
-              const thought = sync.thoughts[spec.id];
-              const status = statusFor(spec.id);
-              const isWorking = WORKING_STATUS[status] === true;
-              const Icon = spec.icon;
-              const isOpen = expanded === spec.id;
-              const detailId = `p2-card-${spec.id}`;
-              const isArchitectDiagram =
-                spec.id === "architect" &&
-                draft?.content !== undefined &&
-                MERMAID_HEAD.test(draft.content.trim());
+          <div className="pf-roster" role="group" aria-label="Avatars">
+            {MAIN_AVATARS.map((a) => {
+              const status = statusFor(a.id);
+              const thought = sync.thoughts[a.id];
+              const selected = focus === a.id;
               return (
-                <div
-                  key={spec.id}
-                  className="pf-card pf-avatar-card"
+                <button
+                  key={a.id}
+                  type="button"
+                  className="pf-roster-card"
                   data-status={status}
-                  data-working={isWorking}
-                  style={{ borderTop: `3px solid ${spec.color}` }}
+                  aria-pressed={selected}
+                  title={selected ? "Show everyone" : `Show only ${a.name}`}
+                  onClick={() => setFocus(selected ? null : a.id)}
+                  style={{ ["--pf-role" as string]: a.color }}
                 >
-                  <button
-                    type="button"
-                    className="pf-avatar-card-head"
-                    aria-expanded={isOpen}
-                    aria-controls={detailId}
-                    onClick={() => setExpanded(isOpen ? null : spec.id)}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className="pf-avatar-icon"
-                        data-working={isWorking}
-                        style={{ background: spec.soft, color: spec.color }}
-                      >
-                        <Icon size={16} />
-                      </span>
-                      <span className="pf-section-title">{spec.label}</span>
-                      <ChevronRight
-                        size={14}
-                        className="pf-accordion-chevron ml-auto"
-                        data-open={isOpen}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Keyed by status: a change remounts the chip and replays its swap animation. */}
-                      <span key={status} className={`pf-chip pf-chip--swap ${STATUS_CHIP[status]}`}>
-                        <span className="pf-dot" />
-                        {status}
-                      </span>
-                      {draft !== undefined && (
-                        <span className="pf-caption pf-mono">rev {draft.revision}</span>
-                      )}
-                    </div>
-                    {thought !== undefined && thought.summary !== "" && (
-                      <p className="pf-caption" style={{ color: "var(--pf-ink-2)" }}>
-                        {thought.summary}
-                      </p>
-                    )}
-                    {thought === undefined && status === "Idle" && (
-                      <p className="pf-caption">Waiting for cycle {cycle} to reach this role.</p>
-                    )}
-                    {thought === undefined && status === "Queued" && (
-                      <p className="pf-caption">Queued for cycle {cycle}.</p>
-                    )}
-                    {isWorking && (thought === undefined || thought.summary === "") && (
-                      <SkeletonLines lines={2} className="pt-0.5" />
-                    )}
-                  </button>
-                  <Collapse id={detailId} open={isOpen}>
-                    <div className="pf-avatar-card-detail">
-                      <p className="pf-label mb-2">Live output and rationale</p>
-                      {draft === undefined ? (
-                        isWorking ? (
-                          <div className="flex flex-col gap-2">
-                            <p className="pf-caption flex items-center gap-1.5">
-                              <LoaderCircle size={12} className="pf-spin" />
-                              {status} — output appears here as it lands.
-                            </p>
-                            <SkeletonLines lines={3} />
-                          </div>
-                        ) : (
-                          <p className="pf-caption">No draft yet — output appears here as the avatar works.</p>
-                        )
-                      ) : isArchitectDiagram ? (
-                        <MermaidSvg source={draft.content!} title="Proposed architecture" />
-                      ) : (
-                        <div className="flex flex-col gap-1">
-                          <p className="pf-caption pf-mono">
-                            draft rev {draft.revision}
-                            {draft.contentHash !== undefined ? ` · ${draft.contentHash.slice(0, 8)}` : ""}
-                          </p>
-                          {draft.content !== undefined && (
-                            <pre className="pf-draft-output pf-mono pf-scroll-thin">
-                              {draft.content.slice(0, 2000)}
-                            </pre>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </Collapse>
-                </div>
+                  <AvatarBadge id={a.id} size={44} speaking={WORKING_STATUS.has(status) && status !== "Queued"} />
+                  <span className="pf-roster-main">
+                    <span className="pf-roster-name">{a.name}</span>
+                    <span className="pf-roster-job">{a.job}</span>
+                    <span key={status} className={`pf-chip pf-chip--swap ${STATUS_CHIP[status]}`}>
+                      <span className="pf-dot" />
+                      {status}
+                    </span>
+                    {thought !== undefined && thought.summary !== "" ? (
+                      <span className="pf-roster-say">{thought.summary}</span>
+                    ) : WORKING_STATUS.has(status) ? (
+                      <SkeletonLines lines={2} />
+                    ) : null}
+                  </span>
+                </button>
               );
             })}
           </div>
 
-          {/* Critic issues */}
-          {sync.critiques.length > 0 && (
-            <section className="mt-7" aria-labelledby="p2-critic">
-              <div className="mb-3 flex items-center gap-2">
-                <ShieldAlert size={15} style={{ color: "var(--pf-danger)" }} />
-                <h2 id="p2-critic" className="pf-section-title">Critic findings</h2>
-                <span className="pf-caption">
-                  {openCritiques.length} blocking · {sync.critiques.length} total
-                </span>
-              </div>
-              <div className="pf-card overflow-hidden">
-                <ul className="m-0 flex list-none flex-col p-0">
-                  {sync.critiques.map((c, i) => (
-                    <CritiqueRow key={c.issueId} issue={c} last={i === sync.critiques.length - 1} />
-                  ))}
-                </ul>
-              </div>
-            </section>
-          )}
-
-          {/* Decision cards: 2-4 options, tradeoffs, recommended badge */}
-          {sync.decisions.length > 0 && (
-            <section className="mt-7" aria-labelledby="p2-decisions">
-              <div className="mb-3 flex items-center gap-2">
-                <h2 id="p2-decisions" className="pf-section-title">Decisions</h2>
-                {openDecisions.length > 0 && (
-                  <span className="pf-chip pf-chip--warn">
-                    <span className="pf-dot" />
-                    {openDecisions.length} awaiting input
-                  </span>
+          <div className="pf-room-grid">
+            <section className="pf-room-feed" aria-labelledby="p2-feed">
+              <div className="pf-room-head">
+                <MessagesSquare size={15} aria-hidden="true" />
+                <h2 id="p2-feed" className="pf-section-title">
+                  Discussion
+                </h2>
+                {focus !== null && (
+                  <button type="button" className="pf-chip pf-chip--accent pf-room-filter" onClick={() => setFocus(null)}>
+                    {avatarSpec(focus).name}
+                    <X size={11} aria-label="Show everyone" />
+                  </button>
                 )}
               </div>
-              <div className="flex flex-col gap-3">
-                {sync.decisions.map((d) => (
-                  <DecisionCardView
-                    key={d.decisionId}
-                    card={d}
-                    disabled={sync.role === "viewer"}
-                    onResolve={resolveDecision}
-                  />
-                ))}
+              {openDecisions.length > 0 && (
+                <div className="pf-room-decisions">
+                  {openDecisions.map((d) => (
+                    <DecisionCardView key={d.decisionId} card={d} disabled={sync.role === "viewer"} onResolve={resolveDecision} />
+                  ))}
+                </div>
+              )}
+              <Timeline sync={sync} focus={focus} pm={pm} arch={arch} onShow={setPlanTab} linkDown={linkDown} />
+            </section>
+
+            <aside className="pf-room-plan" aria-label="Plan taking shape">
+              <div className="pf-rail-tabs" role="tablist" aria-label="Plan views">
+                <PlanTabButton id="epics" current={planTab} onSelect={setPlanTab} icon={Layers} label="Epics" count={pm?.epics.length ?? 0} />
+                <PlanTabButton id="architecture" current={planTab} onSelect={setPlanTab} icon={Network} label="Architecture" />
+                <PlanTabButton
+                  id="findings"
+                  current={planTab}
+                  onSelect={setPlanTab}
+                  icon={ShieldAlert}
+                  label="Findings"
+                  count={sync.critiques.filter((c) => !c.resolved).length}
+                />
               </div>
+              <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
+                {planTab === "epics" && <EpicsPanel pm={pm} />}
+                {planTab === "architecture" && <ArchitecturePanel arch={arch} />}
+                {planTab === "findings" && <FindingsPanel findings={sync.critiques} />}
+              </div>
+            </aside>
+          </div>
+
+          {sync.decisions.some((d) => d.resolvedOptionId !== undefined || d.stale) && (
+            <section className="pf-room-resolved" aria-label="Resolved decisions">
+              {sync.decisions
+                .filter((d) => d.resolvedOptionId !== undefined || d.stale)
+                .map((d) => (
+                  <DecisionCardView key={d.decisionId} card={d} disabled onResolve={resolveDecision} />
+                ))}
             </section>
           )}
 
-          {noOutputYet && (
-            <div className="pf-empty mt-7" aria-live="polite">
-              <span className="pf-empty-icon" data-busy={!linkDown}>
-                {linkDown ? <WifiOff size={20} /> : <Compass size={20} />}
-              </span>
-              <p className="pf-body font-medium" style={{ color: "var(--pf-ink)" }}>
-                {linkDown
-                  ? "Waiting for the session authority"
-                  : runActive
-                    ? "The avatars are working — nothing has landed yet"
-                    : "The deliberation has not produced output yet"}
-              </p>
-              <p className="pf-caption max-w-md">
-                {linkDown
-                  ? "This page keeps its last state and picks up where it left off as soon as the connection is back."
-                  : "Drafts, critic findings, and decisions stream in here as the avatars work through the current cycle."}
-              </p>
-              {!linkDown && (
-                <div className="pf-empty-preview" aria-hidden="true">
-                  <SkeletonCard lines={2} />
-                  <SkeletonCard lines={2} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Max-cycles panel: open blockers, retry / revise-baseline */}
-          {maxCyclesReached && (
-            <section className="pf-notice pf-notice--warn mt-7 flex-col items-stretch">
+          {paused && (
+            <section className="pf-notice pf-notice--warn flex-col items-stretch">
               <div className="flex items-center gap-2">
                 <TriangleAlert size={15} style={{ color: "var(--pf-warn)" }} />
                 <span className="font-semibold" style={{ color: "var(--pf-warn)" }}>
-                  Max cycles reached — unresolved issues
+                  Paused at the cycle limit: {openCritiques.length} blocking {openCritiques.length === 1 ? "finding" : "findings"} still open
                 </span>
               </div>
-              <ul className="mt-1 list-none p-0 text-[13px]" style={{ color: "var(--pf-ink-2)" }}>
-                {openBlockers.map((b) => (
-                  <li key={b.avatarId}>{b.avatarId}: unresolved CRITICAL/HIGH critique</li>
-                ))}
-              </ul>
+              <p className="pf-caption">Retry the architect with the findings, or edit the requirements and confirm again.</p>
               <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  className="pf-btn pf-btn-secondary pf-btn-sm"
-                  onClick={() => retryStage(runId ?? "", "architect")}
-                >
+                <button type="button" className="pf-btn pf-btn-secondary pf-btn-sm" onClick={() => retryStage(runId ?? "", "architect")}>
                   Retry stage
                 </button>
-                <button
-                  type="button"
-                  className="pf-btn pf-btn-secondary pf-btn-sm"
-                  onClick={editBaseline}
-                >
+                <button type="button" className="pf-btn pf-btn-secondary pf-btn-sm" onClick={editBaseline}>
                   Revise baseline
                 </button>
               </div>
@@ -432,41 +282,33 @@ export function Page2AvatarCanvas(): React.ReactElement {
         </div>
       </div>
 
-      {/* Controls + footer */}
       <footer className="pf-footer-bar">
-        <button
-          type="button"
-          className="pf-btn pf-btn-danger"
-          onClick={cancelSession}
-          disabled={sync.role !== "owner"}
-        >
+        <button type="button" className="pf-btn pf-btn-danger" onClick={cancelSession} disabled={sync.role !== "owner"}>
           Cancel session
         </button>
         <p className="pf-caption pf-footer-note">
-          {working.length > 0 ? (
+          {workingCount > 0 ? (
             <>
               <LoaderCircle size={12} className="pf-spin shrink-0" />
-              {working.length === 1
-                ? `${working[0]!.label} is still working — synthesis waits for the cycle to finish.`
-                : `${String(working.length)} avatars are still working — synthesis waits for the cycle to finish.`}
+              {working.length === 1 && specialistsWorking === 0
+                ? `${working[0]} is still working — synthesis waits for the cycle to finish.`
+                : `${workingCount} avatars are still working — synthesis waits for the cycle to finish.`}
             </>
           ) : openDecisions.length > 0 ? (
-            "Resolve open decisions to enable synthesis."
+            "Resolve the open decision to enable synthesis."
           ) : openCritiques.length > 0 ? (
-            "Blocking critique findings must resolve before synthesis."
+            "Blocking findings must be resolved before synthesis."
+          ) : runActive ? (
+            "Every avatar has finished — ready to synthesize."
           ) : (
-            "All contracts validated — ready to synthesize."
+            "Waiting for the run to start."
           )}
         </p>
         <button
           type="button"
           className="pf-btn pf-btn-primary pf-btn-lg ml-auto"
           disabled={!synthesizeEnabled}
-          title={
-            working.length > 0
-              ? "Available when every avatar finishes this cycle"
-              : "Synthesize the master specification"
-          }
+          title={workingCount > 0 ? "Available when every avatar finishes this cycle" : "Synthesize the master specification"}
           onClick={() => runId !== null && synthesize(runId)}
         >
           Synthesize Master Spec
@@ -477,36 +319,313 @@ export function Page2AvatarCanvas(): React.ReactElement {
   );
 }
 
-function CritiqueRow(props: { issue: CritiqueIssue; last: boolean }): React.ReactElement {
-  const { issue, last } = props;
-  const badge =
-    issue.severity === "CRITICAL"
-      ? "pf-badge--critical"
-      : issue.severity === "HIGH"
-        ? "pf-badge--high"
-        : "pf-badge--medium";
+function clock(at: number): string {
+  return new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+/** Which avatar a timeline entry belongs to, for the filter. */
+function entryAvatar(e: TimelineEntry): string | null {
+  if (e.kind === "thought" || e.kind === "draft") return e.avatarId;
+  if (e.kind === "critique") return "critic";
+  return null;
+}
+
+function Timeline(props: {
+  sync: SyncState;
+  focus: string | null;
+  pm: PMDraft | null;
+  arch: ArchitectDraft | null;
+  onShow: (tab: PlanTab) => void;
+  linkDown: boolean;
+}): React.ReactElement {
+  const { sync, focus, pm, arch, onShow, linkDown } = props;
+  const listRef = useRef<HTMLOListElement>(null);
+  const entries = sync.timeline.filter((e) => {
+    if (focus === null) return true;
+    const who = entryAvatar(e);
+    return who === focus || (focus === "architect" && who?.startsWith("specialist:") === true);
+  });
+
+  // Follow the conversation while the reader is at the bottom; leave them be
+  // when they scrolled up to read.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el === null) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+  }, [entries.length]);
+
+  if (entries.length === 0) {
+    return (
+      <div className="pf-empty" aria-live="polite">
+        <span className="pf-empty-icon" data-busy={!linkDown}>
+          {linkDown ? <WifiOff size={20} /> : <MessagesSquare size={20} />}
+        </span>
+        <p className="pf-body font-medium" style={{ color: "var(--pf-ink)" }}>
+          {linkDown ? "Waiting for the session authority" : focus !== null ? "Nothing from this avatar yet" : "The avatars are getting started"}
+        </p>
+        <p className="pf-caption max-w-md">
+          {linkDown
+            ? "This page keeps its last state and picks up as soon as the connection is back."
+            : "Every status, draft, finding and decision appears here as it happens."}
+        </p>
+        {!linkDown && (
+          <div className="pf-empty-preview" aria-hidden="true">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <li
-      className="pf-critique-row"
-      data-resolved={issue.resolved}
-      style={last ? undefined : { borderBottom: "1px solid var(--pf-border)" }}
-    >
-      <span className={`pf-badge ${badge}`}>{issue.severity}</span>
-      <span className="pf-body flex-1" style={{ color: "var(--pf-ink)" }}>
-        {issue.summary}
-      </span>
-      {issue.resolved ? (
-        <span className="pf-chip pf-chip--swap pf-chip--ok">
-          <span className="pf-dot" />
-          Resolved
+    <ol ref={listRef} className="pf-timeline pf-scroll-thin" aria-live="polite">
+      {entries.map((e, i) => (
+        <li key={`${e.kind}-${e.at}-${i}`} className="pf-line" data-kind={e.kind}>
+          <TimelineLine entry={e} sync={sync} pm={pm} arch={arch} onShow={onShow} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function TimelineLine(props: {
+  entry: TimelineEntry;
+  sync: SyncState;
+  pm: PMDraft | null;
+  arch: ArchitectDraft | null;
+  onShow: (tab: PlanTab) => void;
+}): React.ReactElement {
+  const { entry: e, sync, pm, arch, onShow } = props;
+  const who = entryAvatar(e);
+  const time = <time className="pf-line-time">{clock(e.at)}</time>;
+
+  if (e.kind === "decision" || e.kind === "resolved") {
+    const card = sync.decisions.find((d) => d.decisionId === e.decisionId);
+    if (e.kind === "decision") {
+      return (
+        <div className="pf-line-system">
+          <TriangleAlert size={14} aria-hidden="true" />
+          <span>
+            <strong>Decision needed:</strong> {e.question}
+          </span>
+          {time}
+        </div>
+      );
+    }
+    const option = card?.options.find((o) => o.optionId === e.optionId);
+    return (
+      <div className="pf-line-system pf-line-system--ok">
+        <Crown size={14} aria-hidden="true" />
+        <span>
+          <strong>{e.actor === "" ? "The owner" : e.actor}</strong> chose “{option?.label ?? e.optionId}”.
         </span>
-      ) : (
-        <span className="pf-chip pf-chip--swap">
-          <span className="pf-dot" />
-          Open
-        </span>
+        {time}
+      </div>
+    );
+  }
+
+  const spec = avatarSpec(who ?? "");
+  let body: React.ReactNode;
+  if (e.kind === "thought") {
+    const status = KNOWN_STATUS.has(e.status) ? (e.status as AvatarStatus) : "Thinking";
+    body = (
+      <>
+        <span className={`pf-chip ${STATUS_CHIP[status]}`}>{e.status}</span>
+        {e.summary !== "" && <p className="pf-line-text">{e.summary}</p>}
+      </>
+    );
+  } else if (e.kind === "draft") {
+    const what =
+      e.avatarId === "pm" && pm !== null
+        ? `drafted ${pm.epics.length} ${pm.epics.length === 1 ? "epic" : "epics"} and ${pm.stories.length} ${pm.stories.length === 1 ? "story" : "stories"}`
+        : e.avatarId === "architect" && arch !== null
+          ? `drafted the architecture: ${arch.workstreams.length} ${arch.workstreams.length === 1 ? "workstream" : "workstreams"}`
+          : e.schemaId === "synthesis.v1"
+            ? "compiled the master specification"
+            : `published draft ${e.revision}`;
+    const tab: PlanTab | null = e.avatarId === "pm" ? "epics" : e.avatarId === "architect" ? "architecture" : null;
+    body = (
+      <p className="pf-line-text">
+        <FileText size={13} aria-hidden="true" /> {what}.
+        {tab !== null && (
+          <button type="button" className="pf-line-link" onClick={() => onShow(tab)}>
+            View
+          </button>
+        )}
+      </p>
+    );
+  } else {
+    body = (
+      <p className="pf-line-text">
+        Found {e.total} {e.total === 1 ? "issue" : "issues"}: {e.blocking} blocking, {e.open} open.
+        <button type="button" className="pf-line-link" onClick={() => onShow("findings")}>
+          View
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <div className="pf-line-msg">
+      <AvatarBadge id={spec.id} size={30} />
+      <div className="pf-line-main">
+        <div className="pf-line-head">
+          <span className="pf-line-name" style={{ color: spec.color }}>
+            {spec.name}
+          </span>
+          {"cycle" in e && <span className="pf-line-cycle">cycle {e.cycle}</span>}
+          {time}
+        </div>
+        {body}
+      </div>
+    </div>
+  );
+}
+
+function EpicsPanel({ pm }: { pm: PMDraft | null }): React.ReactElement {
+  const [open, setOpen] = useState<number | null>(null);
+  if (pm === null) {
+    return (
+      <div className="pf-rail-empty">
+        <p className="pf-body">The Product Manager is drafting epics.</p>
+        <SkeletonCard lines={2} />
+      </div>
+    );
+  }
+  const docs = pm.epics.map((e) => ({
+    id: e.id,
+    title: e.title,
+    filename: `${e.id.toLowerCase()}-${e.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.md`,
+    markdown: pmEpicMarkdown(pm, e.id),
+  }));
+  return (
+    <div className="pf-epic-list">
+      {pm.epics.map((e, i) => {
+        const stories = pm.stories.filter((s) => s.epicId === e.id);
+        return (
+          <EpicCard
+            key={e.id}
+            id={e.id}
+            title={e.title}
+            goal={e.goal}
+            filename={docs[i]?.filename ?? e.id}
+            stats={[
+              { label: ["story", "stories"], value: stories.length },
+              { label: ["criterion", "criteria"], value: stories.reduce((n, s) => n + s.criteria.length, 0) },
+            ]}
+            tags={[...new Set(stories.map((s) => s.actor))]}
+            onOpen={() => setOpen(i)}
+          />
+        );
+      })}
+      <EpicModal docs={docs} index={open} onIndex={setOpen} />
+    </div>
+  );
+}
+
+function ArchitecturePanel({ arch }: { arch: ArchitectDraft | null }): React.ReactElement {
+  if (arch === null) {
+    return (
+      <div className="pf-rail-empty">
+        <p className="pf-body">The architect drafts after the Product Manager.</p>
+        <SkeletonCard lines={3} />
+      </div>
+    );
+  }
+  const diagram = architectureMermaid(arch);
+  return (
+    <div className="pf-arch">
+      <p className="pf-body">{arch.summary}</p>
+      {diagram !== null && <MermaidSvg source={diagram} title="Proposed architecture" />}
+      <p className="pf-label">Workstreams</p>
+      <ul className="pf-arch-ws">
+        {arch.workstreams.map((w) => (
+          <li key={w.id}>
+            <span className="pf-arch-ws-id">{w.id}</span>
+            <span className="pf-caption">{w.role}</span>
+            <span className="pf-arch-ws-mods">
+              {w.modules.map((m) => (
+                <code key={m} className="pf-tag">
+                  {m}
+                </code>
+              ))}
+            </span>
+            {w.dependsOn.length > 0 && <span className="pf-caption">after {w.dependsOn.join(", ")}</span>}
+          </li>
+        ))}
+      </ul>
+      {arch.constraints.length > 0 && (
+        <>
+          <p className="pf-label">Constraints</p>
+          <ul className="pf-arch-constraints">
+            {arch.constraints.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        </>
       )}
-    </li>
+    </div>
+  );
+}
+
+function FindingsPanel({ findings }: { findings: CritiqueIssue[] }): React.ReactElement {
+  if (findings.length === 0) {
+    return (
+      <div className="pf-rail-empty">
+        <p className="pf-body">No findings yet.</p>
+        <p className="pf-caption">The critic attacks the drafts once the architect and specialists publish them.</p>
+      </div>
+    );
+  }
+  const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 } as const;
+  const sorted = [...findings].sort((a, b) => Number(a.resolved) - Number(b.resolved) || order[a.severity] - order[b.severity]);
+  return (
+    <ul className="pf-findings">
+      {sorted.map((f) => (
+        <li key={f.issueId} className="pf-finding" data-resolved={f.resolved}>
+          <div className="pf-finding-head">
+            <span className={`pf-badge ${f.severity === "CRITICAL" ? "pf-badge--critical" : f.severity === "HIGH" ? "pf-badge--high" : "pf-badge--medium"}`}>
+              {f.severity}
+            </span>
+            <span className="pf-caption pf-mono">{f.issueId}</span>
+            <span className={`pf-chip ${f.resolved ? "pf-chip--ok" : ""}`}>
+              <span className="pf-dot" />
+              {f.resolved ? "Resolved" : "Open"}
+            </span>
+          </div>
+          <p className="pf-body">{f.summary}</p>
+          {f.requiredChange !== "" && <p className="pf-caption">Needs: {f.requiredChange}</p>}
+          {f.targets.length > 0 && (
+            <span className="pf-arch-ws-mods">
+              {f.targets.map((t) => (
+                <code key={t} className="pf-tag">
+                  {t}
+                </code>
+              ))}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PlanTabButton(props: {
+  id: PlanTab;
+  current: PlanTab;
+  onSelect: (t: PlanTab) => void;
+  icon: React.ComponentType<{ size?: number }>;
+  label: string;
+  count?: number;
+}): React.ReactElement {
+  const { id, current, onSelect, icon: Icon, label, count } = props;
+  return (
+    <button type="button" role="tab" className="pf-rail-tab" aria-selected={id === current} onClick={() => onSelect(id)}>
+      <Icon size={14} />
+      {label}
+      {count !== undefined && count > 0 && <span className="pf-rail-count">{count}</span>}
+    </button>
   );
 }
 
@@ -518,10 +637,7 @@ function DecisionCardView(props: {
   const { card, disabled, onResolve } = props;
   const resolved = card.resolvedOptionId !== undefined;
   return (
-    <div
-      className="pf-card pf-card-pad pf-decision"
-      data-state={card.stale ? "stale" : resolved ? "resolved" : "open"}
-    >
+    <div className="pf-card pf-card-pad pf-decision" data-state={card.stale ? "stale" : resolved ? "resolved" : "open"}>
       <div className="flex items-start justify-between gap-3">
         <p className="pf-section-title">{card.question}</p>
         {card.stale && (

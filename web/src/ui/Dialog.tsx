@@ -30,7 +30,7 @@ export interface DialogProps {
   title: string;
   /** Sub-heading under the title. */
   description?: string;
-  size?: "md" | "wide";
+  size?: "md" | "doc" | "wide";
   children: React.ReactNode;
 }
 

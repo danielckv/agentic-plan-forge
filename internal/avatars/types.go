@@ -47,7 +47,14 @@ type RunInput struct {
 	GraphHash string
 	// DocDrift is the documentation-drift evidence the architect must cover.
 	DocDrift []contracts.DocDriftItem
-	Models   ModelSlots
+	// Context is what the repository already says about itself: excerpts from
+	// its notes, specs, plans and decision records, and its Git state. The
+	// architect, specialists and critic receive it; the Product Manager never
+	// does.
+	Context contracts.ProjectContext
+	// ContextHash identifies Context; resume refuses a checkpoint with another.
+	ContextHash string
+	Models      ModelSlots
 	// MaxCycles is clamped to 1..HardMaxCycles; zero selects HardMaxCycles.
 	MaxCycles int
 	// MaxParallel bounds concurrent provider calls per stage; the effective

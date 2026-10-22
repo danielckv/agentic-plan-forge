@@ -57,6 +57,17 @@ lychee --no-progress --config lychee.toml "**/*.md"
 
 The `client` and `server` build tags are mutually exclusive: never pass both.
 
+To look at the window without a model, two harnesses drive the built bundle through a fake planning session
+(`web/scripts/lib/`, seeded with a sample brief and Go-shaped avatar frames):
+
+```sh
+npm --prefix web run build
+node web/scripts/preview.mjs   # screenshots to /tmp/plan-forge-preview and behavior checks
+node web/scripts/promo.mjs     # the README screenshots in docs/images
+```
+
+Re-run `promo.mjs` when a change alters what the README pictures show.
+
 Tooling installation notes:
 
 - `markdownlint-cli2` and `editorconfig-checker` run through `npx` and require a recent Node.js installation.

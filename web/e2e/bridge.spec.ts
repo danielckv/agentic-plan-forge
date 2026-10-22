@@ -50,8 +50,9 @@ test("the window completes the handshake and reaches the authority", async ({ pa
   // "Connected" renders only once the socket negotiated plan-forge.v1 and the
   // bridge accepted the auth frame. Exact matching keeps "Disconnected" out.
   await expect(page.getByText("Connected", { exact: true }).first()).toBeVisible();
-  // The authority's STATE_SNAPSHOT reached the store.
-  await expect(page.getByText("Signed in as owner")).toBeVisible();
+  // The authority's STATE_SNAPSHOT reached the store: the top bar names the
+  // role it assigned.
+  await expect(page.locator('.pf-conn[title="You are the owner"]')).toBeVisible();
   // HELLO followed the auth frame on the same socket.
   await expect
     .poll(() => harness.received.some((f) => f.includes('"event_type":"HELLO"')), { timeout: 10_000 })

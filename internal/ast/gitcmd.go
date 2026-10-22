@@ -33,11 +33,18 @@ var permittedGit = [][]string{
 	{"rev-parse", "--is-inside-work-tree"},
 	{"rev-parse", "--verify", "--quiet", "HEAD"},
 	{"rev-parse", "--abbrev-ref", "HEAD"},
+	{"rev-parse", "--git-common-dir"},
 	{"ls-files", "-z", "--cached", "--others", "--exclude-standard"},
 	{"ls-files", "-s", "-z"},
 	{"hash-object", "--stdin"},
 	{"config", "--get", "core.hooksPath"},
+	// Subjects only: no patch, no stat and no signature check, so no diff
+	// driver, text conversion or GPG program runs.
+	recentSubjectsArgs,
 }
+
+// recentSubjectsArgs lists the newest commit subjects on HEAD.
+var recentSubjectsArgs = []string{"log", "-n", "20", "--no-show-signature", "--no-color", "--format=%s", "HEAD"}
 
 var (
 	gitPathName = regexp.MustCompile(`^[a-z][a-z-]*$`)
@@ -330,4 +337,37 @@ func (g *Git) GitPath(ctx context.Context, name string) (string, error) {
 		p = filepath.Join(g.dir, filepath.FromSlash(p))
 	}
 	return p, nil
+}
+
+// CommonDir returns the absolute Git common directory: the .git directory of
+// the main working tree, shared by every linked worktree.
+func (g *Git) CommonDir(ctx context.Context) (string, error) {
+	out, err := g.run(ctx, nil, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	p := filepath.FromSlash(strings.TrimSpace(string(out)))
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(g.dir, p)
+	}
+	return filepath.Clean(p), nil
+}
+
+// RecentSubjects returns up to 20 commit subjects on HEAD, newest first. A
+// repository without commits returns none.
+func (g *Git) RecentSubjects(ctx context.Context) ([]string, error) {
+	if _, ok := g.Head(ctx); !ok {
+		return nil, nil
+	}
+	out, err := g.run(ctx, nil, recentSubjectsArgs...)
+	if err != nil {
+		return nil, err
+	}
+	var subjects []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			subjects = append(subjects, line)
+		}
+	}
+	return subjects, nil
 }

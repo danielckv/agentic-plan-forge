@@ -88,11 +88,11 @@ export function App(): React.ReactElement {
 
   return (
     <div className="pf-app">
-      <Sidebar sync={sync} collapsed={sidebarCollapsed} onOpenHelp={() => setHelpOpen(true)} />
+      <Sidebar sync={sync} collapsed={sidebarCollapsed} />
 
       {/* Content column */}
       <div className="pf-content">
-        <TopBar sync={sync} />
+        <TopBar sync={sync} onOpenHelp={() => setHelpOpen(true)} />
 
         {sync.banner !== null && (
           <div className="pf-banner pf-banner--warn" role="status">

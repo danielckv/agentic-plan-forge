@@ -88,6 +88,13 @@
   --pf-dur-slow: 220ms;
 
   /* layout */
+  /*
+   * One header height for the sidebar brand row and the top bar, so their
+   * bottom borders form one line; one control height for everything in them.
+   */
+  --pf-header-h: 56px;
+  --pf-footer-h: 58px;
+  --pf-ctl-h: 32px;
   --pf-gutter: 32px;
   --pf-sidebar-w: 232px;
   --pf-rail-w: 56px;
@@ -442,6 +449,7 @@ body {
 }
 
 .pf-footer-bar {
+  min-height: var(--pf-footer-h);
   border-top: 1px solid var(--pf-border);
   background: var(--pf-panel);
   padding: 10px var(--pf-gutter);
@@ -516,33 +524,31 @@ body {
 
 .pf-sidebar-brand {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
-  min-height: 61px;
-  padding: 16px 14px 14px;
+  height: var(--pf-header-h);
+  padding-inline: 14px;
   border-bottom: 1px solid var(--pf-sidebar-border);
 }
 
-.pf-sidebar-brand-text {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  line-height: 1.25;
-}
-
 .pf-sidebar-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--pf-sidebar-ink-strong);
+  white-space: nowrap;
 }
 
-.pf-sidebar-project {
-  display: flex;
+/* The step number in front of each page name. */
+.pf-nav-label {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--pf-sidebar-ink);
-  white-space: nowrap;
+  gap: 8px;
+}
+
+.pf-nav-step {
+  display: none;
 }
 
 /*
@@ -608,35 +614,15 @@ body {
   cursor: not-allowed;
 }
 
+/* The same height as the page footer, so both top borders form one line. */
 .pf-sidebar-foot {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: auto;
-  padding: 12px 8px 10px;
-  border-top: 1px solid var(--pf-sidebar-border);
-}
-
-.pf-sidebar-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-inline: 10px;
-  font-size: 12px;
-  color: var(--pf-sidebar-ink);
-  white-space: nowrap;
-}
-
-.pf-sidebar-status > svg {
   flex: none;
-}
-
-.pf-sidebar-actions {
-  display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 2px;
-  padding-top: 8px;
+  justify-content: center;
+  height: var(--pf-footer-h);
+  margin-top: auto;
+  padding-inline: 8px;
   border-top: 1px solid var(--pf-sidebar-border);
 }
 
@@ -722,15 +708,14 @@ body {
   padding-inline: 0;
 }
 
-.pf-sidebar[data-collapsed="true"] .pf-sidebar-brand-text,
+.pf-sidebar[data-collapsed="true"] .pf-sidebar-title,
 .pf-sidebar[data-collapsed="true"] .pf-nav-label,
 .pf-sidebar[data-collapsed="true"] .pf-sidebar-heading {
   display: none;
 }
 
 .pf-sidebar[data-collapsed="true"] .pf-nav-item,
-.pf-sidebar[data-collapsed="true"] .pf-rail-btn,
-.pf-sidebar[data-collapsed="true"] .pf-sidebar-status {
+.pf-sidebar[data-collapsed="true"] .pf-rail-btn {
   justify-content: center;
   padding-inline: 0;
 }
@@ -741,8 +726,8 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 52px;
-  padding-inline: var(--pf-gutter);
+  height: var(--pf-header-h);
+  padding-inline: var(--pf-gutter) 20px;
   background: var(--pf-panel);
   border-bottom: 1px solid var(--pf-border);
   flex: none;
@@ -752,12 +737,89 @@ body {
 .pf-topbar-project {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
-  max-width: 220px;
-  font-size: 13px;
+  max-width: 340px;
+  height: var(--pf-ctl-h);
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--pf-ink);
+}
+
+.pf-topbar-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 2px 8px;
+  border: 1px solid var(--pf-border);
+  border-radius: 999px;
+  background: var(--pf-panel-subtle);
+  color: var(--pf-muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Connection: a quiet dot and word, not a badge. */
+.pf-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--pf-ctl-h);
+  padding-inline: 4px;
+  background: none;
+  color: var(--pf-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pf-conn .pf-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.pf-icon-btn {
+  display: grid;
+  place-items: center;
+  width: var(--pf-ctl-h);
+  height: var(--pf-ctl-h);
+  border: none;
+  border-radius: var(--pf-radius-ctl);
+  background: transparent;
+  color: var(--pf-muted);
+  cursor: pointer;
+  transition: background-color var(--pf-dur-fast) ease, color var(--pf-dur-fast) ease;
+}
+
+.pf-icon-btn:hover {
+  background: var(--pf-inset);
+  color: var(--pf-ink);
+}
+
+.pf-icon-btn:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+/* The theme switch in the top bar: three icons in one 32 px pill. */
+.pf-segmented--compact {
+  height: var(--pf-ctl-h);
+  align-items: center;
+  background: var(--pf-inset);
+}
+
+.pf-segmented--compact .pf-segment {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+}
+
+.pf-avatar--more {
+  background: var(--pf-inset);
+  color: var(--pf-ink-2);
 }
 
 .pf-topbar-divider {
@@ -770,7 +832,7 @@ body {
 .pf-topbar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-left: auto;
   flex: none;
 }
@@ -2420,6 +2482,1227 @@ figure > .pf-diagram-source { border-top: none; }
 .cm-editor.cm-focused { outline: none; }
 .cm-editor .cm-selectionBackground,
 .cm-editor.cm-focused .cm-selectionBackground { background: var(--pf-accent-soft) !important; }
+
+/* ---------- Page 1: composer ---------- */
+
+/*
+ * The composer page fills the window: the editor and the rail each scroll on
+ * their own, and the page body never scrolls on a wide window. Below 1100 px
+ * the rail drops under the editor and the page scrolls instead.
+ */
+.pf-composer-page {
+  overflow: hidden;
+}
+
+.pf-composer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 384px;
+  gap: 20px;
+  height: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  padding: 20px var(--pf-gutter);
+}
+
+.pf-composer-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pf-composer-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 760px;
+}
+
+.pf-composer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 420px;
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  overflow: hidden;
+  transition: border-color var(--pf-dur-fast) ease, box-shadow var(--pf-dur-fast) ease;
+}
+
+.pf-composer:focus-within {
+  border-color: var(--pf-accent-border);
+  box-shadow: 0 0 0 3px var(--pf-accent-soft);
+}
+
+.pf-composer--pending {
+  padding: 28px 40px;
+}
+
+.pf-composer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  margin-right: 2px;
+  border-right: 1px solid var(--pf-border);
+}
+
+.pf-tool-group:last-of-type {
+  border-right: none;
+}
+
+.pf-tool,
+.pf-tool-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  border: none;
+  border-radius: var(--pf-radius-ctl);
+  background: transparent;
+  color: var(--pf-ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--pf-dur-fast) ease, color var(--pf-dur-fast) ease;
+}
+
+.pf-tool {
+  width: 30px;
+}
+
+.pf-tool-text {
+  padding-inline: 9px;
+}
+
+.pf-tool:hover:not(:disabled),
+.pf-tool-text:hover:not(:disabled) {
+  background: var(--pf-inset);
+  color: var(--pf-ink);
+}
+
+.pf-tool:disabled,
+.pf-tool-text:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pf-tool:focus-visible,
+.pf-tool-text:focus-visible,
+.pf-seg:focus-visible,
+.pf-rail-tab:focus-visible,
+.pf-epic-card:focus-visible,
+.pf-block-head:focus-visible,
+.pf-symbol:focus-visible,
+.pf-note:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+.pf-toolbar-spacer {
+  flex: 1;
+}
+
+.pf-segmented-sm {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  margin-left: 4px;
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-inset);
+}
+
+.pf-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  padding-inline: 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pf-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pf-seg:hover {
+  color: var(--pf-ink);
+}
+
+.pf-seg[aria-pressed="true"] {
+  background: var(--pf-panel);
+  color: var(--pf-ink);
+  box-shadow: var(--pf-shadow-sm);
+}
+
+.pf-composer-body {
+  position: relative;
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.pf-composer[data-mode="split"] .pf-composer-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.pf-composer-editor {
+  min-height: 0;
+  overflow: auto;
+}
+
+.pf-composer-editor[hidden] {
+  display: none;
+}
+
+.pf-composer-preview {
+  min-height: 0;
+  overflow: auto;
+  padding: 28px 40px 48px;
+}
+
+.pf-composer[data-mode="split"] .pf-composer-preview {
+  border-left: 1px solid var(--pf-border);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-composer[data-mode="preview"] .pf-composer-preview .pf-doc {
+  max-width: 780px;
+}
+
+/* A prose surface, not a code editor: sans type, generous measure. */
+.pf-composer .cm-editor {
+  min-height: 100%;
+  font-size: 15px;
+  background: transparent;
+}
+
+.pf-composer .cm-editor .cm-scroller {
+  font-family: inherit;
+  line-height: 1.7;
+}
+
+.pf-composer .cm-editor .cm-content {
+  max-width: 820px;
+  padding: 28px 40px 64px;
+  caret-color: var(--pf-accent);
+}
+
+.pf-composer .cm-editor .cm-activeLine {
+  background: transparent;
+}
+
+.pf-composer .cm-editor .cm-placeholder {
+  color: var(--pf-faint);
+  white-space: pre-wrap;
+}
+
+.pf-composer-drop {
+  position: absolute;
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--pf-accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--pf-accent-soft) 88%, transparent);
+  color: var(--pf-accent);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.pf-composer-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 32px;
+  padding: 4px 14px;
+  border-top: 1px solid var(--pf-border);
+  color: var(--pf-muted);
+  font-size: 12px;
+}
+
+.pf-composer-hint {
+  margin-left: auto;
+}
+
+.pf-composer-status .pf-segmented-sm {
+  margin-left: 8px;
+}
+
+/* The completion popup and its info panel, on the theme tokens. */
+.cm-tooltip {
+  border: 1px solid var(--pf-border) !important;
+  border-radius: 8px;
+  background: var(--pf-panel) !important;
+  color: var(--pf-ink);
+  box-shadow: var(--pf-shadow-md);
+  overflow: hidden;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  max-height: 280px;
+  min-width: 300px;
+  padding: 4px;
+  font-family: inherit !important;
+  font-size: 13px;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--pf-accent-soft);
+  color: var(--pf-ink);
+}
+
+.cm-completionLabel {
+  font-weight: 500;
+}
+
+.cm-tooltip .cm-completionDetail {
+  margin-left: auto !important;
+  padding-left: 16px;
+  color: var(--pf-muted);
+  font-size: 11.5px;
+  font-style: normal !important;
+}
+
+.cm-tooltip .cm-completionIcon {
+  width: 18px;
+  opacity: 0.7;
+}
+
+.cm-completionMatchedText {
+  color: var(--pf-accent);
+  text-decoration: none;
+}
+
+.cm-tooltip.cm-completionInfo {
+  max-width: 420px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+/* attachments under the editor */
+.pf-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pf-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid var(--pf-border);
+  border-radius: 999px;
+  background: var(--pf-panel);
+  color: var(--pf-ink-2);
+  font-size: 12px;
+}
+
+.pf-attachment--error {
+  border-color: var(--pf-danger-border);
+  background: var(--pf-danger-soft);
+  color: var(--pf-danger);
+}
+
+.pf-attachment-x {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ---------- Page 1: plan rail ---------- */
+
+.pf-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  overflow: hidden;
+}
+
+.pf-rail-tabs {
+  display: flex;
+  gap: 2px;
+  min-height: 46px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-panel-subtle);
+}
+
+.pf-rail-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--pf-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pf-rail-tab:hover {
+  color: var(--pf-ink);
+}
+
+.pf-rail-tab[aria-selected="true"] {
+  border-bottom-color: var(--pf-accent);
+  color: var(--pf-ink);
+}
+
+.pf-rail-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--pf-epic-soft);
+  color: var(--pf-epic);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.pf-rail-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  overflow: auto;
+}
+
+.pf-rail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 16px;
+  text-align: center;
+}
+
+/* epic files */
+.pf-epic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pf-epic-list-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pf-epic-card {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--pf-dur-fast) ease,
+    box-shadow var(--pf-dur-fast) ease,
+    transform var(--pf-dur-fast) ease;
+  animation: pf-route-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+.pf-epic-card:hover {
+  border-color: var(--pf-accent-border);
+  box-shadow: var(--pf-shadow-md);
+  transform: translateY(-1px);
+}
+
+.pf-epic-card-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--pf-epic-soft);
+  color: var(--pf-epic);
+}
+
+.pf-epic-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pf-epic-card-file {
+  overflow: hidden;
+  color: var(--pf-muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-epic-card-title {
+  color: var(--pf-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.pf-epic-card-goal {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.pf-epic-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+  color: var(--pf-muted);
+  font-size: 11.5px;
+}
+
+.pf-epic-card-meta strong {
+  color: var(--pf-ink-2);
+  font-weight: 600;
+}
+
+.pf-epic-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.pf-tag {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 6px;
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  background: var(--pf-inset);
+  color: var(--pf-ink-2);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-tag--more {
+  font-family: inherit;
+  color: var(--pf-muted);
+}
+
+/* epic modal */
+.pf-dialog[data-size="doc"] {
+  width: min(880px, 100%);
+}
+
+.pf-epic-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pf-epic-modal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pf-epic-modal-doc {
+  padding: 4px 8px;
+}
+
+.pf-epic-modal-source {
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--pf-border);
+  border-radius: 6px;
+  background: var(--pf-panel-subtle);
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.pf-epic-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pf-border);
+}
+
+/* codebase browser */
+.pf-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pf-browser > * {
+  flex: none;
+}
+
+.pf-block-list,
+.pf-symbol-list,
+.pf-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-block-head,
+.pf-symbol {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--pf-ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pf-block-head:hover,
+.pf-symbol:hover {
+  background: var(--pf-inset);
+  color: var(--pf-ink);
+}
+
+.pf-block-chevron {
+  flex: none;
+  color: var(--pf-faint);
+  transition: transform var(--pf-dur-fast) ease;
+}
+
+.pf-block[data-open="true"] .pf-block-chevron {
+  transform: rotate(90deg);
+}
+
+.pf-block-path {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-block-count {
+  margin-left: auto;
+  flex: none;
+  color: var(--pf-muted);
+  font-size: 11px;
+}
+
+.pf-block .pf-symbol-list {
+  margin: 2px 0 6px 18px;
+  padding-left: 8px;
+  border-left: 1px solid var(--pf-border);
+}
+
+.pf-block-loading {
+  padding: 4px 8px;
+}
+
+.pf-symbol-kind {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--pf-accent-soft);
+  color: var(--pf-accent);
+}
+
+.pf-symbol-kind[data-kind="struct"],
+.pf-symbol-kind[data-kind="class"],
+.pf-symbol-kind[data-kind="interface"],
+.pf-symbol-kind[data-kind="type"],
+.pf-symbol-kind[data-kind="trait"],
+.pf-symbol-kind[data-kind="enum"] {
+  background: var(--pf-epic-soft);
+  color: var(--pf-epic);
+}
+
+.pf-symbol-kind[data-kind="constant"],
+.pf-symbol-kind[data-kind="variable"] {
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+}
+
+.pf-symbol-kind[data-kind="route"] {
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+}
+
+.pf-symbol-name {
+  overflow: hidden;
+  color: var(--pf-ink);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-symbol-where {
+  margin-left: auto;
+  flex: none;
+  color: var(--pf-faint);
+  font-size: 11px;
+}
+
+/* project notes */
+.pf-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pf-notes-branch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--pf-panel-subtle);
+  color: var(--pf-ink-2);
+  font-size: 12px;
+}
+
+.pf-note-list {
+  gap: 8px;
+}
+
+.pf-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--pf-dur-fast) ease;
+}
+
+.pf-note:hover {
+  border-color: var(--pf-accent-border);
+}
+
+.pf-note-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pf-muted);
+}
+
+.pf-note-path {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-note-title {
+  color: var(--pf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-note-text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* footer grounding pills */
+.pf-footer-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pf-footer-bar .pf-footer-note {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+@media (max-width: 1099.98px) {
+  .pf-composer-page {
+    overflow: auto;
+  }
+
+  .pf-composer-layout {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .pf-composer {
+    min-height: 60vh;
+  }
+
+  .pf-rail {
+    min-height: 420px;
+  }
+}
+
+/* ---------- Page 2: the avatar room ---------- */
+
+.pf-room-page {
+  overflow: hidden;
+}
+
+.pf-room {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  padding: 20px var(--pf-gutter);
+}
+
+.pf-roster {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  flex: none;
+}
+
+.pf-roster-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--pf-border);
+  border-top: 3px solid var(--pf-role);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--pf-dur-fast) ease, border-color var(--pf-dur-fast) ease;
+}
+
+.pf-roster-card:hover {
+  box-shadow: var(--pf-shadow-md);
+}
+
+.pf-roster-card[aria-pressed="true"] {
+  border-color: var(--pf-role);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pf-role) 18%, transparent);
+}
+
+.pf-roster-card:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
+.pf-roster-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-roster-name {
+  color: var(--pf-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pf-roster-job {
+  color: var(--pf-muted);
+  font-size: 12px;
+}
+
+.pf-roster-say {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.pf-roster-main .pf-skeleton-stack {
+  width: 100%;
+}
+
+/* An avatar's face; it gets a pulsing ring while it speaks. */
+.pf-face {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.pf-face[data-speaking="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--pf-face-ring);
+  border-radius: 50%;
+  opacity: 0.7;
+  animation: pf-speak 1.6s var(--pf-ease) infinite;
+}
+
+@keyframes pf-speak {
+  0% { transform: scale(0.92); opacity: 0.8; }
+  70% { transform: scale(1.12); opacity: 0; }
+  100% { transform: scale(1.12); opacity: 0; }
+}
+
+.pf-room-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 16px;
+  min-height: 0;
+}
+
+.pf-room-feed,
+.pf-room-plan {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  overflow: hidden;
+}
+
+.pf-room-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-panel-subtle);
+  color: var(--pf-ink-2);
+}
+
+.pf-room-filter {
+  margin-left: auto;
+  border: none;
+  cursor: pointer;
+}
+
+.pf-room-decisions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 0;
+}
+
+.pf-room-feed > .pf-empty {
+  flex: 1;
+}
+
+.pf-timeline {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 16px 16px;
+  overflow: auto;
+  list-style: none;
+}
+
+.pf-line {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pf-border);
+  animation: pf-route-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+.pf-line:last-child {
+  border-bottom: none;
+}
+
+.pf-line-msg {
+  display: flex;
+  gap: 10px;
+}
+
+.pf-line-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pf-line-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+}
+
+.pf-line-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-line-cycle {
+  color: var(--pf-faint);
+  font-size: 11.5px;
+}
+
+.pf-line-time {
+  margin-left: auto;
+  color: var(--pf-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-line-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--pf-ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pf-line-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pf-accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pf-line-link:hover {
+  text-decoration: underline;
+}
+
+.pf-line-system {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+  font-size: 12.5px;
+}
+
+.pf-line-system--ok {
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+}
+
+.pf-line-system .pf-line-time {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.pf-room-resolved {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* plan panel */
+.pf-arch {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pf-arch-ws,
+.pf-arch-constraints,
+.pf-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-arch-ws li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+}
+
+.pf-arch-ws-id {
+  color: var(--pf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-arch-ws-mods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pf-arch-constraints li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--pf-ink-2);
+  font-size: 13px;
+}
+
+.pf-arch-constraints li::before {
+  content: "";
+  position: absolute;
+  top: 0.6em;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--pf-epic);
+}
+
+.pf-finding {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+}
+
+.pf-finding[data-resolved="true"] {
+  opacity: 0.65;
+}
+
+.pf-finding-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pf-finding-head .pf-chip {
+  margin-left: auto;
+}
+
+@media (max-width: 1099.98px) {
+  .pf-room-page {
+    overflow: auto;
+  }
+
+  .pf-room {
+    height: auto;
+  }
+
+  .pf-roster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pf-room-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pf-timeline {
+    max-height: 560px;
+  }
+
+  .pf-room-plan {
+    min-height: 420px;
+  }
+}
 
 /* ---------- misc ---------- */
 

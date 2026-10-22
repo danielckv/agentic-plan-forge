@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * E2E runs Chromium only, from `web/e2e/`, against a locally-launched
- * `plan-forge` binary (built by the orchestrator's gate):
- * `PLAN_FORGE_BIN=<path> npm run test:e2e`.
+ * E2E runs Chromium only, from `web/e2e/`, against the built bundle and the
+ * bridge harness: `npm run build && npm run test:e2e`.
  */
 
 export default defineConfig({

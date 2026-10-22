@@ -151,6 +151,8 @@ func PurgeTargets() ([]string, error) {
 		filepath.Join(cache, "sessions"),
 		filepath.Join(cache, "recovery"),
 		filepath.Join(cache, "notices"),
+		// State of the plan board, live store and command center, retired in
+		// 0.4.0. Purged for one more release so an upgrade leaves nothing behind.
 		filepath.Join(cache, "board"),
 		filepath.Join(cache, "live"),
 		filepath.Join(cache, "center"),

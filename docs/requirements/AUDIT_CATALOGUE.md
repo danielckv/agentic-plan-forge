@@ -7,6 +7,7 @@
 - Date: 2026-10-19.
 - Standard: the 18 quality characteristics of the `make-requirements-great` skill. The characteristics are cited by number below.
 - Status: this file records the review as performed. The catalogue has since been corrected for some of these findings. See the catalogue's `## Review log` for what changed. Findings below are not re-opened or removed when a correction lands.
+- Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the BOARD, COORD and GRAPH areas, REQ-UI-008, REQ-PERF-004 and REQ-PERF-005 were retired with the features they described. Findings on them stay below as the record and carry a superseded note.
 - This is a record of findings, not a second catalogue. It does not restate requirement text. Read the catalogue for the statements.
 
 ### Characteristic key
@@ -80,8 +81,11 @@ Each entry gives the failed characteristics by number and name, the evidence, an
 - **REQ-UI-008**. Failed: 11 Cohesive, 10 Unique.
   - Evidence: the coordinator-panel clause is a superset of `REQ-COORD-007`.
   - Direction: remove the clause or cross-reference `REQ-COORD-007`.
+  - Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: REQ-UI-008 was retired with the board and Graph views.
 
 ### Board
+
+Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the plan board was removed and every REQ-BOARD requirement was retired.
 
 - **REQ-BOARD-002**. Failed: 14 Current, 4 Correct, 12 Consistent, 10 Unique.
   - Evidence: it describes the pre-Wave-4 column rule, while C11 makes `column` the coordinator's live column. Its blocked rule differs from `REQ-COORD-003`, and it overlaps that requirement.
@@ -101,6 +105,8 @@ Each entry gives the failed characteristics by number and name, the evidence, an
 
 ### Coordinator
 
+Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the coordinator was removed and every REQ-COORD requirement was retired.
+
 - **REQ-COORD-001**. Failed: 1 Unambiguous, 3 Concise.
   - Evidence: the verification-receipts caveat has an unclear antecedent.
   - Direction: name what the caveat qualifies, or cut it.
@@ -115,6 +121,8 @@ Each entry gives the failed characteristics by number and name, the evidence, an
   - Direction: keep one of the pair and cite a behavioural test.
 
 ### Graph
+
+Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the Graph view was removed and every REQ-GRAPH requirement was retired.
 
 - **REQ-GRAPH-002**. Failed: 11 Cohesive, 12 Consistent, 5 Testable, 10 Unique.
   - Evidence: "task node" is used of a discovery the glossary does not call a task. Acceptance tests caps and `ErrDiscoveryLimit`, absent from the statement. It overlaps `REQ-GRAPH-004`.
@@ -212,9 +220,11 @@ Each entry gives the failed characteristics by number and name, the evidence, an
 - **REQ-PERF-004**. Failed: 1 Unambiguous, 5 Testable, 11 Cohesive, 10 Unique, 16 Traceable, 12 Consistent.
   - Evidence: "within about 1 second" is vague. Acceptance cites source constants, not a test. The 4-second timer repeats. Source, trace and verification all point at its own implementation. The title says push latency, the statement defines polling.
   - Direction: give a number, a test and an independent source, and align title and statement.
+  - Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: REQ-PERF-004 was retired with the board.
 - **REQ-PERF-005**. Failed: 10 Unique, 1 Unambiguous.
   - Evidence: it duplicates `REQ-GRAPH-005`, and its bound is vague.
   - Direction: merge with `REQ-GRAPH-005` and state a number.
+  - Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: REQ-PERF-005 was retired with the Graph view.
 - **REQ-PERF-006**. Failed: 11 Cohesive, 2 Clear, 18 Complete.
   - Evidence: latency, zero loss and zero duplicates are joined. "control events" and "document pushes" are undefined. No functional relay requirement exists.
   - Direction: split, define the terms and add a functional relay requirement.
@@ -251,6 +261,8 @@ Ten duplicate or overlapping pairs, compared by verb and object:
 | `REQ-BOARD-002` / `REQ-COORD-003` | Blocked rule |
 | `REQ-INSTALL-003` / `REQ-INSTALL-007` | Install behaviour |
 | `REQ-GRAPH-002` / `REQ-GRAPH-004` | Discovery behaviour |
+
+Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: six of these pairs name a retired requirement and no longer apply. They are the pairs with `REQ-UI-008`, `REQ-BOARD-004`, `REQ-BOARD-005`, `REQ-GRAPH-005`, `REQ-BOARD-002` and `REQ-GRAPH-002`.
 
 ### 11 Cohesive
 
@@ -300,8 +312,8 @@ Seven gap groups, each with the technique that found it:
 
 - (a) NFRs with no functional parent: the relay, the hook, `open`, `summary` and `verify`.
 - (b) No requirement for `/plan-forge` invocation or for `/plan-config`.
-- (c) The board's launch behaviour is missing: exit 3 without an approved plan, and Antigravity refused with exit 2.
-- (d) CRUD gaps: note removal, priority lowering, the stated limits, the `409 plan changed` response, and overlay clean-up on re-approval.
+- (c) The board's launch behaviour is missing: exit 3 without an approved plan, and Antigravity refused with exit 2. Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the board was removed.
+- (d) CRUD gaps: note removal, priority lowering, the stated limits, the `409 plan changed` response, and overlay clean-up on re-approval. Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the board and its overlay were removed.
 - (e) Lifecycle gaps: no resume or cancel after the deliberation pause, no re-approval or revocation, and no browser-absent or host-failure error states.
 - (f) Not captured from project decision memory: the Jira-style design language, the distinct Critic model slot, host and model discovery, the Page 3 dual-baseline display, the README and Mermaid documentation requirement, the Cloud Run deploy job, and the relay image platforms and GHCR.
 - (g) Completeness is not provable.
@@ -323,6 +335,7 @@ All 16 terms appear in at least one statement, so there are no dead terms. Viola
 - Terms used but undefined: avatar, Red-Team Critic, Technical Architect, Domain Specialists, Lead Synthesizer, decision cards, consumer, cursor, delta, live column, evidence, drifted, relay, managed, AST, PERT, DAG, TTY, PRD, CSP.
 - Four glossary entries copy requirement text, creating a second source of truth: Product Manager isolation, overlay, coordinator, discovery.
 - Minor drift: "Up next" versus "Up-next"; "awaiting-verification" versus "awaiting verification".
+- Superseded 2026-10-22 by `docs/adrs/0001-remove-live-task-views.md`: the terms board, overlay, coordinator, discovery, consumer, cursor, delta and live column left the catalogue with their requirements, so the findings on them no longer apply.
 
 ## Three highest-impact defects
 

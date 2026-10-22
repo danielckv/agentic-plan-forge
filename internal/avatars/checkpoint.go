@@ -36,6 +36,7 @@ type runState struct {
 	// Identity: resume revalidates all of it and re-runs on any mismatch.
 	PRDRevision uint64
 	GraphHash   string
+	ContextHash string
 	PMHash      string
 	Main        string
 	Judge       string
@@ -173,7 +174,7 @@ func sha256Hex(b []byte) string {
 // compatible reports whether a checkpoint was made for exactly this PRD
 // revision, product content, graph and model slots.
 func (s *runState) compatible(in RunInput, pmHash string) bool {
-	return s.PRDRevision == in.PRD.Revision && s.GraphHash == in.GraphHash && s.PMHash == pmHash &&
+	return s.PRDRevision == in.PRD.Revision && s.GraphHash == in.GraphHash && s.ContextHash == in.ContextHash && s.PMHash == pmHash &&
 		s.Main == in.Models.Main && s.Judge == in.Models.Judge
 }
 

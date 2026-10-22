@@ -83,8 +83,6 @@ func TestPlanModeStepSubstitutionPerHost(t *testing.T) {
 	want := map[string][]string{
 		string(KindClaude): {
 			"`EnterPlanMode`", "`ExitPlanMode`", `"` + testBin + `" validate --repo`,
-			`"` + testBin + `" board report --repo <root> --consumer claude:<your session id if known, else claude:main>`,
-			"`--state done`", "board discover --title", "`Coordinator:` line",
 		},
 		// OMP has no entry: it is command-only, so no SKILL.md is planned for
 		// it and the plan-mode step never renders. The hook delivers the same
@@ -137,46 +135,46 @@ func TestSubstituteResolvesPlanModeStepBinary(t *testing.T) {
 	}
 }
 
-func TestBoardSkillInstallsForClaudeOnly(t *testing.T) {
-	in, home := newTestInstaller(t)
-	boardPaths := func(arts []artifact) []string {
-		var out []string
-		for _, art := range arts {
-			if strings.Contains(art.path, "plan-forge-board") {
-				out = append(out, art.path)
+// The plan-forge-board skill was retired. An install sweeps the copy an older
+// version wrote, but only while its bytes match the recorded hash.
+func TestClaudeInstallRemovesRetiredBoardSkill(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		edited   bool
+		wantGone bool
+	}{{"owned", false, true}, {"edited by the user", true, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			in, home := newTestInstaller(t)
+			retired := filepath.Join(home, ".claude", "skills", "plan-forge-board", "SKILL.md")
+			body := "---\nname: plan-forge-board\n---\nold board skill\n"
+			writeFile(t, retired, body)
+			_, manifestFile, err := loadManifest()
+			if err != nil {
+				t.Fatal(err)
 			}
-		}
-		return out
-	}
+			if err := saveManifest(installManifest{Rows: []manifestRow{{
+				Path: retired, Host: string(KindClaude), Kind: kindSkill, Scope: "user", SHA256: sha256Hex([]byte(body)),
+			}}}, manifestFile); err != nil {
+				t.Fatal(err)
+			}
+			if tc.edited {
+				writeFile(t, retired, body+"my notes\n")
+			}
 
-	claude := planFor(t, in, string(KindClaude), home, InstallOptions{Scope: "user"})
-	paths := boardPaths(claude)
-	wantPath := filepath.Join(home, ".claude", "skills", "plan-forge-board", "SKILL.md")
-	if len(paths) != 1 || paths[0] != wantPath {
-		t.Fatalf("claude board skill paths = %v, want [%s]", paths, wantPath)
-	}
-	for _, art := range claude {
-		if art.path == wantPath {
-			if !strings.Contains(art.content, `"`+testBin+`" board --repo <repository root> --host claude --detach`) {
-				t.Errorf("board skill does not run the board command with the substituted binary:\n%s", art.content)
+			opts := InstallOptions{Scope: "user"}
+			if err := in.Apply(planFor(t, in, string(KindClaude), home, opts), opts); err != nil {
+				t.Fatalf("apply: %v", err)
 			}
-			if art.kind != kindSkill || art.host != string(KindClaude) {
-				t.Errorf("board skill kind/host = %s/%s", art.kind, art.host)
+			_, statErr := os.Stat(retired)
+			if gone := errors.Is(statErr, os.ErrNotExist); gone != tc.wantGone {
+				t.Errorf("retired skill gone = %v, want %v", gone, tc.wantGone)
 			}
-		}
-	}
-
-	repo := t.TempDir()
-	for _, scope := range []InstallOptions{{Scope: "user"}, {Scope: "project", Repo: repo}} {
-		for _, kind := range []string{string(KindOMP), string(KindAGY)} {
-			if got := boardPaths(planFor(t, in, kind, home, scope)); len(got) != 0 {
-				t.Errorf("%s (%s scope) must not install the board skill, got %v", kind, scope.Scope, got)
+			for _, art := range planFor(t, in, string(KindClaude), home, opts) {
+				if strings.Contains(art.path, "plan-forge-board") {
+					t.Errorf("install still plans the retired skill: %s", art.path)
+				}
 			}
-		}
-	}
-	project := boardPaths(planFor(t, in, string(KindClaude), home, InstallOptions{Scope: "project", Repo: repo}))
-	if len(project) != 1 {
-		t.Errorf("claude project scope board skill paths = %v, want exactly one", project)
+		})
 	}
 }
 
@@ -345,13 +343,12 @@ func managedCount(t *testing.T, settings map[string]any, event string) int {
 
 const (
 	startCmd   = `"/opt/plan forge/plan-forge" hook check-state --repo "$CLAUDE_PROJECT_DIR" --format claude`
-	centerCmd  = `"/opt/plan forge/plan-forge" center ensure --repo "$CLAUDE_PROJECT_DIR"`
 	guardCmd   = `"/opt/plan forge/plan-forge" hook claude-guard`
 	handoffCmd = `"/opt/plan forge/plan-forge" hook claude`
 )
 
 func TestMergeClaudeHookAddsAllThreeEvents(t *testing.T) {
-	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, centerCmd, guardCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(map[string]any{}, startCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v", changed, err)
 	}
@@ -362,11 +359,11 @@ func TestMergeClaudeHookAddsAllThreeEvents(t *testing.T) {
 	}
 	hooks := merged["hooks"].(map[string]any)
 	post := hooks["PostToolUse"].([]any)[0].(map[string]any)
-	if post["matcher"] != "Bash|Edit|Write|MultiEdit|NotebookEdit" {
-		t.Errorf("PostToolUse matcher = %v, want Bash|Edit|Write|MultiEdit|NotebookEdit", post["matcher"])
+	if post["matcher"] != "Bash" {
+		t.Errorf("PostToolUse matcher = %v, want Bash", post["matcher"])
 	}
-	if _, has := hooks["UserPromptSubmit"].([]any)[0].(map[string]any)["matcher"]; has {
-		t.Error("UserPromptSubmit entry must not carry a matcher")
+	if _, has := hooks["UserPromptSubmit"]; has {
+		t.Error("a fresh install must not add a UserPromptSubmit entry")
 	}
 	command := func(event string) string {
 		entry := hooks[event].([]any)[0].(map[string]any)
@@ -375,15 +372,13 @@ func TestMergeClaudeHookAddsAllThreeEvents(t *testing.T) {
 	if got, want := command("SessionStart"), startCmd+" # "+managedMarker; got != want {
 		t.Errorf("SessionStart command = %q, want %q", got, want)
 	}
-	for _, event := range []string{"PostToolUse", "UserPromptSubmit"} {
-		if got, want := command(event), handoffCmd+" # "+managedMarker; got != want {
-			t.Errorf("%s command = %q, want %q", event, got, want)
-		}
+	if got, want := command("PostToolUse"), handoffCmd+" # "+managedMarker; got != want {
+		t.Errorf("PostToolUse command = %q, want %q", got, want)
 	}
 }
 
 func TestMergeClaudeHookIsIdempotent(t *testing.T) {
-	first, changed, err := mergeClaudeHook(roundTrip(t, foreignSettings()), startCmd, centerCmd, guardCmd, handoffCmd)
+	first, changed, err := mergeClaudeHook(roundTrip(t, foreignSettings()), startCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("first merge = changed %v, err %v", changed, err)
 	}
@@ -395,7 +390,7 @@ func TestMergeClaudeHookIsIdempotent(t *testing.T) {
 	if err := json.Unmarshal(encoded, &reparsed); err != nil {
 		t.Fatal(err)
 	}
-	second, changed, err := mergeClaudeHook(reparsed, startCmd, centerCmd, guardCmd, handoffCmd)
+	second, changed, err := mergeClaudeHook(reparsed, startCmd, guardCmd, handoffCmd)
 	if err != nil || changed {
 		t.Fatalf("second merge = changed %v, err %v; want unchanged", changed, err)
 	}
@@ -417,7 +412,7 @@ func TestMergeClaudeHookUpgradesSessionStartOnlyInstall(t *testing.T) {
 	old := map[string]any{"hooks": map[string]any{"SessionStart": []any{map[string]any{
 		"hooks": []any{map[string]any{"type": "command", "command": startCmd + " # " + managedMarker}},
 	}}}}
-	merged, changed, err := mergeClaudeHook(old, startCmd, centerCmd, guardCmd, handoffCmd)
+	merged, changed, err := mergeClaudeHook(old, startCmd, guardCmd, handoffCmd)
 	if err != nil || !changed {
 		t.Fatalf("merge = changed %v, err %v", changed, err)
 	}
@@ -430,7 +425,7 @@ func TestMergeClaudeHookUpgradesSessionStartOnlyInstall(t *testing.T) {
 
 func TestMergeClaudeHookPreservesForeignEntries(t *testing.T) {
 	original := foreignSettings()
-	merged, _, err := mergeClaudeHook(roundTrip(t, original), startCmd, centerCmd, guardCmd, handoffCmd)
+	merged, _, err := mergeClaudeHook(roundTrip(t, original), startCmd, guardCmd, handoffCmd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,14 +494,14 @@ func TestSplitManagedHookIgnoresMarkerInForeignFields(t *testing.T) {
 
 func TestMergeClaudeHookRefusesForeignShapes(t *testing.T) {
 	cases := map[string]map[string]any{
-		"hooks not an object":   {"hooks": []any{"x"}},
-		"event not an array":    {"hooks": map[string]any{"PostToolUse": "echo oops"}},
-		"session start a map":   {"hooks": map[string]any{"SessionStart": map[string]any{"a": 1}}},
-		"prompt submit numeric": {"hooks": map[string]any{"UserPromptSubmit": 3}},
+		"hooks not an object":  {"hooks": []any{"x"}},
+		"event not an array":   {"hooks": map[string]any{"PostToolUse": "echo oops"}},
+		"session start a map":  {"hooks": map[string]any{"SessionStart": map[string]any{"a": 1}}},
+		"pre tool use numeric": {"hooks": map[string]any{"PreToolUse": 3}},
 	}
 	for name, settings := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, changed, err := mergeClaudeHook(settings, startCmd, centerCmd, guardCmd, handoffCmd)
+			_, changed, err := mergeClaudeHook(settings, startCmd, guardCmd, handoffCmd)
 			var mergeErr *settingsMergeError
 			if !errors.As(err, &mergeErr) || changed {
 				t.Fatalf("merge = changed %v, err %v; want settingsMergeError", changed, err)
@@ -544,7 +539,7 @@ func TestClaudeApplyAndUninstallRoundTrip(t *testing.T) {
 	if hooks[len(hooks)-1].(map[string]any)["matcher"] != claudePostToolUseMatcher {
 		t.Errorf("managed PostToolUse entry lost its matcher: %v", hooks)
 	}
-	for _, name := range []string{"plan-forge", "plan-config", "plan-forge-board"} {
+	for _, name := range []string{"plan-forge", "plan-config"} {
 		if _, err := os.Stat(filepath.Join(home, ".claude", "skills", name, "SKILL.md")); err != nil {
 			t.Errorf("skill %s missing: %v", name, err)
 		}
@@ -583,7 +578,7 @@ func TestClaudeApplyAndUninstallRoundTrip(t *testing.T) {
 	if got := readJSON(t, settingsPath); !reflect.DeepEqual(got, roundTrip(t, original)) {
 		t.Errorf("settings after uninstall differ from the original:\n got %v\nwant %v", got, original)
 	}
-	for _, name := range []string{"plan-forge", "plan-config", "plan-forge-board"} {
+	for _, name := range []string{"plan-forge", "plan-config"} {
 		if _, err := os.Stat(filepath.Join(home, ".claude", "skills", name, "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("skill %s must be removed, stat err = %v", name, err)
 		}
@@ -919,7 +914,7 @@ func TestOnlyClaudeSkillCopiesAreHiddenFromOMP(t *testing.T) {
 func TestEnabledFalseLeavesFrontmatterAndBodyIntact(t *testing.T) {
 	in, _ := newTestInstaller(t)
 	for _, tmpl := range []string{
-		integrations.SkillPlanForge(), integrations.SkillPlanConfig(), integrations.SkillPlanForgeBoard(),
+		integrations.SkillPlanForge(), integrations.SkillPlanConfig(),
 	} {
 		original := in.substitute(tmpl, string(KindClaude))
 		marked := markHiddenFromOMP(original)
@@ -1008,8 +1003,7 @@ func TestUninstallTwiceSucceeds(t *testing.T) {
 }
 
 // OMP reaches Plan Forge through built-in commands only: /plan-config is a
-// command file and /plan-forge and /plan-forge-board are registered by the
-// hook at runtime. Writing no SKILL.md for OMP is what keeps a command from
+// command file and /plan-forge is registered by the hook at runtime. Writing no SKILL.md for OMP is what keeps a command from
 // being listed twice, so the absence is the contract, not an omission.
 func TestOMPPlansCommandsAndHookButNoSkills(t *testing.T) {
 	in, home := newTestInstaller(t)

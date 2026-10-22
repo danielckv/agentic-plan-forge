@@ -395,6 +395,7 @@ type architectPayload struct {
 	TechnicalAppendix string                     `json:"technical_appendix"`
 	Graph             contracts.RepoContextGraph `json:"repository_graph"`
 	DocDrift          []contracts.DocDriftItem   `json:"documentation_drift"`
+	Context           *contracts.ProjectContext  `json:"project_context,omitempty"`
 	Decisions         []contracts.Decision       `json:"resolved_decisions,omitempty"`
 	Revision          *revisionInput             `json:"revision,omitempty"`
 }
@@ -416,6 +417,7 @@ type specialistPayload struct {
 	Epics        []contracts.Epic              `json:"epics"`
 	Stories      []contracts.Story             `json:"stories"`
 	Graph        contracts.RepoContextGraph    `json:"repository_graph"`
+	Context      *contracts.ProjectContext     `json:"project_context,omitempty"`
 	Decisions    []contracts.Decision          `json:"resolved_decisions,omitempty"`
 	Adopt        *adoptInput                   `json:"adopt_claim,omitempty"`
 	Revision     *revisionInput                `json:"revision,omitempty"`
@@ -429,6 +431,7 @@ type criticPayload struct {
 	NotYetDrafted []string                    `json:"workstreams_not_yet_drafted,omitempty"`
 	Stories       []contracts.Story           `json:"stories"`
 	Graph         contracts.RepoContextGraph  `json:"repository_graph"`
+	Context       *contracts.ProjectContext   `json:"project_context,omitempty"`
 	KnownTargets  []string                    `json:"known_targets"`
 	Prior         []contracts.Critique        `json:"prior_critiques,omitempty"`
 	Deterministic []contracts.Critique        `json:"deterministic_findings,omitempty"`
@@ -452,6 +455,16 @@ func (o *orchestrator) graphForPrompt() contracts.RepoContextGraph {
 	g := o.in.Graph
 	g.RootPath = ""
 	return g
+}
+
+// contextForPrompt is the project context handed to technical avatars, or nil
+// when it holds nothing, so an empty context adds no bytes to the payload.
+func (o *orchestrator) contextForPrompt() *contracts.ProjectContext {
+	c := o.in.Context
+	if len(c.Hits) == 0 && c.Branch == "" && len(c.Recent) == 0 {
+		return nil
+	}
+	return &c
 }
 
 // --- parsing and validation -------------------------------------------------------------------

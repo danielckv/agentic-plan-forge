@@ -18,7 +18,6 @@ interface CtxLike {
     setEditorText(text: string): void;
     confirm(title: string, message: string): Promise<boolean>;
   };
-  isIdle(): boolean;
   waitForIdle(): Promise<void>;
   newSession(opts: {
     parentSession: unknown;
@@ -26,12 +25,9 @@ interface CtxLike {
   }): Promise<SessionResult | undefined>;
   switchSession?(sessionFile: string): Promise<SessionResult | undefined>;
   sessionManager: { getSessionFile(): string };
-  setInterval(fn: () => void, ms: number): unknown;
-  clearTimer(timer: unknown): void;
 }
 
 interface FakeCtxOptions {
-  idle?: boolean;
   confirmYes?: boolean;
   order?: string[];
   newSessionThrows?: boolean;
@@ -47,7 +43,6 @@ const CHILD_FILE = "/sessions/new456.jsonl";
 
 class FakeCtx implements CtxLike {
   cwd = "/repo";
-  idle: boolean;
   notifications: { message: string; kind?: string }[] = [];
   statuses: [string, string][] = [];
   editorTexts: string[] = [];
@@ -56,8 +51,6 @@ class FakeCtx implements CtxLike {
   newSessionCalls: { parentSession: unknown }[] = [];
   modeChanges: { mode: string; data: unknown }[] = [];
   switchCalls: string[] = [];
-  intervals: { fn: () => void; ms: number }[] = [];
-  clearedTimers: unknown[] = [];
   currentFile = PARENT_FILE;
   sessionManager = { getSessionFile: (): string => this.currentFile };
   switchSession?: (sessionFile: string) => Promise<SessionResult | undefined>;
@@ -65,7 +58,6 @@ class FakeCtx implements CtxLike {
 
   constructor(options: FakeCtxOptions = {}) {
     this.options = options;
-    this.idle = options.idle ?? true;
     if (!options.noSwitchSession) {
       this.switchSession = async (sessionFile: string): Promise<SessionResult | undefined> => {
         this.options.order?.push("switchSession");
@@ -92,10 +84,6 @@ class FakeCtx implements CtxLike {
     },
   };
 
-  isIdle(): boolean {
-    return this.idle;
-  }
-
   async waitForIdle(): Promise<void> {
     this.waitForIdleCalls++;
   }
@@ -120,15 +108,6 @@ class FakeCtx implements CtxLike {
     this.currentFile = CHILD_FILE;
     return { cancelled: false };
   }
-
-  setInterval(fn: () => void, ms: number): unknown {
-    this.intervals.push({ fn, ms });
-    return this.intervals.length;
-  }
-
-  clearTimer(timer: unknown): void {
-    this.clearedTimers.push(timer);
-  }
 }
 
 interface FakePiOptions {
@@ -139,7 +118,7 @@ interface FakePiOptions {
 
 class FakePi {
   execCalls: string[][] = [];
-  messages: { message: unknown; options?: { deliverAs?: "nextTurn" | "steer" } }[] = [];
+  messages: { message: unknown }[] = [];
   userMessages: string[] = [];
   commands = new Map<string, { description: string; handler(args: string, ctx: CtxLike): Promise<void> }>();
   handlers = new Map<string, ((event: unknown, ctx: CtxLike) => unknown)[]>();
@@ -165,8 +144,8 @@ class FakePi {
     return this.script(args);
   }
 
-  sendMessage(message: unknown, options?: { deliverAs?: "nextTurn" | "steer" }): void {
-    this.messages.push({ message, options });
+  sendMessage(message: unknown): void {
+    this.messages.push({ message });
   }
 
   registerCommand(
@@ -181,35 +160,14 @@ class FakePi {
     list.push(handler);
     this.handlers.set(event, list);
   }
-
-  // The swarm protocol's event bus. channels stays empty when a test builds a
-  // FakePi without one, which is how an older OMP looks to the hook.
-  channels = new Map<string, ((payload: unknown) => void)[]>();
-  events = {
-    on: (channel: string, handler: (payload: unknown) => void): void => {
-      const list = this.channels.get(channel) ?? [];
-      list.push(handler);
-      this.channels.set(channel, list);
-    },
-  };
-
-  publish(channel: string, payload: unknown): void {
-    for (const handler of this.channels.get(channel) ?? []) handler(payload);
-  }
 }
 
 function makeDeps(): HookDeps {
   return {
     execTimeoutMs: 500,
-    syncIntervalMs: 4000,
     waitTimeout: "1s",
-    swarmCoalesceMs: 5,
     sleep: async () => {},
   };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const APPROVED_WAIT = JSON.stringify({
@@ -218,11 +176,6 @@ const APPROVED_WAIT = JSON.stringify({
   artifact_paths: ["/repo/docs/plans/.plan/synthesized_spec.md"],
   validation: { valid: true, status: "UNSTARTED", verified: 0, total: 9, drift: [] },
 });
-
-const BOARD_DELTA =
-  'Plan-Forge board update (revision 7). The user re-prioritised or added context to the approved plan.\n' +
-  '- T-4 "Add export endpoint": priority -> HIGH\n' +
-  "High-priority tasks, do these first: T-4";
 
 function forgeScript(waitsBefore: { current: number }, finalWait: ExecResult): ExecScript {
   return (args) => {
@@ -238,13 +191,6 @@ function forgeScript(waitsBefore: { current: number }, finalWait: ExecResult): E
         return { code: 0, stdout: "", stderr: "" };
     }
   };
-}
-
-// flush drains the promise continuations queued behind the interval callback
-// (two event-loop turns; a yield, not a wall-clock wait — no timers involved).
-async function flush(): Promise<void> {
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 test("plan-forge command: wait loop through 75 to 0, then plan-mode session via mode_change + switchSession", async () => {
@@ -378,65 +324,6 @@ test("plan-forge command: exit 130 notifies and never opens a session", async ()
   assert.deepEqual(order, []);
 });
 
-test("board command and sync timer: deliverAs nextTurn when idle, steer when busy", async () => {
-  const pi = new FakePi((args) => {
-    if (args[0] === "board" && args[1] === "pull") {
-      return { code: 0, stdout: BOARD_DELTA + "\n", stderr: "" };
-    }
-    if (args[0] === "board") {
-      return { code: 0, stdout: JSON.stringify({ board: "open", pid: 42 }), stderr: "" };
-    }
-    return { code: 0, stdout: "", stderr: "" };
-  });
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx({ idle: true });
-
-  const command = pi.commands.get("plan-forge-board");
-  assert.ok(command, "plan-forge-board command registered");
-  await command.handler("", ctx);
-
-  assert.ok(ctx.notifications.some((n) => n.message.includes("board is open")));
-  assert.equal(ctx.intervals.length, 1, "sync timer started");
-  assert.equal(ctx.intervals[0].ms, 4000);
-
-  ctx.intervals[0].fn();
-  await flush();
-  assert.equal(pi.messages.length, 1);
-  const first = pi.messages[0].message as { customType?: string; content?: string; display?: boolean };
-  assert.equal(first.customType, "plan-forge-board");
-  assert.equal(first.content, BOARD_DELTA);
-  assert.equal(first.display, true);
-  assert.equal(pi.messages[0].options?.deliverAs, "nextTurn");
-  assert.deepEqual(
-    pi.execCalls.find((call) => call[1] === "pull"),
-    ["board", "pull", "--repo", "/repo", "--consumer", "omp:abc123", "--format", "text"],
-  );
-  assert.ok(ctx.statuses.some(([key, text]) => key === "plan-forge" && text.includes("r7")));
-
-  ctx.idle = false;
-  ctx.intervals[0].fn();
-  await flush();
-  assert.equal(pi.messages.length, 2);
-  assert.equal(pi.messages[1].options?.deliverAs, "steer");
-});
-
-test("board sync: empty pull delivers no message", async () => {
-  const pi = new FakePi((args) => {
-    if (args[0] === "board" && args[1] === "pull") {
-      return { code: 0, stdout: "", stderr: "" };
-    }
-    return { code: 0, stdout: JSON.stringify({ board: "open", pid: 42 }), stderr: "" };
-  });
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx();
-
-  await pi.commands.get("plan-forge-board")!.handler("", ctx);
-  ctx.intervals[0].fn();
-  await flush();
-
-  assert.equal(pi.messages.length, 0);
-});
-
 test("tool_result: approved wait prefills /plan in the editor", async () => {
   const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
   createHook(pi, makeDeps());
@@ -526,8 +413,6 @@ test("pi.exec receives timeout + signal; a hung child is aborted and the race ti
     await fast.handlers.get("session_start")![0]({}, new FakeCtx());
     assert.equal(handles.length, 1);
     assert.ok(cleared.includes(handles[0]), "race timer cleared after exec settles");
-    // session_start also fires `center ensure` on its own budget, so find the
-    // check-state call rather than assuming it is the first exec.
     const checkState = fast.execCalls.findIndex((a) => a[0] === "hook" && a[1] === "check-state");
     assert.ok(checkState >= 0, "check-state was not invoked");
     assert.equal(fast.execOptions[checkState]?.timeout, 12345);
@@ -545,49 +430,6 @@ test("pi.exec receives timeout + signal; a hung child is aborted and the race ti
   assert.ok(hungIdx >= 0, "check-state was not invoked");
   assert.equal(hung.execOptions[hungIdx]?.timeout, 20);
   assert.equal(hung.execOptions[hungIdx]?.signal?.aborted, true, "hung child aborted on timeout");
-});
-
-test("board sync: overlapping ticks are skipped while a pull is in flight", async () => {
-  const gate = deferred<ExecResult>();
-  let pulls = 0;
-  const pi = new FakePi((args) => {
-    if (args[0] === "board" && args[1] === "pull") {
-      pulls++;
-      return pulls === 1 ? gate.promise : { code: 0, stdout: "", stderr: "" };
-    }
-    return { code: 0, stdout: "{}", stderr: "" };
-  });
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx();
-  await pi.commands.get("plan-forge-board")!.handler("", ctx);
-
-  ctx.intervals[0].fn();
-  ctx.intervals[0].fn();
-  ctx.intervals[0].fn();
-  await flush();
-  assert.equal(pulls, 1, "no overlapping pull while one is in flight");
-  gate.resolve({ code: 0, stdout: "", stderr: "" });
-  await flush();
-  ctx.intervals[0].fn();
-  await flush();
-  assert.equal(pulls, 2, "next tick runs once the pull settled");
-});
-
-test("session_shutdown nulls ctx: a pull finishing afterwards sends nothing", async () => {
-  const gate = deferred<ExecResult>();
-  const pi = new FakePi((args) =>
-    args[0] === "board" && args[1] === "pull" ? gate.promise : { code: 0, stdout: "{}", stderr: "" },
-  );
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx();
-  await pi.commands.get("plan-forge-board")!.handler("", ctx);
-  ctx.intervals[0].fn();
-  await flush();
-  shutdown(pi, ctx);
-  assert.equal(ctx.clearedTimers.length, 1, "timer cleared on shutdown");
-  gate.resolve({ code: 0, stdout: BOARD_DELTA, stderr: "" });
-  await flush();
-  assert.equal(pi.messages.length, 0, "no sendMessage after shutdown");
 });
 
 test("plan-forge command: wait exit 0 without an approved plan never hands off", async () => {
@@ -656,30 +498,6 @@ test("plan-forge command: sendUserMessage failing after it was invoked notifies,
   assert.ok(!ctx.notifications.some((n) => n.message.includes("press Enter")));
 });
 
-test("board command: sync starts only when the board exits 0", async () => {
-  for (const code of [1, 3]) {
-    const pi = new FakePi(() => ({ code, stdout: "", stderr: "nope" }));
-    createHook(pi, makeDeps());
-    const ctx = new FakeCtx();
-    await pi.commands.get("plan-forge-board")!.handler("", ctx);
-    assert.equal(ctx.intervals.length, 0, `no sync timer after board exit ${code}`);
-  }
-});
-
-test("board command: no managed timers -> sync-unavailable notice", async () => {
-  const pi = new FakePi(() => ({ code: 0, stdout: "{}", stderr: "" }));
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx();
-  (ctx as unknown as { setInterval?: unknown }).setInterval = undefined;
-  await pi.commands.get("plan-forge-board")!.handler("", ctx);
-  assert.ok(
-    ctx.notifications.some(
-      (n) =>
-        n.message === "board sync unavailable in this OMP version; edits reach the agent when you ask it",
-    ),
-  );
-});
-
 test("wait loop: stops when session_shutdown fires", async () => {
   let waits = 0;
   const holder: { pi?: FakePi; ctx?: FakeCtx } = {};
@@ -743,123 +561,29 @@ test("wait loop: capped, then notifies and stops", async () => {
   assert.equal(ctx.newSessionCalls.length, 0);
 });
 
-test("sessionIdOf: raw ids . and .. fall back to session", async () => {
-  for (const raw of [".", ".."]) {
-    const pi = new FakePi((args) =>
-      args[0] === "board" && args[1] === "pull"
-        ? { code: 0, stdout: "", stderr: "" }
-        : { code: 0, stdout: "{}", stderr: "" },
-    );
-    createHook(pi, makeDeps());
-    const ctx = new FakeCtx();
-    Object.assign(ctx.sessionManager, { getSessionId: () => raw });
-    await pi.commands.get("plan-forge-board")!.handler("", ctx);
-    ctx.intervals[0].fn();
-    await flush();
-    const pull = pi.execCalls.find((call) => call[1] === "pull");
-    assert.ok(pull);
-    assert.equal(pull[pull.indexOf("--consumer") + 1], "omp:session");
-  }
+
+// The command center, the plan board and swarm reporting were retired. The hook
+// must not start, call or advertise any of them.
+test("retired features: no board command, and session_start runs check-state only", async () => {
+  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
+  createHook(pi, makeDeps());
+  assert.deepEqual([...pi.commands.keys()], ["plan-forge"]);
+  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
+  assert.deepEqual(pi.execCalls, [["hook", "check-state", "--repo", "/repo", "--format", "omp"]]);
+
+  const ctx = new FakeCtx();
+  await pi.handlers.get("tool_result")![0](
+    { toolName: "edit", input: { path: "/repo/src/a.ts" }, content: "ok", isError: false },
+    ctx,
+  );
+  assert.equal(pi.execCalls.length, 1, "an edit reports nowhere");
 });
 
-// ---- board activity capture ----
-
-function activityCalls(pi: FakePi): string[][] {
-  return pi.execCalls.filter((args) => args[0] === "board" && args[1] === "activity");
-}
-
-test("tool_result: edit/write/ast_edit trigger a fire-and-forget board activity exec", async () => {
+test("handoff prompt names the spec and validation, and nothing about a board", async () => {
   const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
   createHook(pi, makeDeps());
   const ctx = new FakeCtx();
-  const handler = (pi.handlers.get("tool_result") ?? [])[0];
-
-  await handler({ toolName: "edit", input: { path: "internal/a.go" }, content: [], isError: false }, ctx);
-  await handler({ toolName: "write", input: { path: "/repo/web/b.ts" }, content: [], isError: false }, ctx);
-  await handler({ toolName: "ast_edit", input: { file_path: "c.py" }, content: [], isError: false }, ctx);
-  await handler({ toolName: "custom_patch", input: { path: "d.md" }, content: [], isError: false }, ctx);
-
-  assert.deepEqual(activityCalls(pi), [
-    ["board", "activity", "--repo", "/repo", "--consumer", "omp:abc123", "--path", "internal/a.go"],
-    ["board", "activity", "--repo", "/repo", "--consumer", "omp:abc123", "--path", "web/b.ts"],
-    ["board", "activity", "--repo", "/repo", "--consumer", "omp:abc123", "--path", "c.py"],
-    ["board", "activity", "--repo", "/repo", "--consumer", "omp:abc123", "--path", "d.md"],
-  ]);
-  assert.equal(pi.execOptions[0]?.timeout, 500, "bounded by execTimeoutMs");
-  assert.equal(ctx.editorTexts.length, 0);
-  assert.equal(ctx.notifications.length, 0);
-  assert.equal(pi.messages.length, 0, "capture sends no message");
-});
-
-test("tool_result: read-like tools, errors and path-less inputs do not trigger activity", async () => {
-  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx();
-  const handler = (pi.handlers.get("tool_result") ?? [])[0];
-
-  for (const toolName of ["read", "grep", "glob", "find", "bash"]) {
-    await handler({ toolName, input: { path: "x.go", command: "ls" }, content: [], isError: false }, ctx);
-  }
-  await handler({ toolName: "edit", input: { path: "x.go" }, content: [], isError: true }, ctx);
-  await handler({ toolName: "edit", input: {}, content: [], isError: false }, ctx);
-  await handler({ toolName: "edit", input: { path: 7 }, content: [], isError: false }, ctx);
-  assert.deepEqual(activityCalls(pi), []);
-});
-
-test("tool_result: the same path is reported once per 10 s window", async () => {
-  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  let nowMs = 1_000_000;
-  createHook(pi, { ...makeDeps(), now: () => nowMs });
-  const ctx = new FakeCtx();
-  const handler = (pi.handlers.get("tool_result") ?? [])[0];
-  const edit = (path: string) => handler({ toolName: "edit", input: { path }, content: [], isError: false }, ctx);
-
-  await edit("a.go");
-  nowMs += 9_999;
-  await edit("a.go");
-  await edit("b.go");
-  assert.equal(activityCalls(pi).length, 2, "a.go deduped within 10 s, b.go distinct");
-  nowMs += 1;
-  await edit("a.go");
-  assert.equal(activityCalls(pi).length, 3, "a.go reported again after 10 s");
-});
-
-test("tool_result: an activity exec failure is swallowed", async () => {
-  const throwing = new FakePi(() => {
-    throw new Error("spawn failed");
-  });
-  createHook(throwing, makeDeps());
-  const rejecting = new FakePi(() => Promise.reject(new Error("exec rejected")));
-  createHook(rejecting, makeDeps());
-  const ctx = new FakeCtx();
-  for (const pi of [throwing, rejecting]) {
-    const handler = (pi.handlers.get("tool_result") ?? [])[0];
-    await handler({ toolName: "write", input: { path: "a.go" }, content: [], isError: false }, ctx);
-    await flush();
-    assert.equal(activityCalls(pi).length, 1);
-  }
-  assert.equal(ctx.notifications.length, 0);
-  assert.equal(ctx.editorTexts.length, 0);
-});
-
-test("tool_result: activity exec is not awaited by the handler", async () => {
-  const gate = deferred<ExecResult>();
-  const pi = new FakePi(() => gate.promise);
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx();
-  const handler = (pi.handlers.get("tool_result") ?? [])[0];
-  await handler({ toolName: "edit", input: { path: "a.go" }, content: [], isError: false }, ctx);
-  assert.equal(activityCalls(pi).length, 1);
-  gate.resolve({ code: 0, stdout: "", stderr: "" });
-  await flush();
-});
-
-test("handoff prompt carries the board report/discover/Coordinator instructions", async () => {
-  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  createHook(pi, makeDeps());
-  const ctx = new FakeCtx();
-  const handler = (pi.handlers.get("tool_result") ?? [])[0];
-  await handler(
+  await pi.handlers.get("tool_result")![0](
     {
       toolName: "bash",
       input: { command: "plan-forge wait --session s1" },
@@ -870,170 +594,7 @@ test("handoff prompt carries the board report/discover/Coordinator instructions"
   );
   assert.equal(ctx.editorTexts.length, 1);
   const prompt = ctx.editorTexts[0];
-  assert.match(prompt, /board report --repo <root> --consumer omp:abc123 --task <ID> --state started/);
-  assert.match(prompt, /--state done/);
-  assert.match(prompt, /board discover --title/);
-  assert.match(prompt, /`Coordinator:` line/);
-  assert.equal(activityCalls(pi).length, 0, "a bash wait is not an edit");
-});
-
-test("session_start: the command center daemon is ensured, and never opens a tab", async () => {
-  const pi = new FakePi((args) =>
-    args[0] === "center"
-      ? { code: 0, stdout: "", stderr: "" }
-      : { code: 0, stdout: "banner", stderr: "" },
-  );
-  createHook(pi, makeDeps());
-  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
-
-  const ensure = pi.execCalls.find((a) => a[0] === "center");
-  assert.deepEqual(ensure, ["center", "ensure", "--repo", "/repo"]);
-  assert.ok(!ensure!.includes("--open"), "starting a session must not open a dashboard tab");
-  // The banner still arrives: the launch runs beside it, not before it.
-  assert.equal(pi.messages.length, 1);
-});
-
-test("session_start: a failing command center never blocks the banner", async () => {
-  const pi = new FakePi((args) => {
-    if (args[0] === "center") return Promise.reject(new Error("no daemon"));
-    return { code: 0, stdout: "banner", stderr: "" };
-  });
-  createHook(pi, makeDeps());
-  // An unhandled rejection here would fail the run, so the assertion is that
-  // this resolves at all.
-  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
-  await new Promise((r) => setImmediate(r));
-  assert.equal(pi.messages.length, 1);
-});
-
-test("session_start: the command center launch is not awaited", async () => {
-  // A launch that never settles must not hold the session start open.
-  const pi = new FakePi((args) => {
-    if (args[0] === "center") return new Promise<never>(() => {});
-    return { code: 0, stdout: "banner", stderr: "" };
-  });
-  createHook(pi, makeDeps());
-  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
-  assert.equal(pi.messages.length, 1, "the banner was blocked by the launch");
-});
-
-test("tool_result: an edit reports to both the board and the command center", async () => {
-  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  createHook(pi, makeDeps());
-  await pi.handlers.get("tool_result")![0](
-    { toolName: "edit", input: { file_path: "/repo/src/a.ts" } },
-    new FakeCtx(),
-  );
-  const board = pi.execCalls.find((a) => a[0] === "board" && a[1] === "activity");
-  const center = pi.execCalls.find((a) => a[0] === "center" && a[1] === "report");
-  assert.ok(board, "the board capture was lost");
-  assert.ok(center, "the command center was not told");
-  const session = center[center.indexOf("--session") + 1];
-  assert.ok(session.startsWith("omp:"), `session = ${session}`);
-  assert.ok(center.includes("src/a.ts"), `detail missing: ${center.join(" ")}`);
-  // The board and the command center agree on who is reporting.
-  assert.equal(session, board[board.indexOf("--consumer") + 1]);
-});
-
-test("tool_result: a bash command reaches the command center, but a wait poll does not", async () => {
-  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  createHook(pi, makeDeps());
-  await pi.handlers.get("tool_result")![0](
-    { toolName: "bash", input: { command: "go test ./..." } },
-    new FakeCtx(),
-  );
-  const reported = pi.execCalls.filter((a) => a[0] === "center" && a[1] === "report");
-  assert.equal(reported.length, 1);
-  assert.ok(reported[0].includes("go test ./..."));
-
-  // A `plan-forge wait` poll is the forge talking to itself.
-  const quiet = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  createHook(quiet, makeDeps());
-  await quiet.handlers.get("tool_result")![0](
-    { toolName: "bash", input: { command: '"/bin/plan-forge" wait --session s1 --timeout 50s' } },
-    new FakeCtx(),
-  );
-  assert.equal(quiet.execCalls.filter((a) => a[0] === "center" && a[1] === "report").length, 0);
-});
-
-// --- the oh-my-pi swarm protocol ------------------------------------------
-
-const swarmSnapshot = {
-  word: "WORKING",
-  waitingOnUser: false,
-  taskId: "T-12",
-  stage: "limit retries",
-  dispatch: "∥3 ready",
-  activeAgents: 2,
-  epic: "ship the board",
-  currentTask: "wire the panel",
-  parallelSubtasks: [
-    { id: "worker-ada", agent: "coder", employee: "Ada", task: "wire the panel" },
-    { id: "worker-bo", agent: "reviewer", employee: "Bo", task: "read the diff" },
-  ],
-};
-
-async function startedHook(): Promise<FakePi> {
-  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  createHook(pi, makeDeps());
-  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
-  return pi;
-}
-
-function swarmReports(pi: FakePi): string[][] {
-  return pi.execCalls.filter((a) => a[0] === "swarm" && a[1] === "report");
-}
-
-test("swarm: an assistant:status snapshot is forwarded verbatim", async () => {
-  const pi = await startedHook();
-  pi.publish("assistant:status", swarmSnapshot);
-  await delay(40);
-
-  const reports = swarmReports(pi);
-  assert.equal(reports.length, 1);
-  const args = reports[0];
-  assert.deepEqual(args.slice(0, 8), [
-    "swarm", "report", "--repo", "/repo", "--session", "omp:abc123", "--harness", "omp",
-  ]);
-  assert.equal(args[8], "--json");
-  // Forwarded as the protocol wrote it: Plan-Forge consumes this payload, it
-  // does not own it, so no field is renamed on the way through.
-  assert.deepEqual(JSON.parse(args[9]), swarmSnapshot);
-});
-
-test("swarm: a burst coalesces into one report carrying the newest snapshot", async () => {
-  const pi = await startedHook();
-  pi.publish("assistant:status", { ...swarmSnapshot, activeAgents: 1 });
-  pi.publish("assistant:status", { ...swarmSnapshot, activeAgents: 2 });
-  pi.publish("assistant:status", { ...swarmSnapshot, activeAgents: 3 });
-  await delay(40);
-
-  const reports = swarmReports(pi);
-  assert.equal(reports.length, 1, "a dispatch burst must not become a burst of subprocesses");
-  assert.equal(JSON.parse(reports[0][9]).activeAgents, 3, "a panel must show what is running now");
-});
-
-test("swarm: an unusable payload is dropped rather than forwarded", async () => {
-  const pi = await startedHook();
-  for (const bad of [null, "a string", ["an", "array"], 42]) {
-    pi.publish("assistant:status", bad);
-  }
-  await delay(40);
-  assert.equal(swarmReports(pi).length, 0);
-});
-
-test("swarm: nothing is reported after the session shuts down", async () => {
-  const pi = await startedHook();
-  pi.publish("assistant:status", swarmSnapshot);
-  await pi.handlers.get("session_shutdown")![0]({}, new FakeCtx());
-  await delay(40);
-  assert.equal(swarmReports(pi).length, 0, "a queued snapshot must not outlive its session");
-});
-
-test("swarm: an OMP without the event bus simply has no swarm panel", async () => {
-  const pi = new FakePi(() => ({ code: 0, stdout: "", stderr: "" }));
-  (pi as { events?: unknown }).events = undefined;
-  assert.doesNotThrow(() => createHook(pi, makeDeps()));
-  await pi.handlers.get("session_start")![0]({}, new FakeCtx());
-  assert.equal(swarmReports(pi).length, 0);
+  assert.match(prompt, /synthesized_spec\.md/);
+  assert.match(prompt, /valid=true status=UNSTARTED verified=0\/9 drift=0/);
+  assert.doesNotMatch(prompt, /board|Coordinator/);
 });

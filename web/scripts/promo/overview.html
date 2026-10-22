@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Plan Forge overview</title>
+<!-- Rendered by scripts/promo.mjs into docs/images/overview.png. Edit here, not in the PNG. -->
+<style>
+  :root {
+    --ink: #18181b; --ink-2: #3f3f46; --muted: #71717a; --line: #e4e4e7;
+    --accent: #0a66d0; --accent-soft: #e9f1fd; --epic: #6d4fd0; --epic-soft: #f0ebfd;
+    --ok: #15803d; --ok-soft: #e9f7ef; --danger: #b91c1c; --danger-soft: #fdeded; --warn: #a65b09; --warn-soft: #fdf5e4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; width: 1280px; height: 580px; padding: 40px 48px;
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; color: var(--ink);
+    background: radial-gradient(1200px 500px at 50% -10%, #eef3fd 0%, #ffffff 60%);
+    display: flex; flex-direction: column; gap: 28px;
+  }
+  header { display: flex; align-items: center; gap: 14px; }
+  header h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  .flow { flex: 1; display: grid; grid-template-columns: 300px 40px 1fr 40px 260px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  .label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+    box-shadow: 0 1px 2px rgb(16 16 20 / .06), 0 8px 24px -12px rgb(16 16 20 / .18);
+  }
+  .card h3 { margin: 0 0 3px; font-size: 14.5px; }
+  .card p { margin: 0; color: var(--ink-2); font-size: 12.5px; }
+  .card code { font: 11.5px ui-monospace, "SF Mono", Menlo, monospace; color: var(--epic); }
+  .tag { display: inline-block; margin-bottom: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .arrow { display: grid; place-items: center; align-self: center; color: #a1a1aa; font-size: 22px; }
+  .gate {
+    border-radius: 16px; padding: 18px; border: 1.5px solid #c9d8f5;
+    background: linear-gradient(180deg, #f7f9ff, #ffffff);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .gate-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .gate-head h2 { margin: 0; font-size: 16px; }
+  .gate-head span { color: var(--muted); font-size: 12px; }
+  .avatars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .av { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
+  .face { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .av b { display: block; font-size: 13px; }
+  .av span { color: var(--muted); font-size: 12px; }
+  .loop { display: flex; gap: 8px; align-items: center; color: var(--danger); font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 8px; background: var(--danger-soft); }
+  .human { display: flex; gap: 8px; align-items: center; color: var(--warn); font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); }
+  .out { border-color: #bbe7cb; background: linear-gradient(180deg, #f3fbf6, #fff); }
+  .file { font: 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--ok); }
+</style>
+</head>
+<body>
+  <header>
+    <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a7aef"/><stop offset="1" stop-color="#6d4fd0"/></linearGradient></defs>
+      <rect width="32" height="32" rx="8" fill="url(#g)"/>
+      <g transform="translate(-1.4 0)">
+        <path d="M11 24.5V7.75h5.75a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="#fff" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M23.6 19.4l.95 2.15 2.15.95-2.15.95-.95 2.15-.95-2.15-2.15-.95 2.15-.95z" fill="#fff"/>
+      </g>
+    </svg>
+    <div>
+      <h1>Agentic Plan Forge</h1>
+      <p>A pre-planning gate: your agent gets a verified plan, not a first guess.</p>
+    </div>
+  </header>
+
+  <div class="flow">
+    <div class="col">
+      <div class="label">What goes in</div>
+      <div class="card">
+        <span class="tag" style="background:var(--accent-soft);color:var(--accent)">Composer</span>
+        <h3>Your requirements</h3>
+        <p>Written in Markdown or dropped in as .docx, .pdf, .md. Grouped into epics as you type.</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="background:var(--epic-soft);color:var(--epic)">Tree-sitter</span>
+        <h3>The real code</h3>
+        <p>Modules, public symbols, routes. Stale docs are flagged, not trusted.</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="background:var(--ok-soft);color:var(--ok)">Project memory</span>
+        <h3>What the team already decided</h3>
+        <p>ADRs, specs, plans and notes from <code>.agents/</code> and <code>docs/</code>, plus recent commits.</p>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="gate">
+      <div class="gate-head"><h2>The deliberation</h2><span>tool-free model calls through your own agent CLI</span></div>
+      <div class="avatars">
+        <div class="av"><div class="face" style="background:var(--accent-soft);color:var(--accent)">PM</div><div><b>Product Manager</b><span>Epics and stories. Never sees code.</span></div></div>
+        <div class="av"><div class="face" style="background:var(--epic-soft);color:var(--epic)">TA</div><div><b>Technical Architect</b><span>Maps the work onto real modules.</span></div></div>
+        <div class="av"><div class="face" style="background:var(--warn-soft);color:var(--warn)">DS</div><div><b>Domain Specialists</b><span>Tasks, targets and checks per workstream.</span></div></div>
+        <div class="av"><div class="face" style="background:var(--ok-soft);color:var(--ok)">LS</div><div><b>Lead Synthesizer</b><span>Locks one spec with two estimates.</span></div></div>
+      </div>
+      <div class="loop">⟲ Red-Team Critic attacks every draft on a separate model; open findings force a revision</div>
+      <div class="human">● You decide the trade-offs the avatars cannot</div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="col">
+      <div class="label">What comes out</div>
+      <div class="card out">
+        <h3>A verified specification</h3>
+        <p>Epics, subtasks, AST targets, verification commands, human and agent schedules.</p>
+        <p class="file" style="margin-top:8px">.plan/synthesized_spec.md<br>.plan/plan_manifest.json</p>
+      </div>
+      <div class="card">
+        <h3>Straight into Plan Mode</h3>
+        <p>Claude Code, oh-my-pi and Antigravity pick the plan up and execute it.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
