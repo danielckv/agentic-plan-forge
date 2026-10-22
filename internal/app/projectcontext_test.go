@@ -89,3 +89,15 @@ func TestContextPillWording(t *testing.T) {
 		}
 	}
 }
+
+// The top bar names the branch the plan is for, once the scan has read it.
+func TestStatusReportsTheBranchAfterTheScan(t *testing.T) {
+	exec := newExecutor(executorConfig{Repo: t.TempDir(), Logger: quietLogger()})
+	if got := exec.Status().Branch; got != "" {
+		t.Fatalf("branch before the scan = %q, want empty", got)
+	}
+	exec.graph = &contracts.RepoContextGraph{GitBranch: "feat/exports"}
+	if got := exec.Status().Branch; got != "feat/exports" {
+		t.Errorf("branch = %q, want feat/exports", got)
+	}
+}

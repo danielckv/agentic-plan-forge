@@ -10,31 +10,16 @@ const THEME_META: Record<ThemeChoice, { label: string; icon: React.ComponentType
 };
 
 /**
- * System / Light / Dark. Expanded, a segmented control; in the collapsed rail
- * a single button that cycles through the three. Both set `data-theme` on
- * `<html>` through the prefs store and persist to `plan-forge:ui:theme`.
+ * System / Light / Dark as a segmented control. The compact variant, in the
+ * top bar, shows icons only; each button keeps its name for assistive
+ * technology and as a tooltip. Both set `data-theme` on `<html>` through the
+ * prefs store and persist to `plan-forge:ui:theme`.
  */
-export function ThemeSelect({ collapsed }: { collapsed: boolean }): React.ReactElement {
+export function ThemeSelect({ variant = "full" }: { variant?: "full" | "compact" }): React.ReactElement {
   const { theme } = usePrefs();
-
-  if (collapsed) {
-    const meta = THEME_META[theme];
-    const Icon = meta.icon;
-    return (
-      <button
-        type="button"
-        className="pf-rail-btn"
-        aria-label={`Theme: ${meta.label}. Activate to change.`}
-        title={`Theme: ${meta.label}`}
-        onClick={prefs.cycleTheme}
-      >
-        <Icon size={15} />
-      </button>
-    );
-  }
-
+  const compact = variant === "compact";
   return (
-    <div className="pf-segmented" role="group" aria-label="Theme">
+    <div className={compact ? "pf-segmented pf-segmented--compact" : "pf-segmented"} role="group" aria-label="Theme">
       {THEME_ORDER.map((choice) => {
         const { label, icon: Icon } = THEME_META[choice];
         return (
@@ -43,10 +28,12 @@ export function ThemeSelect({ collapsed }: { collapsed: boolean }): React.ReactE
             type="button"
             className="pf-segment"
             aria-pressed={theme === choice}
+            aria-label={label}
+            title={compact ? `${label} theme` : undefined}
             onClick={() => prefs.setTheme(choice)}
           >
-            <Icon size={13} />
-            {label}
+            <Icon size={compact ? 14 : 13} />
+            {!compact && label}
           </button>
         );
       })}

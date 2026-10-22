@@ -130,6 +130,8 @@ export interface StatusView {
   ocr: "available" | "missing" | "unknown";
   repo: string;
   repoPath: string;
+  /** The checked-out branch, once the scan has read it. */
+  branch?: string;
   /**
    * The host the invoking skill passed with `--host` (`claude`, `omp`, `agy`,
    * or `auto`). Page 3 words its call to action and handoff panel for it.

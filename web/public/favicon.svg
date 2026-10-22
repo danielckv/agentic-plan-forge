@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 32 32" role="img" aria-label="Agentic Plan Forge">
+  <title>Agentic Plan Forge</title>
+  <defs>
+    <linearGradient id="pf-brand-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a7aef"/>
+      <stop offset="1" stop-color="#6d4fd0"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#pf-brand-grad)"/>
+  <g transform="translate(-1.4 0)">
+    <path d="M11 24.5V7.75h5.75a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="#ffffff" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M23.6 19.4l.95 2.15 2.15.95-2.15.95-.95 2.15-.95-2.15-2.15-.95 2.15-.95z" fill="#ffffff"/>
+  </g>
+</svg>

@@ -13,6 +13,7 @@ export const STATUS = {
   ocr: "available",
   repo: "billing-service",
   repoPath: "/Users/dana/src/billing-service",
+  branch: "feat/invoice-exports",
   requestedHost: "claude",
   mainHost: "claude",
   mainModel: "claude-opus-5-5",
@@ -85,7 +86,7 @@ export const MODULES = (() => {
 
 export const CONTEXT = {
   source: "recall-index",
-  branch: "main",
+  branch: "feat/invoice-exports",
   head: "4e1a9c07d2b3",
   recent_commits: ["Add reporting query range filters", "Store invoices per tenant", "Audit log: record login events"],
   hits: [

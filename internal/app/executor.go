@@ -108,6 +108,8 @@ type StatusView struct {
 	// only through the loopback bridge and never leaves the machine.
 	Repo     string `json:"repo"`
 	RepoPath string `json:"repoPath"`
+	// Branch is the checked-out branch once the scan has read it.
+	Branch string `json:"branch,omitempty"`
 	HostSummary
 }
 
@@ -311,6 +313,9 @@ func (e *executor) Status() StatusView {
 	e.mu.Lock()
 	v := e.pills
 	v.Interpretation = e.normRev
+	if e.graph != nil {
+		v.Branch = e.graph.GitBranch
+	}
 	e.mu.Unlock()
 	v.RepoPath = e.cfg.Repo
 	v.Repo = filepath.Base(e.cfg.Repo)

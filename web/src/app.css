@@ -88,6 +88,13 @@
   --pf-dur-slow: 220ms;
 
   /* layout */
+  /*
+   * One header height for the sidebar brand row and the top bar, so their
+   * bottom borders form one line; one control height for everything in them.
+   */
+  --pf-header-h: 56px;
+  --pf-footer-h: 58px;
+  --pf-ctl-h: 32px;
   --pf-gutter: 32px;
   --pf-sidebar-w: 232px;
   --pf-rail-w: 56px;
@@ -442,6 +449,7 @@ body {
 }
 
 .pf-footer-bar {
+  min-height: var(--pf-footer-h);
   border-top: 1px solid var(--pf-border);
   background: var(--pf-panel);
   padding: 10px var(--pf-gutter);
@@ -516,33 +524,31 @@ body {
 
 .pf-sidebar-brand {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
-  min-height: 61px;
-  padding: 16px 14px 14px;
+  height: var(--pf-header-h);
+  padding-inline: 14px;
   border-bottom: 1px solid var(--pf-sidebar-border);
 }
 
-.pf-sidebar-brand-text {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  line-height: 1.25;
-}
-
 .pf-sidebar-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--pf-sidebar-ink-strong);
+  white-space: nowrap;
 }
 
-.pf-sidebar-project {
-  display: flex;
+/* The step number in front of each page name. */
+.pf-nav-label {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--pf-sidebar-ink);
-  white-space: nowrap;
+  gap: 8px;
+}
+
+.pf-nav-step {
+  display: none;
 }
 
 /*
@@ -608,35 +614,15 @@ body {
   cursor: not-allowed;
 }
 
+/* The same height as the page footer, so both top borders form one line. */
 .pf-sidebar-foot {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: auto;
-  padding: 12px 8px 10px;
-  border-top: 1px solid var(--pf-sidebar-border);
-}
-
-.pf-sidebar-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-inline: 10px;
-  font-size: 12px;
-  color: var(--pf-sidebar-ink);
-  white-space: nowrap;
-}
-
-.pf-sidebar-status > svg {
   flex: none;
-}
-
-.pf-sidebar-actions {
-  display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 2px;
-  padding-top: 8px;
+  justify-content: center;
+  height: var(--pf-footer-h);
+  margin-top: auto;
+  padding-inline: 8px;
   border-top: 1px solid var(--pf-sidebar-border);
 }
 
@@ -722,15 +708,14 @@ body {
   padding-inline: 0;
 }
 
-.pf-sidebar[data-collapsed="true"] .pf-sidebar-brand-text,
+.pf-sidebar[data-collapsed="true"] .pf-sidebar-title,
 .pf-sidebar[data-collapsed="true"] .pf-nav-label,
 .pf-sidebar[data-collapsed="true"] .pf-sidebar-heading {
   display: none;
 }
 
 .pf-sidebar[data-collapsed="true"] .pf-nav-item,
-.pf-sidebar[data-collapsed="true"] .pf-rail-btn,
-.pf-sidebar[data-collapsed="true"] .pf-sidebar-status {
+.pf-sidebar[data-collapsed="true"] .pf-rail-btn {
   justify-content: center;
   padding-inline: 0;
 }
@@ -741,8 +726,8 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 52px;
-  padding-inline: var(--pf-gutter);
+  height: var(--pf-header-h);
+  padding-inline: var(--pf-gutter) 20px;
   background: var(--pf-panel);
   border-bottom: 1px solid var(--pf-border);
   flex: none;
@@ -752,12 +737,89 @@ body {
 .pf-topbar-project {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
-  max-width: 220px;
-  font-size: 13px;
+  max-width: 340px;
+  height: var(--pf-ctl-h);
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--pf-ink);
+}
+
+.pf-topbar-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 2px 8px;
+  border: 1px solid var(--pf-border);
+  border-radius: 999px;
+  background: var(--pf-panel-subtle);
+  color: var(--pf-muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Connection: a quiet dot and word, not a badge. */
+.pf-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--pf-ctl-h);
+  padding-inline: 4px;
+  background: none;
+  color: var(--pf-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pf-conn .pf-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.pf-icon-btn {
+  display: grid;
+  place-items: center;
+  width: var(--pf-ctl-h);
+  height: var(--pf-ctl-h);
+  border: none;
+  border-radius: var(--pf-radius-ctl);
+  background: transparent;
+  color: var(--pf-muted);
+  cursor: pointer;
+  transition: background-color var(--pf-dur-fast) ease, color var(--pf-dur-fast) ease;
+}
+
+.pf-icon-btn:hover {
+  background: var(--pf-inset);
+  color: var(--pf-ink);
+}
+
+.pf-icon-btn:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+/* The theme switch in the top bar: three icons in one 32 px pill. */
+.pf-segmented--compact {
+  height: var(--pf-ctl-h);
+  align-items: center;
+  background: var(--pf-inset);
+}
+
+.pf-segmented--compact .pf-segment {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+}
+
+.pf-avatar--more {
+  background: var(--pf-inset);
+  color: var(--pf-ink-2);
 }
 
 .pf-topbar-divider {
@@ -770,7 +832,7 @@ body {
 .pf-topbar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-left: auto;
   flex: none;
 }
