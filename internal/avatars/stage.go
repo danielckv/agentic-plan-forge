@@ -457,9 +457,19 @@ func (o *orchestrator) attempt(ctx context.Context, sp stageSpec, req contracts.
 		o.liveMu.Unlock()
 	}()
 
+	// The heartbeat must not outlive the call. Closing the channel alone is
+	// not enough: a beat already blocked on the emit mutex would land after
+	// the stage published Synced, putting a finished avatar back on a working
+	// status — and a working status keeps the room from reading the cycle as
+	// finished. So attempt waits for the beat goroutine to return.
 	beats := make(chan struct{})
-	defer close(beats)
+	beatsDone := make(chan struct{})
+	defer func() {
+		close(beats)
+		<-beatsDone
+	}()
 	go func() {
+		defer close(beatsDone)
 		t := time.NewTicker(o.in.heartbeat())
 		defer t.Stop()
 		for {

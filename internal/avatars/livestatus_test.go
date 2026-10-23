@@ -170,6 +170,23 @@ func TestHeartbeatsDoNotDisturbTheFinalStatus(t *testing.T) {
 		if last != "Synced" && last != "Critiquing" {
 			t.Errorf("%s ended on %q, want a settled status", avatar, last)
 		}
+		// A beat that lands after the stage settled would put a finished
+		// avatar back on a working status, and the room counts a working
+		// avatar as one the cycle is still waiting for.
+		settled := -1
+		for i, p := range got {
+			if p.Status == "Synced" {
+				settled = i
+			}
+		}
+		if settled < 0 {
+			continue
+		}
+		for _, p := range got[settled+1:] {
+			if strings.HasPrefix(p.PublicSummary, "Running for ") {
+				t.Errorf("%s emitted a heartbeat after it settled: %q", avatar, p.PublicSummary)
+			}
+		}
 	}
 }
 
