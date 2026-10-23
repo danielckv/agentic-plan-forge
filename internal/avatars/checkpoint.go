@@ -3,6 +3,7 @@
 package avatars
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -104,13 +105,29 @@ func (s *runState) clone() *runState {
 	return &c
 }
 
-// CheckpointStore keeps the resumable state of recent runs in memory. State
-// never leaves the process: it holds model drafts, which are retained only for
-// the life of the session.
+// CheckpointSink persists the newest checkpoint beyond the process, so drafts
+// that were already paid for survive a crash or a restart. One repository
+// keeps one unfinished run: Put replaces it, Get returns it whatever run id
+// asks (the orchestrator revalidates identity before adopting it) and Drop
+// removes it. A sink that fails is logged by its owner and never fails a run.
+type CheckpointSink interface {
+	Put(runID string, state json.RawMessage) error
+	Get() (runID string, state json.RawMessage, ok bool)
+	Drop() error
+}
+
+// CheckpointStore keeps the resumable state of recent runs in memory, and,
+// when it has a sink, the newest one on disk as well. State holds model
+// drafts: in memory it lives for the session, on disk until the plan is
+// approved or the baseline changes.
 type CheckpointStore struct {
 	mu    sync.Mutex
 	runs  map[string]*runState
 	order []string
+	sink  CheckpointSink
+	// onSinkError reports a sink failure. Nil ignores it: a checkpoint that
+	// cannot be written costs a re-run, never a failed stage.
+	onSinkError func(error)
 }
 
 // NewCheckpointStore returns an empty store.
@@ -118,16 +135,95 @@ func NewCheckpointStore() *CheckpointStore {
 	return &CheckpointStore{runs: map[string]*runState{}}
 }
 
+// Persist attaches a sink and adopts the run it holds, if any. It is called
+// once, before a run starts.
+func (c *CheckpointStore) Persist(sink CheckpointSink, onError func(error)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sink, c.onSinkError = sink, onError
+}
+
+// sinkFailed reports a sink error without failing the run.
+func (c *CheckpointStore) sinkFailed(err error) {
+	if err == nil {
+		return
+	}
+	c.mu.Lock()
+	fn := c.onSinkError
+	c.mu.Unlock()
+	if fn != nil {
+		fn(err)
+	}
+}
+
 // defaultCheckpoints serves runs whose RunInput names no store.
 var defaultCheckpoints = NewCheckpointStore()
 
-func (c *CheckpointStore) load(runID string) *runState {
+// load returns the checkpoint for a run: the in-memory one first, then the
+// persisted one. The persisted checkpoint is offered to any run id, because a
+// restart assigns a new one; the caller revalidates it against the baseline,
+// the graph, the project context and the model slots before adopting it.
+// It also reports whether the checkpoint came from the sink, which means this
+// process has not published those drafts yet.
+func (c *CheckpointStore) load(runID string) (*runState, bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if s, ok := c.runs[runID]; ok {
-		return s.clone()
+		defer c.mu.Unlock()
+		return s.clone(), false
 	}
-	return nil
+	sink := c.sink
+	c.mu.Unlock()
+	if sink == nil {
+		return nil, false
+	}
+	_, raw, ok := sink.Get()
+	if !ok || len(raw) == 0 {
+		return nil, false
+	}
+	st := newRunState()
+	if err := json.Unmarshal(raw, st); err != nil {
+		c.sinkFailed(err)
+		c.sinkFailed(sink.Drop())
+		return nil, false
+	}
+	st.afterDecode()
+	return st, true
+}
+
+// afterDecode repairs what a JSON round trip changes. A draft that was never
+// made marshals as null and comes back as the four bytes "null", which would
+// look like a present draft and skip the stage that must still run.
+func (s *runState) afterDecode() {
+	s.PM.Raw = definedRaw(s.PM.Raw)
+	s.Arch.Raw = definedRaw(s.Arch.Raw)
+	if s.Specs == nil {
+		s.Specs = map[string]draftRec{}
+	}
+	for ws, rec := range s.Specs {
+		rec.Raw = definedRaw(rec.Raw)
+		if !rec.present() {
+			delete(s.Specs, ws)
+			continue
+		}
+		s.Specs[ws] = rec
+	}
+	if s.DecisionContracts == nil {
+		s.DecisionContracts = map[string]string{}
+	}
+	if s.Applied == nil {
+		s.Applied = map[string]bool{}
+	}
+	if s.Revs == nil {
+		s.Revs = map[string]uint64{}
+	}
+}
+
+// definedRaw maps a JSON null, and anything blank, to no draft at all.
+func definedRaw(r json.RawMessage) json.RawMessage {
+	if t := bytes.TrimSpace(r); len(t) == 0 || string(t) == "null" {
+		return nil
+	}
+	return r
 }
 
 func (c *CheckpointStore) save(runID string, s *runState) {
@@ -141,18 +237,43 @@ func (c *CheckpointStore) save(runID string, s *runState) {
 		}
 	}
 	c.runs[runID] = s.clone()
+	sink := c.sink
+	if sink == nil {
+		return
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		c.onSinkError0(err)
+		return
+	}
+	if err := sink.Put(runID, raw); err != nil {
+		c.onSinkError0(err)
+	}
 }
 
-// Forget drops the checkpoint of a run.
+// onSinkError0 reports an error while the lock is already held.
+func (c *CheckpointStore) onSinkError0(err error) {
+	if c.onSinkError != nil {
+		c.onSinkError(err)
+	}
+}
+
+// Forget drops the checkpoint of a run, in memory and on disk. It is called
+// when a checkpoint no longer matches the baseline, and when an approved plan
+// makes the run history irrelevant.
 func (c *CheckpointStore) Forget(runID string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	delete(c.runs, runID)
 	for i, id := range c.order {
 		if id == runID {
 			c.order = append(c.order[:i], c.order[i+1:]...)
 			break
 		}
+	}
+	sink := c.sink
+	c.mu.Unlock()
+	if sink != nil {
+		c.sinkFailed(sink.Drop())
 	}
 }
 

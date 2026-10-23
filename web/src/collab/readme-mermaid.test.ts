@@ -1,18 +1,38 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import mermaid from "mermaid";
 
 /**
- * Every ```mermaid block in README.md must parse. GitHub renders these blocks
- * directly, so a syntax error would publish a broken diagram. `mermaid.parse`
- * runs WITHOUT `suppressErrors`, so an invalid diagram throws and fails here.
+ * Every ```mermaid block in the repository's Markdown must parse. GitHub
+ * renders these blocks directly, so a syntax error would publish a broken
+ * diagram. `mermaid.parse` runs WITHOUT `suppressErrors`, so an invalid
+ * diagram throws and fails here.
+ *
+ * The whole documentation tree is scanned, not README.md alone: a diagram that
+ * moves between pages must not take its test with it.
  */
 
-const readmePath = resolve(import.meta.dirname, "../../../README.md");
+const repoRoot = resolve(import.meta.dirname, "../../..");
+const skipDirs = new Set(["node_modules", "dist", ".git", ".claude", ".plan"]);
 
 mermaid.initialize({ startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true });
+
+function markdownFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith(".") && entry.name !== ".github") continue;
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (skipDirs.has(entry.name)) continue;
+      out.push(...markdownFiles(full));
+      continue;
+    }
+    if (entry.name.endsWith(".md")) out.push(full);
+  }
+  return out.sort();
+}
 
 function mermaidBlocks(markdown: string): string[] {
   const blocks: string[] = [];
@@ -23,14 +43,19 @@ function mermaidBlocks(markdown: string): string[] {
   return blocks;
 }
 
-describe("README.md mermaid blocks", () => {
-  const blocks = mermaidBlocks(readFileSync(readmePath, "utf8"));
+describe("Markdown mermaid blocks", () => {
+  const found: Array<readonly [string, string]> = [];
+  for (const file of markdownFiles(repoRoot)) {
+    for (const src of mermaidBlocks(readFileSync(file, "utf8"))) {
+      found.push([file.slice(repoRoot.length + 1), src] as const);
+    }
+  }
 
-  it("contains the How it works diagram", () => {
-    expect(blocks.length).toBeGreaterThanOrEqual(1);
+  it("the documentation still carries a diagram", () => {
+    expect(found.length).toBeGreaterThanOrEqual(1);
   });
 
-  it.each(blocks.map((src, i) => [i + 1, src] as const))("block %i parses", async (_i, src) => {
+  it.each(found)("%s parses", async (_file, src) => {
     const result = await mermaid.parse(src);
     expect(result).toBeTruthy();
   });

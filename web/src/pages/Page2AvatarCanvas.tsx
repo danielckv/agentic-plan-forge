@@ -26,6 +26,15 @@ import {
   type PMDraft,
 } from "../protocol/drafts";
 import { cancelSession, editBaseline, resolveDecision, retryStage, synthesize, useSync } from "../store/syncStore";
+import {
+  avatarStatus,
+  runFailure,
+  workingAvatars,
+  KNOWN_STATUS,
+  WORKING_STATUS,
+  type AvatarStatus,
+  type RoomInput,
+} from "../ui/room";
 import type { CritiqueIssue, DecisionCard, SyncState, TimelineEntry } from "../store/syncStore";
 import { SkeletonCard, SkeletonLines } from "../ui/Skeleton";
 
@@ -49,18 +58,6 @@ const CYCLE_STEPS: Array<{ n: number; label: string }> = [
   { n: 3, label: "Convergence" },
 ];
 
-export type AvatarStatus =
-  | "Idle"
-  | "Queued"
-  | "Thinking"
-  | "Drafting"
-  | "Critiquing"
-  | "Revising"
-  | "Synced"
-  | "Failed"
-  | "Cancelled"
-  | "Stale";
-
 const STATUS_CHIP: Record<AvatarStatus, string> = {
   Idle: "",
   Queued: "",
@@ -74,14 +71,6 @@ const STATUS_CHIP: Record<AvatarStatus, string> = {
   Stale: "pf-chip--warn",
 };
 
-const KNOWN_STATUS = new Set<string>(["Idle", "Thinking", "Drafting", "Critiquing", "Revising", "Synced", "Failed", "Cancelled", "Stale"]);
-
-/**
- * Statuses that mean the avatar is working right now. The run chip, the
- * speaking ring and the footer key off these.
- */
-const WORKING_STATUS = new Set<string>(["Queued", "Thinking", "Drafting", "Critiquing", "Revising"]);
-
 type PlanTab = "epics" | "architecture" | "findings";
 
 export function Page2AvatarCanvas(): React.ReactElement {
@@ -92,28 +81,37 @@ export function Page2AvatarCanvas(): React.ReactElement {
   const [planTab, setPlanTab] = useState<PlanTab>("epics");
 
   const runActive = runId !== null;
-  const statusFor = (avatarId: string): AvatarStatus => {
-    const t = sync.thoughts[avatarId];
-    if (t !== undefined && KNOWN_STATUS.has(t.status)) return t.status as AvatarStatus;
-    if (sync.drafts.some((d) => d.avatarId === avatarId)) return "Synced";
-    return runActive ? "Queued" : "Idle";
-  };
   // Specialists work under the architect: any specialist at work keeps the
   // cycle open even though it has no card of its own.
-  const specialistsWorking = Object.values(sync.thoughts).filter(
-    (t) => t.avatarId.startsWith("specialist:") && WORKING_STATUS.has(t.status),
-  ).length;
-  const working = MAIN_AVATARS.filter((a) => WORKING_STATUS.has(statusFor(a.id))).map((a) => a.name);
-  const workingCount = working.length + specialistsWorking;
+  const room: RoomInput = {
+    thoughts: sync.thoughts,
+    draftAvatars: sync.drafts.map((d) => d.avatarId),
+    runActive,
+  };
+  const statusFor = (avatarId: string): AvatarStatus => avatarStatus(room, avatarId);
+  const workingIds = workingAvatars(
+    room,
+    MAIN_AVATARS.map((a) => a.id),
+  );
+  const working = workingIds.map((id) => avatarSpec(id).name);
+  const workingCount = working.length;
 
   const openCritiques = sync.critiques.filter((c) => !c.resolved && c.severity !== "MEDIUM");
   const openDecisions = sync.decisions.filter((d) => d.resolvedOptionId === undefined && !d.stale);
   // The orchestrator pauses a run that reaches the cycle cap with blocking
   // findings, and says so with a Stale critic status.
   const paused = sync.thoughts.critic?.status === "Stale" && openCritiques.length > 0 && workingCount === 0;
+  // A failed stage ends the run: the avatars that never ran were cancelled, so
+  // the room offers the retry instead of waiting for them.
+  const failure = runFailure(room);
 
   const synthesizeEnabled =
-    sync.role === "owner" && workingCount === 0 && openCritiques.length === 0 && openDecisions.length === 0 && !paused;
+    sync.role === "owner" &&
+    workingCount === 0 &&
+    openCritiques.length === 0 &&
+    openDecisions.length === 0 &&
+    !paused &&
+    failure === null;
   const linkDown = sync.conn !== "open";
 
   const pm = useMemo(() => parsePMDraft(sync.drafts.find((d) => d.avatarId === "pm")?.data), [sync.drafts]);
@@ -260,6 +258,34 @@ export function Page2AvatarCanvas(): React.ReactElement {
             </section>
           )}
 
+          {failure !== null && (
+            <section className="pf-notice pf-notice--danger flex-col items-stretch">
+              <div className="flex items-center gap-2">
+                <TriangleAlert size={15} style={{ color: "var(--pf-danger)" }} />
+                <span className="font-semibold" style={{ color: "var(--pf-danger)" }}>
+                  The run stopped: the {avatarSpec(failure.avatarId).name} stage failed
+                </span>
+              </div>
+              <p className="pf-caption">{failure.summary}</p>
+              <p className="pf-caption">
+                The drafts that finished are kept. Retrying re-runs only the stage that failed.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  className="pf-btn pf-btn-secondary pf-btn-sm"
+                  onClick={() => retryStage(runId ?? "", failure.avatarId)}
+                  disabled={sync.role !== "owner"}
+                >
+                  Retry stage
+                </button>
+                <button type="button" className="pf-btn pf-btn-secondary pf-btn-sm" onClick={editBaseline}>
+                  Revise baseline
+                </button>
+              </div>
+            </section>
+          )}
+
           {paused && (
             <section className="pf-notice pf-notice--warn flex-col items-stretch">
               <div className="flex items-center gap-2">
@@ -290,10 +316,12 @@ export function Page2AvatarCanvas(): React.ReactElement {
           {workingCount > 0 ? (
             <>
               <LoaderCircle size={12} className="pf-spin shrink-0" />
-              {working.length === 1 && specialistsWorking === 0
+              {working.length === 1
                 ? `${working[0]} is still working — synthesis waits for the cycle to finish.`
                 : `${workingCount} avatars are still working — synthesis waits for the cycle to finish.`}
             </>
+          ) : failure !== null ? (
+            "The run stopped on a failed stage — retry it or revise the baseline."
           ) : openDecisions.length > 0 ? (
             "Resolve the open decision to enable synthesis."
           ) : openCritiques.length > 0 ? (
