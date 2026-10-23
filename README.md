@@ -26,6 +26,42 @@ You need Git, a browser, and Claude Code or OMP signed in. The planning window o
 when you run `/plan-forge`, and only then. Plan Forge never asks for or stores provider API keys: it uses the credentials
 your host agent already has.
 
+### Update, reinstall and remove
+
+There is no separate update command and nothing to force: the install command replaces the binary in place and
+re-registers every skill and hook with the new path, whether or not one is already there.
+
+```sh
+# Update, or reinstall the same version over itself
+curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | sh
+
+# Install one exact release, to test a build or to roll back
+curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | PLAN_FORGE_VERSION=v0.4.0 sh
+
+# Re-register skills and hooks without downloading anything
+plan-forge install
+
+# Overwrite a skill or settings file you edited yourself (see below)
+plan-forge install --force
+
+# Remove what Plan Forge installed, restoring any settings file it changed
+plan-forge uninstall --host all
+
+# ...and delete its own config, credentials, backups and caches too
+plan-forge uninstall --host all --purge
+```
+
+Two things that look like a failed update but are not:
+
+- **A planning session already open keeps the old build.** Replacing the binary does not change a running process.
+  Approve or close the tab, then run `/plan-forge` again.
+- **`plan-forge install` exits 5 and leaves a file alone** when its contents no longer match what Plan Forge wrote,
+  which means you edited it. That is deliberate — it will not throw away your edit. `--force` overwrites it. The other
+  exit codes are 3 (no supported agent found) and 4 (you declined the prompt).
+
+If a new build seems to have no effect, check `which -a plan-forge`: an older copy earlier on `PATH` shadows the one in
+`~/.local/bin`. Uninstalling never touches a repository's `.plan/` folder, so approved plans and caches survive.
+
 ## A look inside
 
 **Write the requirements.** One large editor with headings, checklists and tables. Type `/` for blocks such as an epic

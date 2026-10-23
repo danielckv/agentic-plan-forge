@@ -119,7 +119,53 @@ manages.
 
 ## Update
 
-Re-run the same install command. Skills and hooks are refreshed with the current absolute binary path.
+Re-run the same install command. There is no separate update command, and nothing needs forcing: the installer
+downloads the archive, verifies it against `checksums.txt`, and replaces the binary with an atomic `mv`, whether or not
+one is already there. It then re-runs `plan-forge install`, which refreshes every skill and hook with the current
+absolute binary path.
+
+```sh
+curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | sh
+```
+
+To install one exact release instead of the newest — to test a build, or to roll back — set `PLAN_FORGE_VERSION`:
+
+```sh
+curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | PLAN_FORGE_VERSION=v0.4.0 sh
+```
+
+Two other variables are read: `PLAN_FORGE_INSTALL_DIR` (default `$HOME/.local/bin`, must be absolute) and
+`PLAN_FORGE_NO_SKILLS=1`, which installs the binary and stops before registering skills.
+
+On Windows, re-run the same `irm … install.ps1 | iex` line. The three variables are the same, with
+`PLAN_FORGE_INSTALL_DIR` defaulting to `%LOCALAPPDATA%\Programs\plan-forge`. Windows cannot overwrite a running
+executable, so the installer renames the current one to `plan-forge.exe.old` and leaves it there; the next update
+deletes it. A leftover `.old` file is normal and safe to remove once no session is using it.
+
+### When an update looks like it did nothing
+
+- **A planning session already open keeps the old build.** Replacing a file does not change a process already running
+  from it. Approve or close the tab, then run `/plan-forge` again.
+- **An older copy earlier on `PATH` shadows the new one.** Check with `which -a plan-forge`; `plan-forge version` prints
+  the version, commit and platform of the copy that actually runs.
+- **Your edits are kept, not overwritten.** `plan-forge install` compares each file it owns against the hash it recorded
+  when it wrote it. A file that no longer matches is one you changed, so it is left alone and the command exits 5. Run
+  `plan-forge install --force` to overwrite it, or `--dry-run` first to see what would change. The parse and impact
+  caches under `docs/plans/.plan/cache/` need no attention: each records the version of the logic that filled it and is
+  discarded when that changes.
+
+### Re-registering without downloading
+
+If the skills or hooks are missing or point at a moved binary, fix them without touching the binary itself:
+
+```sh
+plan-forge install --dry-run     # print the plan, write nothing
+plan-forge install               # every host whose binary is found
+plan-forge install --host claude # one host
+plan-forge doctor                # what is registered now, and what is missing
+```
+
+Exit codes: 3 no supported agent found, 4 declined at the prompt, 5 a managed file diverged (see above).
 
 ## Uninstall
 
@@ -127,10 +173,22 @@ Re-run the same install command. Skills and hooks are refreshed with the current
 plan-forge uninstall --host all
 ```
 
-This removes only files and hook entries that Plan Forge installed, restoring any settings file it modified. Add
-`--purge` to also delete Plan Forge's own configuration, credentials, backups and caches. It refuses if the state
-directory lacks Plan Forge's marker file, so it cannot delete a directory it does not own. Repository `.plan/` folders
-are never touched.
+This removes only files and hook entries that Plan Forge installed, restoring any settings file it modified. A file that
+diverged from what Plan Forge wrote is left in place rather than deleted, for the same reason `install` refuses to
+overwrite it. Use `--dry-run` to see what would go first, and `--host claude|omp|agy` to remove one host's artifacts.
+
+```sh
+plan-forge uninstall --host all --purge
+```
+
+`--purge` additionally deletes Plan Forge's own state: `config.json`, `relay-token.json`,
+`install-manifest.json`, `approvals.json`, the backups and sessions under its home, and the `run`, `uploads`,
+`sessions`, `recovery` and `notices` directories in its cache. Each path is enumerated, so a purge never removes a
+directory recursively whatever it happens to contain, and it refuses outright if the state directory lacks Plan Forge's
+marker file, so it cannot delete a directory it does not own.
+
+Repository `.plan/` folders are never touched by either command: an approved `synthesized_spec.md` and
+`plan_manifest.json` survive uninstalling Plan Forge itself.
 
 ## Build from source
 
