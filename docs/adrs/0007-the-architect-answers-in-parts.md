@@ -60,14 +60,14 @@ or how many tokens it spent.
 
 The stage runs as three parts, assembled and validated as one draft (`internal/avatars/architect.go`):
 
-1. **Design** — summary, constraints, workstreams, contracts, accepted tradeoffs. It reads the graph, the project
-   context, the PM draft and the technical appendix. It does **not** read the documentation drift, which it does not
-   answer. The specialists wait for this part and for nothing else.
-2. **Diagrams** — the architecture and sequence diagrams, drawn from the design the first part decided. No graph, no
-   drift, no context.
-3. **Documentation tasks** — one call per batch of at most 20 confirmed drift items (`docBatchItems`), bounded also by
-   24 KiB of drift evidence per call (`docBatchBytes`). No graph: a documentation target is a documentation path, which
-   the drift item already carries.
+- **Part 1, the design** — summary, constraints, workstreams, contracts, accepted tradeoffs. It reads the graph, the
+  project context, the PM draft and the technical appendix. It does **not** read the documentation drift, which it does
+  not answer. The specialists wait for this part and for nothing else.
+- **Part 2, the diagrams** — the architecture and sequence diagrams, drawn from the design part 1 decided. No graph, no
+  drift, no context.
+- **Part 3, the documentation tasks** — one call per batch of at most 20 confirmed drift items (`docBatchItems`),
+  bounded also by 24 KiB of drift evidence per call (`docBatchBytes`). No graph: a documentation target is a
+  documentation path, which the drift item already carries.
 
 Parts 2 and 3 do not depend on each other and run concurrently under the same `MaxParallel` limit as the specialists.
 Each part is checkpointed (`runState.ArchDesign`, `ArchDiagrams`, `ArchDocs`), so a failure costs its own call and a
