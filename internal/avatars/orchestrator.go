@@ -318,7 +318,7 @@ func (o *orchestrator) runPM(ctx context.Context, c int) error {
 		system: PMSystemPrompt(), schema: synthesizer.SchemaPM, cycle: c, status: statusThinking,
 		summary: "Drafting epics and user stories from the approved product requirements.",
 	}
-	doc, raw, err := runStage(o, ctx, sp, o.pmIn, o.parsePM)
+	doc, raw, err := runStage(o, ctx, sp, fixedInput(o.pmIn), o.parsePM)
 	if err != nil {
 		return err
 	}
@@ -437,55 +437,8 @@ func (o *orchestrator) requiredFor(ws string) []contracts.Critique {
 }
 
 // --- Technical Architect ----------------------------------------------------------------------
-
-func (o *orchestrator) runArchitect(ctx context.Context, c int) error {
-	o.mu.Lock()
-	prev := o.st.Arch
-	oldArch := o.arch
-	decisions := append([]contracts.Decision{}, o.st.Decisions...)
-	o.mu.Unlock()
-
-	sp := stageSpec{
-		avatar: relay.StageArchitect, role: contracts.RoleArchitect, slot: contracts.SlotMain, model: o.in.Models.Main,
-		system: ArchitectSystemPrompt(), schema: synthesizer.SchemaArchitect, cycle: c, status: statusThinking,
-		summary: "Mapping the stories onto module boundaries, contracts and a workstream DAG.",
-	}
-	var rev *revisionInput
-	if prev.present() {
-		rev = &revisionInput{PreviousDraft: prev.Raw, RequiredChanges: o.requiredFor("")}
-		sp.status = statusRevising
-		sp.summary = "Revising the architecture for the open critiques; unaffected drafts are kept."
-	}
-	payload, err := fitPayload(sp.avatar, &architectPayload{
-		Cycle: c, PM: o.pm, TechnicalAppendix: o.in.PRD.TechnicalAppendix, Graph: o.graphForPrompt(),
-		DocDrift: nonNilDrift(o.in.DocDrift), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
-		Decisions: decisions, Revision: rev,
-	})
-	if err != nil {
-		return o.failStage(ctx, sp, err)
-	}
-	doc, raw, err := runStage(o, ctx, sp, payload, o.parseArchitect)
-	if err != nil {
-		return err
-	}
-	n := o.nextRev(relay.StageArchitect)
-	o.mu.Lock()
-	o.arch = doc
-	o.st.Arch = draftRec{Raw: raw, Cycle: c, Rev: n}
-	if prev.present() {
-		o.invalidateByContractsLocked(oldArch, doc)
-	}
-	o.mu.Unlock()
-	o.save()
-	return o.publishDraft(ctx, relay.StageArchitect, synthesizer.SchemaArchitect, c, raw, n)
-}
-
-func nonNilDrift(in []contracts.DocDriftItem) []contracts.DocDriftItem {
-	if in == nil {
-		return []contracts.DocDriftItem{}
-	}
-	return in
-}
+//
+// The stage itself runs in parts; see architect.go.
 
 // invalidateByContractsLocked implements "re-run the architect only if shared
 // contracts change, then the affected specialists": a specialist is stale when

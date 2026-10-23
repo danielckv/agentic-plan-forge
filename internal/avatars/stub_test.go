@@ -78,6 +78,14 @@ func newStub(t *testing.T, fx synthtest.Fixture) *stub {
 // default answer.
 func (s *stub) on(key string, fn func(c *call, in input) (reply, bool)) { s.hooks[key] = fn }
 
+// The architect answers in parts: the design, the diagrams and one call per
+// batch of documentation tasks. Only the design part keeps the bare "architect"
+// key, so a test that fails or counts "architect" means the design call.
+const (
+	keyArchDiagrams = "architect:diagrams"
+	keyArchDocs     = "architect:docs"
+)
+
 func keyOf(req contracts.GenerateRequest, in input) string {
 	switch req.Role {
 	case contracts.RoleSpecialist:
@@ -85,6 +93,12 @@ func keyOf(req contracts.GenerateRequest, in input) string {
 	case contracts.RoleProductManager:
 		return "pm"
 	case contracts.RoleArchitect:
+		if _, ok := in.Fields["id_prefix"]; ok {
+			return keyArchDocs
+		}
+		if _, ok := in.Fields["pm"]; !ok {
+			return keyArchDiagrams
+		}
 		return "architect"
 	case contracts.RoleCritic:
 		return "critic"
@@ -167,7 +181,13 @@ func (s *stub) defaultReply(key string, in input) reply {
 	case key == "pm":
 		return reply{Content: raw(s.fx.PM)}
 	case key == "architect":
-		return reply{Content: raw(s.fx.Architect)}
+		design := s.fx.Architect
+		design.Diagrams, design.DocTasks = synthesizer.DiagramSet{}, nil
+		return reply{Content: raw(design)}
+	case key == keyArchDiagrams:
+		return reply{Content: raw(synthesizer.ArchitectDoc{Diagrams: s.fx.Architect.Diagrams})}
+	case key == keyArchDocs:
+		return reply{Content: raw(synthesizer.ArchitectDoc{DocTasks: s.docTasks(in)})}
 	case strings.HasPrefix(key, relay.StageSpecialistPrefix):
 		ws := strings.TrimPrefix(key, relay.StageSpecialistPrefix)
 		for _, sp := range s.fx.Specialists {
@@ -182,6 +202,24 @@ func (s *stub) defaultReply(key string, in input) reply {
 		return reply{Content: raw(synthesizer.SynthesisDoc{ExecutiveSummary: "Finance can export invoices safely.", CoverageCaveats: []string{"One MEDIUM tradeoff is accepted."}})}
 	}
 	return reply{Err: fmt.Errorf("stub has no answer for %q", key)}
+}
+
+// docTasks answers one documentation batch: the fixture task, repeated for
+// every drift item the payload carries, with the id prefix the payload names.
+func (s *stub) docTasks(in input) []contracts.TechnicalTask {
+	prefix := in.str("id_prefix")
+	var items []contracts.DocDriftItem
+	_ = json.Unmarshal(in.Fields["documentation_drift"], &items)
+	template := s.fx.Architect.DocTasks[0]
+	out := make([]contracts.TechnicalTask, 0, len(items))
+	for _, item := range items {
+		t := template
+		t.ID = prefix + item.ID
+		t.DocDriftIDs = []string{item.ID}
+		t.Targets = []contracts.Target{{Path: item.DocFilePath, Operation: contracts.OpDocument}}
+		out = append(out, t)
+	}
+	return out
 }
 
 func (s *stub) count(key string) int {

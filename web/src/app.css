@@ -3771,6 +3771,116 @@ figure > .pf-diagram-source { border-top: none; }
   background: var(--pf-epic);
 }
 
+/* ---------- usage rail: what each host was asked to do ---------- */
+
+.pf-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pf-usage-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+}
+
+.pf-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-usage-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+}
+
+.pf-usage-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pf-usage-host {
+  color: var(--pf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-usage-share {
+  color: var(--pf-ink-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-usage-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--pf-border);
+}
+
+.pf-usage-bar span {
+  display: block;
+  height: 100%;
+  background: var(--pf-epic);
+}
+
+.pf-usage-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-usage-failed {
+  color: var(--pf-danger);
+}
+
+.pf-usage-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pf-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-usage-table th,
+.pf-usage-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--pf-border);
+  text-align: right;
+}
+
+.pf-usage-table thead th,
+.pf-usage-table tbody th {
+  color: var(--pf-ink-2);
+  font-weight: 500;
+  text-align: left;
+}
+
+.pf-usage-table tbody th {
+  color: var(--pf-ink);
+}
+
 .pf-finding {
   display: flex;
   flex-direction: column;

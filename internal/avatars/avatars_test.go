@@ -125,12 +125,21 @@ func TestPMRequestNeverCarriesRepositoryMaterial(t *testing.T) {
 	}
 
 	// Sanity: the test is meaningful because the technical avatars do see the
-	// graph, drift and appendix, but never the local root path.
+	// graph, drift and appendix, but never the local root path. The architect
+	// answers in parts: the design reads the graph and the appendix, the
+	// documentation part reads the drift.
 	arch := h.stub.callsOf("architect")[0].Req
-	for _, want := range []string{graphSym, appendix, driftText, modPath} {
+	for _, want := range []string{graphSym, appendix, modPath} {
 		if !strings.Contains(string(arch.UserPayload), want) {
-			t.Errorf("architect request is missing %q", want)
+			t.Errorf("architect design request is missing %q", want)
 		}
+	}
+	docs := h.stub.callsOf(keyArchDocs)
+	if len(docs) == 0 {
+		t.Fatal("no documentation-task call was made for the drift item")
+	}
+	if !strings.Contains(string(docs[0].Req.UserPayload), driftText) {
+		t.Errorf("documentation request is missing %q", driftText)
 	}
 	for _, c := range h.stub.allCalls() {
 		if strings.Contains(string(c.Req.UserPayload), rootPath) || strings.Contains(c.Req.SystemPrompt, rootPath) {
@@ -652,7 +661,12 @@ func TestEmptyTerminalResultCountsAsFailure(t *testing.T) {
 	}
 }
 
-func TestCallTimeoutIsBoundedAndRetriedOnce(t *testing.T) {
+// A call that outran its timeout is never repeated unchanged: that spends a
+// second full timeout to fail the same way. The Product Manager payload is the
+// nine product fields and has no evidence to give up, so the stage fails after
+// one call. A payload that can shrink is retried smaller instead; see
+// TestATimedOutStageRetriesWithLessEvidence.
+func TestCallTimeoutIsBoundedAndNotRepeated(t *testing.T) {
 	h := newHarness(t, synthtest.Sample())
 	h.in.CallTimeout = 25 * time.Millisecond
 	h.stub.delay = time.Hour
@@ -661,8 +675,8 @@ func TestCallTimeoutIsBoundedAndRetriedOnce(t *testing.T) {
 	if !errors.As(err, &stage) || stage.Stage != "pm" || !errors.Is(stage.Err, context.DeadlineExceeded) {
 		t.Fatalf("Run error = %v, want a PM StageError wrapping the deadline", err)
 	}
-	if h.stub.count("pm") != 2 {
-		t.Errorf("PM calls = %d, want 2", h.stub.count("pm"))
+	if h.stub.count("pm") != 1 {
+		t.Errorf("PM calls = %d, want 1: a timed-out call is not repeated unchanged", h.stub.count("pm"))
 	}
 	if got := h.stub.callsOf("pm")[0].Req.Timeout; got != 25*time.Millisecond {
 		t.Errorf("request timeout = %v", got)

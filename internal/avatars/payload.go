@@ -30,8 +30,9 @@ type trimmable interface {
 
 // fitPayload marshals p, trimming its evidence until it fits the stage bound.
 // A payload that cannot be made to fit returns an ErrBound naming the parts
-// that filled it.
-func fitPayload(avatar string, p trimmable) (json.RawMessage, error) {
+// that filled it. The result keeps p, so a call that outruns the clock can be
+// retried from a smaller payload.
+func fitPayload(avatar string, p trimmable) (*stageInput, error) {
 	raw := mustJSON(p)
 	for len(raw) > contracts.MaxStagePayloadBytes {
 		note, ok := p.trim()
@@ -46,7 +47,7 @@ func fitPayload(avatar string, p trimmable) (json.RawMessage, error) {
 		p.addNote(note)
 		raw = mustJSON(p)
 	}
-	return raw, nil
+	return &stageInput{raw: raw, src: p}, nil
 }
 
 // largestParts names the biggest top-level fields of a payload, largest first.
@@ -88,22 +89,6 @@ func storyKeywords(stories []contracts.Story) []string {
 		texts = append(texts, s.AcceptanceCriteria...)
 	}
 	return ast.KeywordsFromText(texts...)
-}
-
-// trimDrift halves the drift list, keeping the items the stories are about.
-// An empty list has nothing left to give.
-func trimDrift(items []contracts.DocDriftItem, stories []contracts.Story) ([]contracts.DocDriftItem, string, bool) {
-	if len(items) == 0 {
-		return items, "", false
-	}
-	size := jsonSize(items)
-	kept, info := ast.DriftDigest(items, ast.DriftDigestOptions{
-		Keywords: storyKeywords(stories), MaxBytes: max(size/2, 1),
-	})
-	if len(kept) == len(items) {
-		return items[:0], noteOf("documentation drift", len(items), 0), true
-	}
-	return kept, noteOf("documentation drift", info.TotalItems, info.IncludedItems), true
 }
 
 // trimContext halves the project context, dropping the lowest-ranked excerpts
@@ -168,14 +153,10 @@ func jsonSize(v any) int {
 
 func (p *architectPayload) addNote(note string) { p.EvidenceNotes = append(p.EvidenceNotes, note) }
 
-// trim gives up the drift list, then the project context, then the graph, then
-// the PRD's technical appendix. The stories and the Product Manager draft are
-// the stage's subject and are never cut.
+// trim gives up the project context, then the graph, then the PRD's technical
+// appendix. The stories and the Product Manager draft are the stage's subject
+// and are never cut.
 func (p *architectPayload) trim() (string, bool) {
-	if items, note, ok := trimDrift(p.DocDrift, p.PM.Stories); ok {
-		p.DocDrift = items
-		return note, true
-	}
 	if c, note, ok := trimContext(p.Context); ok {
 		p.Context = c
 		return note, true

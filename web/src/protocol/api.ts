@@ -106,6 +106,24 @@ export interface ImpactMap {
   generated_at?: string;
 }
 
+/** One host, model and role's share of this session (`contracts.UsageRow`). */
+export interface UsageRow {
+  host: string;
+  model: string;
+  role: string;
+  requests: number;
+  failures: number;
+  input_tokens: number;
+  output_tokens: number;
+  milliseconds: number;
+}
+
+/** GET /api/usage (`contracts.UsageReport`). */
+export interface UsageReport {
+  rows: UsageRow[];
+  totals: UsageRow;
+}
+
 /** One draft epic rendered as a file (`app.PlanFile`). */
 export interface PlanFile {
   id: string;
@@ -142,6 +160,10 @@ export function fetchProjectContext(): Promise<ProjectContext> {
 
 export function fetchImpact(): Promise<ImpactMap> {
   return getJSON<ImpactMap>("/api/impact");
+}
+
+export function fetchUsage(): Promise<UsageReport> {
+  return getJSON<UsageReport>("/api/usage");
 }
 
 /** The blocks (no argument), one block's declarations, or a name search. */

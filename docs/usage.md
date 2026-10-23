@@ -124,8 +124,9 @@ The four avatars sit across the top with what each is doing now. Click one to sh
 
 - **Discussion.** Every status, draft, critic finding and decision in the order it happened. Decisions the avatars cannot
   make wait at the top as A/B cards; synthesis waits until you choose.
-- **Plan taking shape.** The Product Manager's epics as files, the architect's diagram and workstreams, and the critic's
-  findings by severity.
+- **Plan taking shape.** The Product Manager's epics as files, the architect's diagram and workstreams, the critic's
+  findings by severity, and **Usage**: how many calls each generation host served, the tokens it reported and how long
+  it took, per host and per avatar.
 
 **Synthesize Master Spec** unlocks once every avatar has finished the cycle, no CRITICAL or HIGH finding is open and no
 decision waits. A run that reaches the cycle limit with blocking findings pauses and offers to retry the architect or
@@ -133,7 +134,15 @@ revise the requirements.
 
 **When a stage fails.** The room says which stage failed and offers **Retry stage** and **Revise baseline**. The avatars
 that never ran are marked cancelled rather than left waiting. Retrying re-runs only the failed stage: every draft that
-was already validated is kept.
+was already validated is kept. The button reads **Retrying…** until the board moves, and a second click is refused
+rather than cancelling the call the first one started.
+
+**How the architect runs.** The stage answers in three parts: the design (workstreams and interface contracts), the
+diagrams drawn from it, and the documentation tasks in batches of at most 20 stale documents. The diagrams and the
+batches run at the same time, up to the configured `max_parallel`. Each part is kept on its own, so a retry re-runs the
+part that failed and the specialists start as soon as the design is validated. A call that outruns the 180 second host
+limit is not repeated: it runs again with half its evidence, and says in the payload what it gave up. See
+[ADR 0007](adrs/0007-the-architect-answers-in-parts.md).
 
 **When you come back.** An unfinished run is kept in `docs/plans/.plan/run.json`, so closing the window or losing the
 process does not throw away work a model was already paid for. The next run over the same requirements picks the drafts
@@ -143,8 +152,10 @@ the run starts over. Approving a plan deletes the file.
 
 **What the avatars are given.** Each technical stage receives a bounded view of the repository: the code graph (200 KiB),
 the project notes (64 KiB) and the documentation drift list (128 KiB, confirmed drift first, then what your stories are
-about). When a stage input still does not fit its limit, evidence is given up in that order and the payload says what was
-cut, so the model treats the gap as unchecked rather than as nothing to do.
+about). Each part of a stage receives only what it answers: the architect's design part gets no drift, its documentation
+part gets no code graph. When a stage input still does not fit its limit, or the call outruns the clock, evidence is
+given up in that order and the payload says what was cut, so the model treats the gap as unchecked rather than as
+nothing to do.
 
 ### 3. Synthesis: the specification
 

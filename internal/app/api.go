@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/danielckv/agentic-plan-forge/internal/config"
+	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/ingestion"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 )
@@ -35,6 +36,7 @@ func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/status", s.handleStatus)
 	s.bridge.Handle("GET /api/context", s.handleContext)
 	s.bridge.Handle("GET /api/impact", s.handleImpact)
+	s.bridge.Handle("GET /api/usage", s.handleUsage)
 	s.bridge.Handle("GET /api/components", s.handleComponents)
 	s.bridge.Handle("GET /api/plan-files", s.handlePlanFiles)
 	s.bridge.Handle("POST /api/reinterpret", s.handleReinterpret)
@@ -71,6 +73,19 @@ func (s *appSession) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.exec.Status())
+}
+
+// GET /api/usage — what this session has asked each host and model to do.
+func (s *appSession) handleUsage(w http.ResponseWriter, _ *http.Request) {
+	if s.meter == nil {
+		writeJSON(w, http.StatusOK, contracts.UsageReport{Rows: []contracts.UsageRow{}})
+		return
+	}
+	report := s.meter.Report()
+	if report.Rows == nil {
+		report.Rows = []contracts.UsageRow{}
+	}
+	writeJSON(w, http.StatusOK, report)
 }
 
 // POST /api/reinterpret — the Page 1 "Re-interpret" button.
