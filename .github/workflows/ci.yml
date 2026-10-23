@@ -15,7 +15,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # GitHub has no native debounce, so this is it: every job waits on a step
+  # that sleeps, and `cancel-in-progress` above kills the whole run when the
+  # next push arrives. Only the last push of a burst ever reaches the jobs
+  # below, so one piece of work costs one CI run instead of one per push.
+  #
+  # The wait is skipped outside a pull request: a push to main is already the
+  # final state of its work, and a dispatch is a deliberate ask.
+  debounce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Coalesce a burst of pushes
+        if: github.event_name == 'pull_request'
+        run: sleep 900
+
   actionlint:
+    needs: debounce
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,6 +45,7 @@ jobs:
         run: ./actionlint -color
 
   markdownlint:
+    needs: debounce
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -42,6 +59,7 @@ jobs:
           globs: '**/*.md'
 
   editorconfig:
+    needs: debounce
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -55,6 +73,7 @@ jobs:
         run: editorconfig-checker
 
   links:
+    needs: debounce
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -69,6 +88,7 @@ jobs:
           fail: true
 
   go-shared:
+    needs: debounce
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -87,6 +107,7 @@ jobs:
         run: go test ./internal/relay/
 
   go-server:
+    needs: debounce
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -107,6 +128,7 @@ jobs:
         run: '! go list -deps -tags server ./cmd/relay | grep -Eq "internal/(ast|ingestion|host|avatars|storage|synthesizer|window|app|planstate|gather)|/web$|tree-sitter|ledongthuc/pdf|modernc.org/sqlite"'
 
   web:
+    needs: debounce
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -194,6 +216,7 @@ jobs:
         run: go test -tags client ./...
 
   deploy-script:
+    needs: debounce
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

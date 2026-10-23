@@ -1,5 +1,9 @@
 name: Release
 
+# Dispatch only: no build runs on a merge. Dispatch this workflow against a
+# `v*.*.*` tag to cut a release — that publishes the archives and pushes the
+# relay image. Dispatching against a branch builds and packages every platform
+# without releasing, which is the way to check a cross-compilation change.
 on:
   workflow_dispatch:
 
@@ -44,6 +48,9 @@ jobs:
       matrix:
         include:
           - { runner: macos-15, os: darwin, arch: arm64, exe: "" }
+          - { runner: macos-15-intel, os: darwin, arch: amd64, exe: "" }
+          - { runner: ubuntu-24.04, os: linux, arch: amd64, exe: "" }
+          - { runner: ubuntu-24.04-arm, os: linux, arch: arm64, exe: "" }
           - { runner: windows-2022, os: windows, arch: amd64, exe: ".exe" }
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -200,7 +207,7 @@ jobs:
             || gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
 
   relay-image:
-    if: github.event_name == 'push'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: package
     runs-on: ubuntu-24.04
     timeout-minutes: 30

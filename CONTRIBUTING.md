@@ -101,6 +101,12 @@ Tooling installation notes:
 - Keep pull requests small and focused; unrelated changes belong in separate pull requests.
 - Fill in the pull request template completely.
 - Ensure all CI checks pass. Reviewers may ask for changes before merging.
+- CI waits 15 minutes before it starts. Pushing again inside that window cancels the waiting run and restarts the
+  clock, so a burst of fixes costs one CI run instead of one per push. Run the checks above locally first; do not wait
+  on CI to find what `go test` would have told you.
+- Releases are cut by dispatching the Release workflow by hand. Dispatch it against a `v*.*.*` tag to publish the
+  archives and push the relay image; dispatch it against a branch to build and package every platform without
+  releasing, which is how to check a cross-compilation change.
 - Maintainer review is expected before a pull request is merged. When no second reviewer is available, the maintainer self-merges.
 
 ## Licensing of Contributions
