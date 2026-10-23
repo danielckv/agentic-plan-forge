@@ -40,10 +40,22 @@ name and fails with a comment pointing here, so the boundary cannot be reopened 
 
 **Retrieve, then judge. The model never writes a path.**
 A deterministic pass assembles an evidence pack per epic: the top 20 public declarations by the
-keyword ranking, and up to 6 documentation, specification and decision excerpts. Each candidate gets
-an identifier (`c1`…`cN`), unique across the pass. The model is shown those candidates and answers
-with their identifiers; `resolve` reads the path, the line and the declaration back out of the
-candidate. An entry naming an identifier that was not offered is dropped and counted.
+keyword ranking, up to 16 whole directories, and up to 6 documentation, specification and decision
+excerpts. Each candidate gets an identifier (`c1`…`cN`), unique across the pass. The model is shown
+those candidates and answers with their identifiers; `resolve` reads the path, the line and the
+declaration back out of the candidate. An entry naming an identifier that was not offered is dropped
+and counted.
+
+The declarations give precision and the directories give recall. Requirements written in business
+language match no declaration name — the failure this ADR exists to fix — so without the directories
+the model could only choose among the parts the keywords happened to reach. The first live run
+against this repository proved the point: with declarations alone it returned documents and test
+functions; with the directories it named `internal/impact`, `internal/gather` and
+`ProjectContext` in `internal/app/projectcontext.go`.
+
+Test files are not candidates. A test is how a change is checked, not a part of the project a plan
+changes, and the same live run had reported `TestBuildFindsAConflictWithADecisionRecord` as something
+the work touches. `IsTestPath` excludes them from both the declarations and the directories.
 
 A fabricated file path is therefore structurally impossible rather than merely unlikely, and
 `provenance` on every link is the exact text the model saw. `TestBuildRefusesAPathTheModelInvented`
@@ -71,9 +83,10 @@ scanning this repository (269 files, 50 modules):
 
 | Evidence sent | Wall clock | Share of the 180 s cap |
 | ---: | ---: | ---: |
-| 8,786 characters | 18 s | 10% |
-| 8,537 characters | 34 s | 19% |
-| 17,083 characters | 45 s | 25% |
+| 10,068 characters | 18 s | 10% |
+| 10,888 characters | 31 s | 17% |
+| 10,691 characters | 32 s | 18% |
+| 17,083 characters (two packs in one call) | 45 s | 25% |
 
 Normalization needs 8,000 for the same 180 s because it restates every requirement; this stage
 returns at most eight short entries per epic, so the same input costs about a third of the time. The

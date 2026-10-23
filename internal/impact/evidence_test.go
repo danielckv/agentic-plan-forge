@@ -133,6 +133,119 @@ func TestPacksCarryNoMachinePathAndNoPrivateSymbol(t *testing.T) {
 	}
 }
 
+// TestPacksOfferNoTestFile guards what the first live run got wrong: the model
+// was handed test functions and reported them as parts of the project the work
+// touches. A test is how a change is checked, not a thing the plan changes.
+func TestPacksOfferNoTestFile(t *testing.T) {
+	in := fixture()
+	in.Graph.Symbols["internal/billing/export_test.go"] = []contracts.Symbol{
+		sym("internal/billing/export_test.go", "TestExportInvoices", contracts.SymbolFunction, 7, true),
+	}
+	in.Graph.Symbols["web/src/billing/export.test.ts"] = []contracts.Symbol{
+		sym("web/src/billing/export.test.ts", "exportInvoicesSuite", contracts.SymbolFunction, 3, true),
+	}
+
+	packs, _ := buildPacks(context.Background(), in)
+	for _, c := range allCandidates(packs) {
+		if c.Symbol.Path != "" && IsTestPath(c.Symbol.Path) {
+			t.Errorf("a test file was offered as a part of the project: %s", c.Symbol.Path)
+		}
+		if c.Block.Path != "" && IsTestPath(c.Block.Path) {
+			t.Errorf("a test directory was offered as a part of the project: %s", c.Block.Path)
+		}
+	}
+}
+
+func TestIsTestPath(t *testing.T) {
+	for p, want := range map[string]bool{
+		"internal/app/planfiles_test.go":      true,
+		"web/src/protocol/schema.test.ts":     true,
+		"web/src/ui/Dialog.spec.tsx":          true,
+		"tests/test_billing.py":               true,
+		"internal/app/planfiles.go":           false,
+		"internal/billing/latest_export.go":   false,
+		"web/src/pages/composer/PlanRail.tsx": false,
+	} {
+		if got := IsTestPath(p); got != want {
+			t.Errorf("IsTestPath(%q) = %v, want %v", p, got, want)
+		}
+	}
+}
+
+// TestPacksOfferWholeBlocksTheKeywordsMissed is the recall half of the design:
+// requirements written in business language match no declaration name, so the
+// model must still be able to name the directory the work belongs in.
+func TestPacksOfferWholeBlocksTheKeywordsMissed(t *testing.T) {
+	in := fixture()
+	in.Graph.Modules = []contracts.ModuleBoundary{
+		{ID: "mod:go:internal/billing", Path: "internal/billing", Language: "go"},
+		{ID: "mod:go:internal/mail", Path: "internal/mail", Language: "go"},
+	}
+	// Requirements a keyword search cannot connect to any declaration name.
+	in.PRD.Epics = []contracts.DraftEpic{{
+		ID: "E1", Title: "Tell people when something finished",
+		Requirements: []string{"Somebody should hear about it once the work completes."},
+	}}
+
+	packs, _ := buildPacks(context.Background(), in)
+	var blockPaths []string
+	for _, c := range allCandidates(packs) {
+		if c.Block.Path != "" {
+			blockPaths = append(blockPaths, c.Block.Path)
+		}
+	}
+	if len(blockPaths) == 0 {
+		t.Fatal("no whole directory was offered; the model could only pick what the keywords reached")
+	}
+	found := false
+	for _, p := range blockPaths {
+		if p == "internal/mail" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("blocks = %v, want internal/mail among them: no keyword reaches it, so only the block can", blockPaths)
+	}
+
+	// A directory already represented by a ranked declaration is not repeated.
+	in.PRD.Epics = []contracts.DraftEpic{{ID: "E1", Title: "Invoice export", Requirements: []string{"Export invoices"}}}
+	packs, _ = buildPacks(context.Background(), in)
+	for _, c := range allCandidates(packs) {
+		if c.Block.Path == "internal/billing" {
+			t.Error("internal/billing was offered whole as well as by declaration")
+		}
+	}
+}
+
+func TestBlockCandidatesResolveToTheirDirectory(t *testing.T) {
+	in := fixture()
+	in.Graph.Modules = []contracts.ModuleBoundary{{ID: "mod:go:internal/mail", Path: "internal/mail", Language: "go"}}
+	in.PRD.Epics = []contracts.DraftEpic{{ID: "E1", Title: "Notify", Requirements: []string{"Somebody hears about it."}}}
+	packs, _ := buildPacks(context.Background(), in)
+
+	var blockID string
+	for _, c := range allCandidates(packs) {
+		if c.Block.Path == "internal/mail" {
+			blockID = c.ID
+		}
+	}
+	if blockID == "" {
+		t.Fatal("internal/mail was not offered as a block")
+	}
+
+	links, _ := resolve(packs, wireMap{SchemaVersion: 1, Entries: []wireEntry{
+		{EpicID: "E1", CandidateID: blockID, Area: "Notifications", Verdict: contracts.ImpactChange,
+			Reason: "Messages to people are sent from here, and this adds one more.", Confidence: "HIGH"},
+	}})
+	got := links["E1"]
+	if len(got) != 1 || got[0].Path != "internal/mail" || got[0].Area != "Notifications" {
+		t.Fatalf("block link = %+v, want it pointing at internal/mail", got)
+	}
+	if got[0].SymbolName != "" || got[0].Line != 0 {
+		t.Errorf("a whole directory must not claim a declaration or a line: %+v", got[0])
+	}
+}
+
 func TestBatchPacksRespectsTheEvidenceBudget(t *testing.T) {
 	var packs []pack
 	for i := 0; i < 12; i++ {

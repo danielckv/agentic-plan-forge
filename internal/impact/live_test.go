@@ -72,14 +72,27 @@ func TestLiveMeasureEvidenceBudget(t *testing.T) {
 			cost += p.chars()
 		}
 		start := time.Now()
-		_, _, err := callWithRetries(ctx, in, b, i+1, len(batches))
+		links, notes, err := callWithRetries(ctx, in, b, i+1, len(batches))
 		elapsed := time.Since(start)
 		t.Logf("batch %d of %d: %d packs, %d chars -> %v (err=%v)", i+1, len(batches), len(b), cost, elapsed.Round(time.Second), err)
 		if err != nil {
 			t.Errorf("batch %d failed: %v", i+1, err)
+			continue
 		}
 		if elapsed > contracts.MaxGenerateTimeout {
 			t.Errorf("batch %d took %v, over the %v call timeout: MaxEvidenceChars is too high", i+1, elapsed, contracts.MaxGenerateTimeout)
+		}
+		for _, n := range notes {
+			t.Logf("  note: %s", n)
+		}
+		for epicID, ls := range links {
+			for _, l := range ls {
+				where := l.Path
+				if l.SymbolName != "" {
+					where = l.SymbolName + " — " + where
+				}
+				t.Logf("  [%s] %-14s %-22s %s\n        %s", epicID, l.Verdict, l.Area, where, l.Reason)
+			}
 		}
 	}
 }

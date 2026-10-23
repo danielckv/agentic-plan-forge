@@ -35,10 +35,10 @@ const MapSchemaID = "impact_map.v1"
 
 const (
 	// PromptVersion invalidates cached maps when the system prompt changes.
-	PromptVersion = 1
+	PromptVersion = 2
 	// ExtractorVersion invalidates cached maps when evidence assembly changes:
 	// candidate selection, ranking or excerpt clipping.
-	ExtractorVersion = 1
+	ExtractorVersion = 2
 )
 
 const (
@@ -220,14 +220,38 @@ func summarize(m contracts.ImpactMap) string {
 
 // ---------------------------------------------------------------- candidates
 
+// testFileSuffixes mark a file as a test across the languages the scanner
+// parses. A test is how a change is checked, not a part of the project the
+// plan changes, so offering one as something the requirements touch sends the
+// reader to the wrong file.
+var testFileSuffixes = []string{
+	"_test.go", ".test.ts", ".test.tsx", ".test.js", ".test.jsx",
+	".spec.ts", ".spec.tsx", ".spec.js", ".spec.jsx", "_test.py", "_test.rs",
+}
+
+// IsTestPath reports whether a repository-relative path is a test file.
+func IsTestPath(rel string) bool {
+	lower := strings.ToLower(rel)
+	base := path.Base(lower)
+	for _, suffix := range testFileSuffixes {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+	return strings.HasPrefix(base, "test_") || strings.HasPrefix(base, "conftest.")
+}
+
 // publicSymbols lists every public declaration of g, sorted by path and line,
-// so a ranking over them is stable.
+// so a ranking over them is stable. Test files are left out: see IsTestPath.
 func publicSymbols(g *contracts.RepoContextGraph) []contracts.Symbol {
 	if g == nil {
 		return nil
 	}
 	var out []contracts.Symbol
-	for _, syms := range g.Symbols {
+	for p, syms := range g.Symbols {
+		if IsTestPath(p) {
+			continue
+		}
 		for _, s := range syms {
 			if s.Visibility != ast.VisibilityPublic || s.Name == "" {
 				continue
@@ -327,6 +351,23 @@ func codeLink(epicID string, s contracts.Symbol, area, verdict, reason, source s
 		Reason:     reason,
 		Source:     source,
 		Provenance: s.Signature,
+	}
+}
+
+// blockLink describes one directory of the project, for work that belongs
+// somewhere without belonging to one declaration.
+func blockLink(epicID, dir, area, verdict, reason, source string) contracts.ImpactLink {
+	if area == "" {
+		area = dir
+	}
+	return contracts.ImpactLink{
+		ID:      linkID(epicID, contracts.ImpactKindCode, dir, ""),
+		Area:    area,
+		Kind:    contracts.ImpactKindCode,
+		Path:    dir,
+		Verdict: verdict,
+		Reason:  reason,
+		Source:  source,
 	}
 }
 

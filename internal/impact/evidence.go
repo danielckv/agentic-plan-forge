@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,12 +27,12 @@ const (
 	// applied to the unit this stage splits on.
 	//
 	// Measured against claude-opus-5 on Claude Code, scanning this repository
-	// (269 files, 50 modules): 8,537 characters took 34s, 8,786 took 18s, and
-	// 17,083 took 45s. Normalization needs 8,000 for the same 180s because it
-	// restates every requirement; this stage returns at most eight short
-	// entries per epic, so the same input costs a third of the time. 18,000
-	// leaves a fourfold margin for a slower host. See
-	// TestLiveMeasureEvidenceBudget.
+	// (269 files, 50 modules): a 10,068-character pack took 18s, 10,691 took
+	// 32s, 10,888 took 31s, and two packs batched at 17,083 took 45s.
+	// Normalization needs 8,000 for the same 180s because it restates every
+	// requirement; this stage returns at most eight short entries per epic, so
+	// the same input costs about a third of the time. 18,000 leaves a fourfold
+	// margin for a slower host. See TestLiveMeasureEvidenceBudget.
 	MaxEvidenceChars = 18000
 	// MinEvidenceChars is the size below which a pack that overran the call
 	// timeout is no longer shrunk: at this size the timeout is not a size
@@ -44,7 +46,15 @@ const (
 	// maxTotalDocCandidates bounds the document excerpts across every pack, so
 	// a twelve-epic PRD cannot spend the whole budget on prose.
 	maxTotalDocCandidates = 40
+	// maxBlockNames is how many declarations name one block in a pack.
+	maxBlockNames = 5
 )
+
+// MaxBlockCandidates is how many whole directories one pack offers beside its
+// ranked declarations. Requirements written in business language match no
+// declaration name, so without these the model could only choose among the
+// parts the keywords happened to reach.
+const MaxBlockCandidates = 16
 
 // candidate is one thing the model may be shown and may link to.
 //
@@ -52,10 +62,28 @@ const (
 // pass. The model answers with ids, so a path it has never been shown cannot
 // appear in the result.
 type candidate struct {
-	ID     string
-	Kind   string
+	ID   string
+	Kind string
+	// Symbol is set for one declaration; Block for a whole directory; Hit for
+	// a documentation, specification or decision excerpt.
 	Symbol contracts.Symbol
+	Block  blockRef
 	Hit    contracts.ContextHit
+}
+
+// blockRef is one directory of the project, offered whole.
+//
+// The ranked declarations give the model precision, and this gives it recall:
+// requirements written in business language match no declaration name, so
+// without the list of blocks the model could only choose among parts the
+// keywords happened to reach.
+type blockRef struct {
+	Path     string
+	Language string
+	Symbols  int
+	// Names are a few declarations from the block, so the model can tell what
+	// the block is for without being shown all of it.
+	Names []string
 }
 
 // pack is one epic's evidence, or the whole-PRD pack when EpicID is empty.
@@ -105,18 +133,78 @@ func (p pack) wire() wirePack {
 }
 
 func (c candidate) wire() wireCandidate {
-	if c.Kind == contracts.ImpactKindCode {
+	switch {
+	case c.Block.Path != "":
+		return wireCandidate{
+			ID: c.ID, Kind: "block", Name: path.Base(c.Block.Path), Where: c.Block.Path,
+			Excerpt: fmt.Sprintf("a %s directory of %d declarations, among them %s",
+				c.Block.Language, c.Block.Symbols, strings.Join(c.Block.Names, ", ")),
+		}
+	case c.Kind == contracts.ImpactKindCode:
 		return wireCandidate{
 			ID: c.ID, Kind: c.Kind, Name: c.Symbol.Name,
 			Where:     c.Symbol.Path + ":" + strconv.Itoa(c.Symbol.StartLine),
 			Signature: clip(c.Symbol.Signature, maxSignatureChars),
 		}
+	default:
+		return wireCandidate{
+			ID: c.ID, Kind: c.Kind, Name: c.Hit.Heading,
+			Where:   c.Hit.Path,
+			Excerpt: clip(c.Hit.Text, maxExcerptChars),
+		}
 	}
-	return wireCandidate{
-		ID: c.ID, Kind: c.Kind, Name: c.Hit.Heading,
-		Where:   c.Hit.Path,
-		Excerpt: clip(c.Hit.Text, maxExcerptChars),
+}
+
+// blocks lists the project's directories, best first for these terms, with a
+// few representative declarations each. Test directories and directories
+// already represented by a ranked declaration are left out: the first are not
+// parts of the project a plan changes, and the second are already offered more
+// precisely.
+func blocks(g *contracts.RepoContextGraph, syms []contracts.Symbol, covered map[string]bool, terms []string, limit int) []blockRef {
+	if g == nil || limit <= 0 {
+		return nil
 	}
+	byDir := map[string][]contracts.Symbol{}
+	for _, s := range syms {
+		byDir[path.Dir(s.Path)] = append(byDir[path.Dir(s.Path)], s)
+	}
+
+	type scored struct {
+		b     blockRef
+		score int
+	}
+	var out []scored
+	for _, m := range g.Modules {
+		if covered[m.Path] || IsTestPath(m.Path) || len(byDir[m.Path]) == 0 {
+			continue
+		}
+		b := blockRef{Path: m.Path, Language: m.Language, Symbols: len(byDir[m.Path])}
+		for _, s := range byDir[m.Path] {
+			if len(b.Names) == maxBlockNames {
+				break
+			}
+			b.Names = append(b.Names, s.Name)
+		}
+		score := 0
+		lower := strings.ToLower(m.Path)
+		for _, t := range terms {
+			if strings.Contains(lower, t) {
+				score++
+			}
+		}
+		out = append(out, scored{b, score})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].score != out[j].score {
+			return out[i].score > out[j].score
+		}
+		return out[i].b.Path < out[j].b.Path
+	})
+	refs := make([]blockRef, 0, min(len(out), limit))
+	for i := 0; i < len(out) && i < limit; i++ {
+		refs = append(refs, out[i].b)
+	}
+	return refs
 }
 
 // packsWire renders a batch of packs for the model.
@@ -167,8 +255,13 @@ func buildPacks(ctx context.Context, in Input) ([]pack, []string) {
 	build := func(epicID, title, goal string, reqs, criteria []string, text string, symLimit int) pack {
 		terms := gather.QueryTerms(text, maxTerms)
 		p := pack{EpicID: epicID, Title: title, Goal: goal, Requirements: reqs, AcceptanceCriteria: criteria}
+		covered := map[string]bool{}
 		for _, s := range rankSymbols(syms, terms, symLimit) {
+			covered[path.Dir(s.Path)] = true
 			p.Candidates = append(p.Candidates, candidate{ID: id(), Kind: contracts.ImpactKindCode, Symbol: s})
+		}
+		for _, b := range blocks(in.Graph, syms, covered, terms, MaxBlockCandidates) {
+			p.Candidates = append(p.Candidates, candidate{ID: id(), Kind: contracts.ImpactKindCode, Block: b})
 		}
 		room := min(MaxDocCandidates, docBudget)
 		for _, h := range gatherPerEpic(ctx, in, text, terms, room) {
