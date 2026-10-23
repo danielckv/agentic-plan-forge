@@ -12,7 +12,7 @@ import (
 
 	"github.com/danielckv/agentic-plan-forge/internal/ast"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
-	"github.com/danielckv/agentic-plan-forge/internal/gather"
+	"github.com/danielckv/agentic-plan-forge/internal/impact"
 )
 
 const (
@@ -36,6 +36,12 @@ type ComponentRef struct {
 	Signature string `json:"signature,omitempty"`
 	Module    string `json:"module"`
 	Language  string `json:"language"`
+	// Verdict, Reason and Confidence are carried only when the impact map put
+	// this declaration on an epic. The component browser leaves them empty: it
+	// lists what exists, and claims nothing about the work.
+	Verdict    string `json:"verdict,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Confidence string `json:"confidence,omitempty"`
 }
 
 // ComponentModule is one block of the repository: a directory of one language
@@ -67,6 +73,9 @@ type PlanFile struct {
 	Criteria     int                    `json:"criteria"`
 	Components   []ComponentRef         `json:"components"`
 	Notes        []contracts.ContextHit `json:"notes"`
+	// Links is what this epic touches, with a verdict and a plain-language
+	// reason each. Components and Notes are projections of it.
+	Links []contracts.ImpactLink `json:"links"`
 }
 
 // PlanFilesView is the body of GET /api/plan-files. Revision is the
@@ -182,84 +191,100 @@ func searchComponents(all []ComponentRef, query string) ([]ComponentRef, bool) {
 	return out, false
 }
 
-// PlanFiles renders the draft epics of the latest interpretation.
+// PlanFiles renders the draft epics of the latest interpretation, each with
+// what it touches.
+//
+// The links come from the impact map, so the rail and the Page 1 panel can
+// never disagree. Before the first map pass, or when the map belongs to an
+// older interpretation, the keyword map is built here instead: it is the same
+// function the map pass itself paints with first, so the rail is never empty
+// and never shows a map for a document the user has since changed.
 func (e *executor) PlanFiles() PlanFilesView {
 	e.mu.Lock()
-	norm, g, pc := e.norm, e.graph, e.projectCtx
+	norm, g, pc, m := e.norm, e.graph, e.projectCtx, e.impactMap
+	repo := e.cfg.Repo
 	e.mu.Unlock()
 	v := PlanFilesView{Files: []PlanFile{}}
 	if norm == nil {
 		return v
 	}
 	v.Revision = norm.Revision
-	all := publicComponents(g)
-	var notes []contracts.ContextHit
-	if pc != nil {
-		notes = pc.Hits
+
+	if m == nil || m.PRDRevision != norm.Revision {
+		in := impact.Input{Repo: repo, PRD: *norm, Graph: g}
+		if pc != nil {
+			in.Context = *pc
+		}
+		lex := impact.Lexical(in)
+		m = &lex
 	}
+
+	all := publicComponents(g)
 	for _, epic := range norm.Epics {
-		text := strings.Join(append(append([]string{epic.Title, epic.Goal}, epic.Requirements...), epic.AcceptanceCriteria...), "\n")
-		terms := gather.QueryTerms(text, 20)
+		links := linksFor(m, epic.ID)
 		f := PlanFile{
 			ID: epic.ID, Title: epic.Title, Goal: epic.Goal, Filename: epicFilename(epic),
 			Requirements: len(epic.Requirements), Criteria: len(epic.AcceptanceCriteria),
-			Components: rankComponents(all, terms, componentsPerEpic),
-			Notes:      rankNotes(notes, terms, notesPerEpic),
+			Links:      links,
+			Components: componentsOf(links, all),
+			Notes:      notesOf(links),
 		}
-		f.Markdown = renderPlanFile(epic, f.Components, f.Notes)
+		f.Markdown = renderPlanFile(epic, links)
 		v.Files = append(v.Files, f)
 	}
 	return v
 }
 
-// rankComponents scores each declaration against the epic's terms: three
-// points when its name holds a term, one when only its path does.
-func rankComponents(all []ComponentRef, terms []string, limit int) []ComponentRef {
-	type scored struct {
-		c     ComponentRef
-		score int
+// linksFor returns the map's links for one epic, or an empty list.
+func linksFor(m *contracts.ImpactMap, epicID string) []contracts.ImpactLink {
+	if m == nil {
+		return []contracts.ImpactLink{}
 	}
-	var hits []scored
-	for _, c := range all {
-		name, p := strings.ToLower(c.Name), strings.ToLower(c.Path)
-		score := 0
-		for _, t := range terms {
-			switch {
-			case strings.Contains(name, t):
-				score += 3
-			case strings.Contains(p, t):
-				score++
+	for _, e := range m.Epics {
+		if e.EpicID == epicID {
+			if e.Links == nil {
+				return []contracts.ImpactLink{}
 			}
-		}
-		if score > 0 {
-			hits = append(hits, scored{c, score})
+			return e.Links
 		}
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
-	out := make([]ComponentRef, 0, min(len(hits), limit))
-	for i := 0; i < len(hits) && i < limit; i++ {
-		out = append(out, hits[i].c)
+	return []contracts.ImpactLink{}
+}
+
+// componentsOf projects the code links back onto the declarations the
+// component browser serves, so the chips, the counts and the @ completion the
+// window already renders keep working. A link whose declaration is no longer
+// in the graph is dropped rather than shown as a component that cannot be
+// opened.
+func componentsOf(links []contracts.ImpactLink, all []ComponentRef) []ComponentRef {
+	byID := make(map[string]ComponentRef, len(all))
+	for _, c := range all {
+		byID[c.ID] = c
+	}
+	out := make([]ComponentRef, 0, len(links))
+	for _, l := range links {
+		if l.Kind != contracts.ImpactKindCode || l.SymbolID == "" {
+			continue
+		}
+		c, ok := byID[l.SymbolID]
+		if !ok {
+			continue
+		}
+		c.Verdict, c.Reason, c.Confidence = l.Verdict, l.Reason, l.Confidence
+		out = append(out, c)
 	}
 	return out
 }
 
-// rankNotes keeps the project-context excerpts that share the most terms with
-// the epic.
-func rankNotes(notes []contracts.ContextHit, terms []string, limit int) []contracts.ContextHit {
-	type scored struct {
-		h     contracts.ContextHit
-		score float64
-	}
-	var hits []scored
-	for _, h := range notes {
-		if s := gather.Relevance(h.Heading+"\n"+h.Text, terms); s > 0 {
-			hits = append(hits, scored{h, s})
+// notesOf returns the documentation, specification and decision links as the
+// excerpts the Notes tab shows.
+func notesOf(links []contracts.ImpactLink) []contracts.ContextHit {
+	out := make([]contracts.ContextHit, 0, len(links))
+	for _, l := range links {
+		if l.Kind == contracts.ImpactKindCode {
+			continue
 		}
-	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
-	out := make([]contracts.ContextHit, 0, min(len(hits), limit))
-	for i := 0; i < len(hits) && i < limit; i++ {
-		out = append(out, hits[i].h)
+		out = append(out, contracts.ContextHit{Path: l.Path, Heading: l.Heading, Text: l.Provenance})
 	}
 	return out
 }
@@ -280,9 +305,52 @@ func epicFilename(e contracts.DraftEpic) string {
 	return name + ".md"
 }
 
+// verdictWord is the verdict as a reader who does not read code reads it. An
+// empty verdict is a keyword match, which claims nothing.
+func verdictWord(l contracts.ImpactLink) string {
+	switch l.Verdict {
+	case contracts.ImpactChange:
+		return "Change"
+	case contracts.ImpactAdd:
+		return "New"
+	case contracts.ImpactReuse:
+		return "Already there"
+	case contracts.ImpactConflict:
+		return "Clashes"
+	default:
+		return "Possibly involved"
+	}
+}
+
+// linkWhere names where a link points, for the reader who does want the file.
+func linkWhere(l contracts.ImpactLink) string {
+	switch {
+	case l.Path == "":
+		return "_nothing yet_"
+	case l.Line > 0:
+		return fmt.Sprintf("`%s:%d`", cellMD(l.Path), l.Line)
+	default:
+		return "`" + cellMD(l.Path) + "`"
+	}
+}
+
+// linkWhat names the thing a link points at: the declaration, the document's
+// heading, or the plain-language area when there is nothing yet.
+func linkWhat(l contracts.ImpactLink) string {
+	switch {
+	case l.SymbolName != "":
+		return "`" + cellMD(l.SymbolName) + "`"
+	case l.Heading != "":
+		return cellMD(l.Heading)
+	default:
+		return cellMD(l.Area)
+	}
+}
+
 // renderPlanFile writes one epic as Markdown: goal, requirements as a
-// checklist, acceptance criteria, then the related code and notes.
-func renderPlanFile(e contracts.DraftEpic, components []ComponentRef, notes []contracts.ContextHit) string {
+// checklist, acceptance criteria, what the work touches, and anything it
+// contradicts.
+func renderPlanFile(e contracts.DraftEpic, links []contracts.ImpactLink) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s · %s\n\n", e.ID, oneLineMD(e.Title))
 	if e.Goal != "" {
@@ -302,21 +370,45 @@ func renderPlanFile(e contracts.DraftEpic, components []ComponentRef, notes []co
 	for _, a := range e.AcceptanceCriteria {
 		fmt.Fprintf(&b, "- %s\n", oneLineMD(a))
 	}
-	b.WriteString("\n## Related code\n\n")
-	if len(components) == 0 {
-		b.WriteString("_No existing component matches this epic yet. It may need new code._\n")
-	} else {
-		b.WriteString("| Component | Kind | Where |\n| :--- | :--- | :--- |\n")
-		for _, c := range components {
-			fmt.Fprintf(&b, "| `%s` | %s | `%s:%d` |\n", cellMD(c.Name), cellMD(c.Kind), cellMD(c.Path), c.Line)
+	var touches, conflicts []contracts.ImpactLink
+	modelRead := false
+	for _, l := range links {
+		if l.Source == contracts.ImpactSourceModel {
+			modelRead = true
 		}
+		if l.Verdict == contracts.ImpactConflict {
+			conflicts = append(conflicts, l)
+			continue
+		}
+		touches = append(touches, l)
 	}
-	if len(notes) > 0 {
-		b.WriteString("\n## Related notes\n\n")
-		for _, n := range notes {
-			line := "`" + cellMD(n.Path) + "`"
-			if n.Heading != "" {
-				line += " — " + oneLineMD(n.Heading)
+
+	b.WriteString("\n## What this touches\n\n")
+	switch {
+	case len(touches) > 0:
+		b.WriteString("| Part of the project | What happens | Where | Why |\n| :--- | :--- | :--- | :--- |\n")
+		for _, l := range touches {
+			why := oneLineMD(l.Reason)
+			if why == "" {
+				why = "_matched by name_"
+			}
+			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", linkWhat(l), verdictWord(l), linkWhere(l), cellMD(why))
+		}
+	case modelRead:
+		b.WriteString("_Nothing in this project matches this epic. It looks like new work._\n")
+	default:
+		b.WriteString("_Nothing matched by name yet. The full read of the project is still running._\n")
+	}
+
+	if len(conflicts) > 0 {
+		b.WriteString("\n## Conflicts with decisions already made\n\n")
+		for _, l := range conflicts {
+			line := "`" + cellMD(l.Path) + "`"
+			if l.Heading != "" {
+				line += " — **" + oneLineMD(l.Heading) + "**"
+			}
+			if l.Reason != "" {
+				line += ": " + oneLineMD(l.Reason)
 			}
 			fmt.Fprintf(&b, "- %s\n", line)
 		}

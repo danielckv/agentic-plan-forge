@@ -23,6 +23,7 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/gather"
+	"github.com/danielckv/agentic-plan-forge/internal/impact"
 	"github.com/danielckv/agentic-plan-forge/internal/ingestion"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
@@ -101,6 +102,15 @@ type StatusView struct {
 	// technical avatars: gathering, ok, none or failed.
 	Context       string `json:"context"`
 	ContextDetail string `json:"contextDetail"`
+	// Impact and ImpactDetail report the impact map: mapping, quick, ok or
+	// failed.
+	Impact       string `json:"impact"`
+	ImpactDetail string `json:"impactDetail"`
+	// ImpactRevision moves on every published map. The window refetches the
+	// impact panel and the plan files when it changes: the interpretation
+	// revision does not move when the model result replaces the keyword
+	// ranking, so keying on that alone would show the first paint forever.
+	ImpactRevision uint64 `json:"impactRevision"`
 	// Interpretation is the revision of the latest interpretation; the window
 	// refetches the plan files when it changes.
 	Interpretation uint64 `json:"interpretation"`
@@ -141,6 +151,8 @@ type executorConfig struct {
 	Scan func(ctx context.Context, opts ast.ScanOptions) (*contracts.RepoContextGraph, error)
 	// Gather overrides gather.Collect (tests).
 	Gather func(ctx context.Context, opts gather.Options) (contracts.ProjectContext, error)
+	// Impact overrides impact.Build (tests).
+	Impact func(ctx context.Context, in impact.Input) (contracts.ImpactMap, error)
 }
 
 // executor is the one LLM pipeline of a session. It reads the authority's
@@ -170,17 +182,24 @@ type executor struct {
 	scanDone    chan struct{}
 	projectCtx  *contracts.ProjectContext
 	contextSeq  uint64
-	pills       StatusView
-	norm        *contracts.NormalizedPRD
-	normKey     string
-	normRev     uint64
-	approvalID  string
-	createdAt   time.Time
-	failure     *approvalFailure
-	members     map[string]bool
-	synced      chan struct{}
-	finished    bool
-	leaseCancel context.CancelFunc
+	// impactMap is the latest published map; impactRev moves with it so the
+	// window refetches when the model result replaces the keyword ranking.
+	impactMap    *contracts.ImpactMap
+	impactRev    uint64
+	impactSeq    uint64
+	impactCancel context.CancelFunc
+	lastScan     time.Time
+	pills        StatusView
+	norm         *contracts.NormalizedPRD
+	normKey      string
+	normRev      uint64
+	approvalID   string
+	createdAt    time.Time
+	failure      *approvalFailure
+	members      map[string]bool
+	synced       chan struct{}
+	finished     bool
+	leaseCancel  context.CancelFunc
 }
 
 func newExecutor(cfg executorConfig) *executor {
@@ -196,7 +215,8 @@ func newExecutor(cfg executorConfig) *executor {
 		scanDone:    make(chan struct{}),
 		pills: StatusView{
 			AST: "scanning", ASTDetail: "0 files parsed, 0 symbols indexed", OCR: "unknown",
-			Context: contextGathering, ContextDetail: "reading project notes, specs and decisions", HostSummary: cfg.Hosts,
+			Context: contextGathering, ContextDetail: "reading project notes, specs and decisions",
+			Impact: impactPending, ImpactDetail: impactPendingDetail, HostSummary: cfg.Hosts,
 		},
 	}
 	return e
@@ -276,6 +296,7 @@ func (e *executor) scan(ctx context.Context) {
 		return
 	}
 	e.graph = g
+	e.lastScan = time.Now()
 	symbols := 0
 	for _, syms := range g.Symbols {
 		symbols += len(syms)
@@ -315,6 +336,7 @@ func (e *executor) Status() StatusView {
 	e.mu.Lock()
 	v := e.pills
 	v.Interpretation = e.normRev
+	v.ImpactRevision = e.impactRev
 	if e.graph != nil {
 		v.Branch = e.graph.GitBranch
 	}
@@ -440,7 +462,7 @@ func (e *executor) interpret(ctx context.Context) (contracts.NormalizedPRD, erro
 	e.norm, e.normKey = &norm, key
 	e.mu.Unlock()
 	e.publishNormalized(norm)
-	go e.refreshContext(ctx, normalizedText(norm))
+	go e.refreshGrounding(ctx, norm)
 	return norm, nil
 }
 
@@ -561,10 +583,15 @@ func (e *executor) transition(to relay.Phase) {
 		e.converged, e.synthesized, e.synthHash, e.runInput = nil, nil, "", nil
 		e.runID = ""
 		e.mu.Unlock()
+	case relay.PhaseDeliberation:
+		// The page that shows the map is gone. The map already built stays, so
+		// going back is instant, but an unfinished call is not worth paying for.
+		e.cancelImpact()
 	case relay.PhaseSynthesis:
 		e.startSynthesis(runID)
 	case relay.PhaseCancelled:
 		e.stopRun()
+		e.cancelImpact()
 		e.finish(PhaseCancelled, "the session was cancelled", nil)
 	}
 }

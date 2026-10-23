@@ -137,3 +137,30 @@ func TestBuildPMInputIsProductOnlyAndDeterministic(t *testing.T) {
 		t.Fatal("product text must not be HTML-escaped")
 	}
 }
+
+// TestPMInputHasExactlyTheProductFields guards the separation the product
+// promises: requirements are kept apart from technical material, so product
+// decisions are not made by code-level accident.
+//
+// The impact map that Page 1 shows is derived from the Product Manager's own
+// output, never fed back into it. Adding it, the repository graph, or any
+// other repository material to this payload must fail here, with this comment
+// to explain why. See docs/adrs/0005-prd-impact-map.md.
+func TestPMInputHasExactlyTheProductFields(t *testing.T) {
+	raw := avatars.BuildPMInput(contracts.ProductPRD{Title: "Invoice export"})
+	got := keyOrder(t, raw)
+	want := []string{"title", "problem", "goals", "actors", "flows", "requirements", "acceptance_criteria", "constraints", "open_questions"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("the Product Manager payload is %v, want exactly the nine product fields %v", got, want)
+	}
+	for _, forbidden := range []string{
+		"impact", "map", "areas", "links", "verdict", "graph", "symbols", "modules",
+		"routes", "paths", "project_context", "doc_drift", "repository",
+	} {
+		for _, key := range got {
+			if key == forbidden {
+				t.Errorf("the Product Manager payload carries %q: it must never see repository material", key)
+			}
+		}
+	}
+}

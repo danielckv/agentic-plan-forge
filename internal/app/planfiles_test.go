@@ -82,7 +82,10 @@ func TestComponentsListsBlocksThenSymbols(t *testing.T) {
 	}
 }
 
-func TestPlanFilesLinkEpicsToCodeAndNotes(t *testing.T) {
+// TestPlanFilesFallBackToKeywordsBeforeTheFirstMap covers the rail before the
+// impact map has run: it shows the keyword matches and says that is what they
+// are, rather than claiming the work is all new.
+func TestPlanFilesFallBackToKeywordsBeforeTheFirstMap(t *testing.T) {
 	v := plannedExecutor(t).PlanFiles()
 	if v.Revision != 3 || len(v.Files) != 2 {
 		t.Fatalf("plan files = %+v", v)
@@ -97,16 +100,22 @@ func TestPlanFilesLinkEpicsToCodeAndNotes(t *testing.T) {
 	if len(f.Notes) != 1 || f.Notes[0].Path != "docs/adrs/0004-invoices.md" {
 		t.Errorf("notes = %+v, want the invoice ADR only", f.Notes)
 	}
+	for _, l := range f.Links {
+		if l.Source != contracts.ImpactSourceLexical || l.Verdict != "" {
+			t.Errorf("link %+v asserts more than a keyword match can know", l)
+		}
+	}
 	for _, want := range []string{
 		"# E1 · Invoice export", "> Finance exports | invoices.", "- [ ] Export invoices for a date range",
-		"| `ExportInvoices` | function | `internal/billing/export.go:12` |", "`docs/adrs/0004-invoices.md` — Invoice export format",
+		"## What this touches",
+		"| `ExportInvoices` | Possibly involved | `internal/billing/export.go:12` | _matched by name_ |",
 	} {
 		if !strings.Contains(f.Markdown, want) {
 			t.Errorf("markdown lacks %q:\n%s", want, f.Markdown)
 		}
 	}
-	if !strings.Contains(v.Files[1].Markdown, "No existing component matches") {
-		t.Errorf("an epic with no match must say so:\n%s", v.Files[1].Markdown)
+	if !strings.Contains(v.Files[1].Markdown, "still running") {
+		t.Errorf("an unmatched epic must not be called new work before the map ran:\n%s", v.Files[1].Markdown)
 	}
 
 	none := newExecutor(executorConfig{Logger: quietLogger()}).PlanFiles()
@@ -115,12 +124,58 @@ func TestPlanFilesLinkEpicsToCodeAndNotes(t *testing.T) {
 	}
 }
 
+// TestPlanFilesUseTheMapWhenItMatchesTheInterpretation is the point of the
+// change: once the model has read the project, every link carries a verdict
+// and a sentence a non-technical reader can act on.
+func TestPlanFilesUseTheMapWhenItMatchesTheInterpretation(t *testing.T) {
+	exec := plannedExecutor(t)
+	exec.impactMap = &contracts.ImpactMap{
+		SchemaVersion: contracts.SchemaVersion, State: contracts.ImpactReady, PRDRevision: 3,
+		Epics: []contracts.ImpactEpic{{EpicID: "E1", Title: "Invoice export", Links: []contracts.ImpactLink{
+			{ID: "E1:code", Area: "Invoice export", Kind: contracts.ImpactKindCode,
+				Path: "internal/billing/export.go", Line: 12, SymbolID: "internal/billing/export.go#function:ExportInvoices",
+				SymbolName: "ExportInvoices", Verdict: contracts.ImpactChange, Source: contracts.ImpactSourceModel,
+				Reason: "Invoices are exported here today, and this adds the date range finance asked for."},
+			{ID: "E1:adr", Area: "Export format", Kind: contracts.ImpactKindDecision,
+				Path: "docs/adrs/0004-invoices.md", Heading: "Invoice export format",
+				Verdict: contracts.ImpactConflict, Source: contracts.ImpactSourceModel,
+				Reason: "The recorded decision fixes the export as CSV, and the requirements ask for a spreadsheet."},
+		}}},
+	}
+
+	f := exec.PlanFiles().Files[0]
+	if len(f.Components) != 1 || f.Components[0].Verdict != contracts.ImpactChange || f.Components[0].Reason == "" {
+		t.Errorf("components = %+v, want the verdict and the reason carried through", f.Components)
+	}
+	for _, want := range []string{
+		"| `ExportInvoices` | Change | `internal/billing/export.go:12` | Invoices are exported here today",
+		"## Conflicts with decisions already made",
+		"`docs/adrs/0004-invoices.md` — **Invoice export format**: The recorded decision fixes the export as CSV",
+	} {
+		if !strings.Contains(f.Markdown, want) {
+			t.Errorf("markdown lacks %q:\n%s", want, f.Markdown)
+		}
+	}
+	if strings.Contains(f.Markdown, "| `docs/adrs") {
+		t.Error("a conflict was listed in the touches table as well as its own section")
+	}
+
+	// A map built from an older interpretation is not shown for a newer one.
+	exec.impactMap.PRDRevision = 2
+	if got := exec.PlanFiles().Files[0]; len(got.Links) > 0 && got.Links[0].Source == contracts.ImpactSourceModel {
+		t.Error("a map for an older interpretation was served for the current one")
+	}
+}
+
 func TestPlanFileTableCellsCannotBreakTheTable(t *testing.T) {
-	md := renderPlanFile(contracts.DraftEpic{ID: "E1", Title: "T"}, []ComponentRef{
-		{Name: "a|b`c", Kind: "function", Path: "x|y.go", Line: 1},
-	}, nil)
-	if !strings.Contains(md, "| `a\\|b'c` | function | `x\\|y.go:1` |") {
-		t.Errorf("unsafe cell rendered as:\n%s", md)
+	md := renderPlanFile(contracts.DraftEpic{ID: "E1", Title: "T"}, []contracts.ImpactLink{
+		{Kind: contracts.ImpactKindCode, SymbolName: "a|b`c", Path: "x|y.go", Line: 1,
+			Verdict: contracts.ImpactChange, Reason: "Breaks | the `table."},
+	})
+	for _, want := range []string{"| `a\\|b'c` | Change | `x\\|y.go:1` |", "Breaks \\| the 'table."} {
+		if !strings.Contains(md, want) {
+			t.Errorf("unsafe cell rendered as:\n%s", md)
+		}
 	}
 }
 
