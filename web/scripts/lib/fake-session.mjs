@@ -112,8 +112,23 @@ export async function startFakeSession({ port, dist, brief = S.BRIEF, interprete
     }
   }, ms);
 
-  const thought = (avatar, status, summary, cycle) =>
-    send("AVATAR_THOUGHT", { run_id: S.RUN_ID, avatar_id: avatar, cycle, status, public_summary: summary }, `AVATAR_THOUGHT(${avatar}:${status})`);
+  // Where each avatar runs, as the router places it: a run spreads its roles
+  // across every host the machine is signed in to.
+  const PLACED = {
+    pm: { host: "claude", model: "opus" },
+    architect: { host: "claude", model: "opus" },
+    "specialist:reporting": { host: "omp", model: "claude-sonnet-5-5" },
+    "specialist:audit": { host: "omp", model: "claude-sonnet-5-5" },
+    critic: { host: "omp", model: "claude-opus-5-5" },
+    synthesizer: { host: "claude", model: "opus" },
+    narrator: { host: "omp", model: "claude-haiku-5-5" },
+  };
+
+  const thought = (avatar, status, summary, cycle, extra = {}) =>
+    send("AVATAR_THOUGHT", {
+      run_id: S.RUN_ID, avatar_id: avatar, cycle, status, public_summary: summary,
+      ...(PLACED[avatar] ?? {}), ...extra,
+    }, `AVATAR_THOUGHT(${avatar}:${status})`);
   const draft = (avatar, schema, content, rev, cycle) =>
     send("AVATAR_DRAFT", {
       run_id: S.RUN_ID, avatar_id: avatar, cycle, draft_id: `${avatar}-draft`, draft_revision: String(rev),
@@ -132,7 +147,18 @@ export async function startFakeSession({ port, dist, brief = S.BRIEF, interprete
     () => draft("pm", "pm.v1", S.PM_DOC, 1, 1),
     () => thought("pm", "Synced", "Drafted 3 epics and 3 stories; every requirement traces to a story.", 1),
     () => thought("architect", "Thinking", "Mapping the epics onto internal/reporting, internal/audit and the web app.", 1),
-    () => thought("architect", "Drafting", "ADR 7 says exports stream; designing the CSV writer around QueryInvoices.", 1),
+    () => thought("architect", "Drafting", "ADR 7 says exports stream; designing the CSV writer around QueryInvoices.", 1, {
+      step: "design 1/3", context_note: "graph 184 files · context 12 excerpts · drift 20 items · 201 KiB",
+    }),
+    // The heartbeat a running call emits: the card takes it, the discussion
+    // does not.
+    () => thought("architect", "Drafting", "Running for 40s, 7.2 KB written, now on contracts.", 1, {
+      step: "design 1/3", context_note: "graph 184 files · context 12 excerpts · drift 20 items · 201 KiB",
+      elapsed_ms: 40000, output_bytes: 7372,
+    }),
+    () => thought("narrator", "Narrating",
+      "The architect is mapping the CSV export onto internal/reporting and is 40 seconds into its design call; both specialists are waiting on its contracts.",
+      1),
     () => draft("architect", "architect.v1", S.ARCHITECT_DOC, 1, 1),
     () => thought("architect", "Synced", "3 workstreams: reporting, audit, web. The CSV writer streams from QueryInvoices.", 1),
     () => thought("specialist:reporting", "Drafting", "Writing tasks for the streaming CSV writer and its trailer row.", 1),
