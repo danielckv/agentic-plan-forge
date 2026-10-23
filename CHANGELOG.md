@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-23
+
 ### Added
 
 - The room shows what the run has cost. A Usage tab beside Epics, Architecture and Findings names every generation host the session has called — how many calls it served, how many failed, the tokens it reported in and out, and how long it took — once per host and once per avatar. Every adapter already read the host's own token counts and threw them away; they are now counted per host, model and role, and served from `GET /api/usage`.
@@ -213,7 +215,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.2.0...v0.3.0
