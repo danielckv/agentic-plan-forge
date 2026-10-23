@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
@@ -214,14 +215,67 @@ func (o *orchestrator) request(sp stageSpec, payload json.RawMessage) contracts.
 	}
 }
 
+// maxTimeoutShrinks bounds how often one stage call may be replaced by a
+// smaller one after outrunning the call timeout. Each shrink halves the
+// evidence, so two take a payload to a quarter of its size.
+const maxTimeoutShrinks = 2
+
+// stageInput is the bytes one stage call sends, together with the payload they
+// were marshalled from when that payload can give up evidence. A call that
+// outruns the clock is retried from a smaller payload, never from the same
+// bytes.
+type stageInput struct {
+	raw json.RawMessage
+	src trimmable
+}
+
+// fixedInput is a payload with no evidence to give up: the Product Manager
+// input, a repair input and the synthesis input are all already minimal.
+func fixedInput(raw json.RawMessage) *stageInput { return &stageInput{raw: raw} }
+
+// halve trims evidence until the payload is at most half the size it was, and
+// returns one note naming what went. ok is false when nothing is left to give.
+func (s *stageInput) halve(budget time.Duration) (string, bool) {
+	if s.src == nil {
+		return "", false
+	}
+	was := len(s.raw)
+	target := max(was/2, 1)
+	var notes []string
+	for len(s.raw) > target {
+		note, ok := s.src.trim()
+		if !ok {
+			break
+		}
+		s.src.addNote(note)
+		notes = append(notes, note)
+		s.raw = mustJSON(s.src)
+	}
+	if len(notes) == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("The call outran its %d second budget, so it is running again with less evidence (%d of %d KiB). %s",
+		int(budget.Seconds()), len(s.raw)>>10, was>>10, strings.Join(notes, " ")), true
+}
+
+// overranCallTimeout reports whether err is the host killing a call that ran
+// past the call timeout, rather than the caller ending the run.
+func overranCallTimeout(ctx context.Context, err error) bool {
+	return ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded)
+}
+
 // transient reports whether a provider failure may succeed on a retry. A tool
 // use violation, a missing capability, an oversized result and a schema
-// rejection would fail the same way again.
+// rejection would fail the same way again, and so would the same call after it
+// outran the clock: generate shrinks that one instead.
 func transient(err error) bool {
 	var tool *contracts.ErrToolUseObserved
 	var capab *contracts.ErrCapability
 	var bound *contracts.ErrBound
 	if errors.As(err, &tool) || errors.As(err, &capab) || errors.As(err, &bound) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 	var coded *contracts.CodedError
@@ -290,16 +344,23 @@ func (o *orchestrator) attempt(ctx context.Context, sp stageSpec, req contracts.
 // transient failure that happened before any output, after an exponential
 // backoff starting at one second. A failure after partial output is never
 // retried: the caller must ask explicitly, so the same work is not billed twice.
-func (o *orchestrator) generate(ctx context.Context, sp stageSpec, payload json.RawMessage) (json.RawMessage, error) {
-	if len(payload) > contracts.MaxStagePayloadBytes {
+//
+// A call that outruns the call timeout is the exception, and follows the rule
+// ADR 0004 set for normalization: the call was too large, so it is replaced by
+// a strictly smaller one (half the evidence, at most maxTimeoutShrinks times)
+// rather than repeated. Repeating it would spend another full timeout to fail
+// the same way.
+func (o *orchestrator) generate(ctx context.Context, sp stageSpec, in *stageInput) (json.RawMessage, error) {
+	if len(in.raw) > contracts.MaxStagePayloadBytes {
 		return nil, &genFailure{Err: &contracts.ErrBound{
 			Name:     sp.avatar + " payload",
 			Limit:    contracts.MaxStagePayloadBytes,
-			Observed: int64(len(payload)),
+			Observed: int64(len(in.raw)),
 		}}
 	}
-	req := o.request(sp, payload)
-	for attemptNo := 0; ; attemptNo++ {
+	req := o.request(sp, in.raw)
+	shrinks, attemptNo := 0, 0
+	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -314,13 +375,24 @@ func (o *orchestrator) generate(ctx context.Context, sp stageSpec, payload json.
 		if errors.As(err, &emitErr) {
 			return nil, err
 		}
+		if overranCallTimeout(ctx, err) && shrinks < maxTimeoutShrinks {
+			if note, ok := in.halve(o.in.callTimeout()); ok {
+				shrinks++
+				if terr := o.thought(ctx, sp.avatar, sp.cycle, sp.status, note); terr != nil {
+					return nil, terr
+				}
+				req = o.request(sp, in.raw)
+				continue
+			}
+		}
 		if sawOutput {
 			return nil, &genFailure{Err: err, Partial: true}
 		}
 		if attemptNo == 0 && transient(err) {
-			if serr := o.in.sleep(ctx, o.in.backoff()<<attemptNo); serr != nil {
+			if serr := o.in.sleep(ctx, o.in.backoff()); serr != nil {
 				return nil, serr
 			}
+			attemptNo++
 			continue
 		}
 		return nil, &genFailure{Err: err}
@@ -398,12 +470,12 @@ func repairPayload(input, previous json.RawMessage, err error) json.RawMessage {
 // runStage runs one stage: call the provider, validate, and repair once with
 // the validation errors and the same input. A second invalid result is a failed
 // stage. Repair is separate from the transient retry and happens at most once.
-func runStage[T any](o *orchestrator, ctx context.Context, sp stageSpec, payload json.RawMessage, parse func(json.RawMessage) (T, json.RawMessage, error)) (T, json.RawMessage, error) {
+func runStage[T any](o *orchestrator, ctx context.Context, sp stageSpec, in *stageInput, parse func(json.RawMessage) (T, json.RawMessage, error)) (T, json.RawMessage, error) {
 	var zero T
 	if err := o.thought(ctx, sp.avatar, sp.cycle, sp.status, sp.summary); err != nil {
 		return zero, nil, err
 	}
-	raw, err := o.generate(ctx, sp, payload)
+	raw, err := o.generate(ctx, sp, in)
 	if err != nil {
 		return zero, nil, o.failStage(ctx, sp, err)
 	}
@@ -415,7 +487,7 @@ func runStage[T any](o *orchestrator, ctx context.Context, sp stageSpec, payload
 		fmt.Sprintf("The draft failed validation with %d problem(s); requesting one repair.", len(problemsOf(perr)))); err != nil {
 		return zero, nil, err
 	}
-	raw, err = o.generate(ctx, sp, repairPayload(payload, raw, perr))
+	raw, err = o.generate(ctx, sp, fixedInput(repairPayload(in.raw, raw, perr)))
 	if err != nil {
 		return zero, nil, o.failStage(ctx, sp, err)
 	}
@@ -432,12 +504,15 @@ type revisionInput struct {
 	RequiredChanges []contracts.Critique `json:"required_changes,omitempty"`
 }
 
+// architectPayload is the design part of the architect stage: the stories to
+// place, the repository they land in and what the repository already says about
+// itself. The documentation drift is not here; it travels one batch at a time
+// to the documentation part, which is the only part that answers it.
 type architectPayload struct {
 	Cycle             int                        `json:"cycle"`
 	PM                synthesizer.PMDoc          `json:"pm"`
 	TechnicalAppendix string                     `json:"technical_appendix"`
 	Graph             contracts.RepoContextGraph `json:"repository_graph"`
-	DocDrift          []contracts.DocDriftItem   `json:"documentation_drift"`
 	Context           *contracts.ProjectContext  `json:"project_context,omitempty"`
 	EvidenceNotes     []string                   `json:"evidence_notes,omitempty"`
 	Decisions         []contracts.Decision       `json:"resolved_decisions,omitempty"`

@@ -146,6 +146,9 @@ type appSession struct {
 	endpoint  relay.Endpoint
 	finishCh  chan Result
 	finishOne sync.Once
+	// meter counts what every provider call cost, per host, model and role. It
+	// wraps the generator, so one handle sees ingestion, impact and the avatars.
+	meter *host.Meter
 }
 
 func (s *appSession) finish(r Result) {
@@ -276,13 +279,15 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 		}
 		gen = router
 	}
+	meter := host.NewMeter(gen, hosts.MainModel, hosts.JudgeModel)
+	gen = meter
 
 	store, err := storage.NewArtifactStore(repo)
 	if err != nil {
 		return classify(err)
 	}
 
-	s := &appSession{id: id, opts: opts, repo: repo, log: log, cfg: opts.Config, finishCh: make(chan Result, 1)}
+	s := &appSession{id: id, opts: opts, repo: repo, log: log, cfg: opts.Config, finishCh: make(chan Result, 1), meter: meter}
 
 	var bridge *relay.Bridge
 	deliver := func(raw []byte) error {

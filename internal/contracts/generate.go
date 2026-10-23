@@ -114,6 +114,27 @@ type Usage struct {
 	OutputTokens int `json:"output_tokens,omitempty"`
 }
 
+// UsageRow accounts for the calls one host, model and role served in this
+// session. The token counts are what the host reported; a host that reports
+// none leaves them at zero.
+type UsageRow struct {
+	Host         string `json:"host"`
+	Model        string `json:"model"`
+	Role         string `json:"role"`
+	Requests     int    `json:"requests"`
+	Failures     int    `json:"failures"`
+	InputTokens  int    `json:"input_tokens"`
+	OutputTokens int    `json:"output_tokens"`
+	Milliseconds int64  `json:"milliseconds"`
+}
+
+// UsageReport is the session's provider accounting: one row per host, model and
+// role, busiest first, and the totals across them.
+type UsageReport struct {
+	Rows   []UsageRow `json:"rows"`
+	Totals UsageRow   `json:"totals"`
+}
+
 // GenerationResult is a completed provider invocation.
 type GenerationResult struct {
 	// Content is the schema-validated payload produced by the stage.

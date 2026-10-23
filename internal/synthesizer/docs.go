@@ -629,6 +629,34 @@ type ArchitectContext struct {
 // Validate checks the architect draft: DAG, boundaries, contracts, diagrams,
 // documentation tasks and requirement coverage inputs.
 func (a ArchitectDoc) Validate(c DesignContext) error {
+	p := designProblems(a, c)
+	p = append(p, validateDiagrams(a.Diagrams)...)
+	p = append(p, docTaskProblems(a, c, c.DocDrift)...)
+	return problemsToError("architect", p)
+}
+
+// ValidateDesign checks only what the design part of the architect stage
+// produces: the summary, the workstream DAG and the interface contracts. The
+// stage runs in parts, and a part is validated against its own subject before
+// the assembled draft is validated as a whole.
+func (a ArchitectDoc) ValidateDesign(c DesignContext) error {
+	return problemsToError("architect", designProblems(a, c))
+}
+
+// ValidateDiagrams checks only the diagram part of the architect stage.
+func (a ArchitectDoc) ValidateDiagrams() error {
+	return problemsToError("architect", validateDiagrams(a.Diagrams))
+}
+
+// ValidateDocTasks checks the documentation tasks of a draft, and that every
+// confirmed item of drift is covered by one. drift is the subset of
+// documentation drift the tasks are answering: a part that was given a batch
+// of items covers that batch, and the assembled draft covers them all.
+func (a ArchitectDoc) ValidateDocTasks(c DesignContext, drift []contracts.DocDriftItem) error {
+	return problemsToError("architect", docTaskProblems(a, c, drift))
+}
+
+func designProblems(a ArchitectDoc, c DesignContext) []string {
 	var p []string
 	if strings.TrimSpace(a.Summary) == "" {
 		p = append(p, "summary is required")
@@ -689,8 +717,12 @@ func (a ArchitectDoc) Validate(c DesignContext) error {
 			}
 		}
 	}
-	p = append(p, validateDiagrams(a.Diagrams)...)
+	return p
+}
 
+// docTaskProblems checks the documentation tasks and their coverage of drift.
+func docTaskProblems(a ArchitectDoc, c DesignContext, drift []contracts.DocDriftItem) []string {
+	var p []string
 	taskIDs := map[string]bool{}
 	taskDeps := map[string][]string{}
 	for _, t := range a.DocTasks {
@@ -715,7 +747,7 @@ func (a ArchitectDoc) Validate(c DesignContext) error {
 			covered[id] = true
 		}
 	}
-	for _, item := range c.DocDrift {
+	for _, item := range drift {
 		if item.DriftType == contracts.DriftUnverifiable {
 			continue
 		}
@@ -723,7 +755,7 @@ func (a ArchitectDoc) Validate(c DesignContext) error {
 			p = append(p, fmt.Sprintf("stale documentation %s (%s line %d) has no documentation task", item.ID, item.DocFilePath, item.DocLine))
 		}
 	}
-	return problemsToError("architect", p)
+	return p
 }
 
 func validateDiagrams(d DiagramSet) []string {

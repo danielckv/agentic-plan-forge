@@ -90,7 +90,7 @@ func Synthesize(ctx context.Context, in RunInput, si contracts.SynthesisInput, g
 		return contracts.SynthesisInput{}, o.failStage(ctx, sp, err)
 	}
 	payload := mustJSON(o.synthesisPayload(si, docs))
-	doc, _, err := runStage(o, ctx, sp, payload, parseSynthesisDoc)
+	doc, _, err := runStage(o, ctx, sp, fixedInput(payload), parseSynthesisDoc)
 	if err != nil {
 		return contracts.SynthesisInput{}, err
 	}

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Crown,
   FileText,
+  Gauge,
   Layers,
   LoaderCircle,
   MessagesSquare,
@@ -17,6 +18,7 @@ import { AvatarBadge, MAIN_AVATARS, avatarSpec } from "../components/avatars/Ava
 import { EpicCard } from "../components/epics/EpicCard";
 import { EpicModal } from "../components/epics/EpicModal";
 import { MermaidSvg } from "../components/MermaidSvg";
+import { UsagePanel } from "../components/UsagePanel";
 import {
   architectureMermaid,
   parseArchitectDraft,
@@ -71,7 +73,7 @@ const STATUS_CHIP: Record<AvatarStatus, string> = {
   Stale: "pf-chip--warn",
 };
 
-type PlanTab = "epics" | "architecture" | "findings";
+type PlanTab = "epics" | "architecture" | "findings" | "usage";
 
 export function Page2AvatarCanvas(): React.ReactElement {
   const sync = useSync();
@@ -79,6 +81,10 @@ export function Page2AvatarCanvas(): React.ReactElement {
   const runId = sync.runId;
   const [focus, setFocus] = useState<string | null>(null);
   const [planTab, setPlanTab] = useState<PlanTab>("epics");
+  // A retry that has been sent but whose stage has not started yet. Without it
+  // a second click cancels a call that is already paid for; the executor
+  // refuses that, and the button says so rather than looking dead.
+  const [retrySent, setRetrySent] = useState<string | null>(null);
 
   const runActive = runId !== null;
   // Specialists work under the architect: any specialist at work keeps the
@@ -113,6 +119,16 @@ export function Page2AvatarCanvas(): React.ReactElement {
     !paused &&
     failure === null;
   const linkDown = sync.conn !== "open";
+
+  useEffect(() => {
+    // The board moved: a new failure, or none at all, makes the button live.
+    setRetrySent(null);
+  }, [failure?.avatarId, failure?.summary]);
+
+  const askRetry = (avatarId: string): void => {
+    setRetrySent(avatarId);
+    retryStage(runId ?? "", avatarId);
+  };
 
   const pm = useMemo(() => parsePMDraft(sync.drafts.find((d) => d.avatarId === "pm")?.data), [sync.drafts]);
   const arch = useMemo(() => parseArchitectDraft(sync.drafts.find((d) => d.avatarId === "architect")?.data), [sync.drafts]);
@@ -239,11 +255,13 @@ export function Page2AvatarCanvas(): React.ReactElement {
                   label="Findings"
                   count={sync.critiques.filter((c) => !c.resolved).length}
                 />
+                <PlanTabButton id="usage" current={planTab} onSelect={setPlanTab} icon={Gauge} label="Usage" />
               </div>
               <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
                 {planTab === "epics" && <EpicsPanel pm={pm} />}
                 {planTab === "architecture" && <ArchitecturePanel arch={arch} />}
                 {planTab === "findings" && <FindingsPanel findings={sync.critiques} />}
+                {planTab === "usage" && <UsagePanel live={workingCount > 0} />}
               </div>
             </aside>
           </div>
@@ -274,10 +292,10 @@ export function Page2AvatarCanvas(): React.ReactElement {
                 <button
                   type="button"
                   className="pf-btn pf-btn-secondary pf-btn-sm"
-                  onClick={() => retryStage(runId ?? "", failure.avatarId)}
-                  disabled={sync.role !== "owner"}
+                  onClick={() => askRetry(failure.avatarId)}
+                  disabled={sync.role !== "owner" || retrySent !== null}
                 >
-                  Retry stage
+                  {retrySent !== null ? "Retrying…" : "Retry stage"}
                 </button>
                 <button type="button" className="pf-btn pf-btn-secondary pf-btn-sm" onClick={editBaseline}>
                   Revise baseline
@@ -296,8 +314,13 @@ export function Page2AvatarCanvas(): React.ReactElement {
               </div>
               <p className="pf-caption">Retry the architect with the findings, or edit the requirements and confirm again.</p>
               <div className="mt-2 flex gap-2">
-                <button type="button" className="pf-btn pf-btn-secondary pf-btn-sm" onClick={() => retryStage(runId ?? "", "architect")}>
-                  Retry stage
+                <button
+                  type="button"
+                  className="pf-btn pf-btn-secondary pf-btn-sm"
+                  onClick={() => askRetry("architect")}
+                  disabled={retrySent !== null}
+                >
+                  {retrySent !== null ? "Retrying…" : "Retry stage"}
                 </button>
                 <button type="button" className="pf-btn pf-btn-secondary pf-btn-sm" onClick={editBaseline}>
                   Revise baseline

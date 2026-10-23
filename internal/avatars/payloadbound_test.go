@@ -26,7 +26,7 @@ func TestGenerateRefusesAPayloadOverTheBound(t *testing.T) {
 	sp := stageSpec{avatar: "architect", role: contracts.RoleArchitect}
 	over := payloadOfSize(contracts.MaxStagePayloadBytes + 1)
 
-	_, err := o.generate(context.Background(), sp, over)
+	_, err := o.generate(context.Background(), sp, fixedInput(over))
 	if err == nil {
 		t.Fatal("generate accepted a payload past the bound")
 	}
@@ -62,7 +62,7 @@ func TestGenerateAcceptsAPayloadAtTheBound(t *testing.T) {
 	o := &orchestrator{gen: echoGen{reply: `{"ok":true}`}}
 	sp := stageSpec{avatar: "architect", role: contracts.RoleArchitect}
 
-	raw, err := o.generate(context.Background(), sp, payloadOfSize(1<<10))
+	raw, err := o.generate(context.Background(), sp, fixedInput(payloadOfSize(1<<10)))
 	if err != nil {
 		t.Fatalf("a %d byte payload was refused: %v", 1<<10, err)
 	}

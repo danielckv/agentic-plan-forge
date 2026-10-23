@@ -37,15 +37,22 @@ func TestPreamblesMatchThePlanVerbatim(t *testing.T) {
 }
 
 func TestSystemPromptsStartWithTheirPreamble(t *testing.T) {
+	// The architect answers in parts; every part carries the same preamble and
+	// the same untrusted-input instruction as a whole stage would.
 	prompts := map[string]string{
-		"pm":          avatars.PMSystemPrompt(),
-		"architect":   avatars.ArchitectSystemPrompt(),
-		"specialist":  avatars.SpecialistSystemPrompt(),
-		"critic":      avatars.CriticSystemPrompt(),
-		"synthesizer": avatars.SynthesizerSystemPrompt(),
+		"pm":                  avatars.PMSystemPrompt(),
+		"architect":           avatars.ArchitectDesignSystemPrompt(),
+		"architect diagrams":  avatars.ArchitectDiagramsSystemPrompt(),
+		"architect doc tasks": avatars.ArchitectDocTasksSystemPrompt(),
+		"specialist":          avatars.SpecialistSystemPrompt(),
+		"critic":              avatars.CriticSystemPrompt(),
+		"synthesizer":         avatars.SynthesizerSystemPrompt(),
 	}
+	pres := preambles()
+	pres["architect diagrams"] = avatars.ArchitectPreamble
+	pres["architect doc tasks"] = avatars.ArchitectPreamble
 	for name, p := range prompts {
-		pre := preambles()[name]
+		pre := pres[name]
 		if !strings.HasPrefix(p, pre) {
 			t.Errorf("%s system prompt does not start with its preamble", name)
 		}

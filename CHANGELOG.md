@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The room shows what the run has cost. A Usage tab beside Epics, Architecture and Findings names every generation host the session has called — how many calls it served, how many failed, the tokens it reported in and out, and how long it took — once per host and once per avatar. Every adapter already read the host's own token counts and threw them away; they are now counted per host, model and role, and served from `GET /api/usage`.
+
+### Fixed
+
+- The Technical Architect no longer dies with `architect stage failed: context deadline exceeded`. One call had to read the code graph (200 KiB), the documentation drift (128 KiB) and the project notes (64 KiB), and then write the workstream DAG, the interface contracts, two diagrams and one fully specified documentation task for every confirmed drift item — on a repository with real drift, far more than the 180-second host limit allows. The stage now answers in parts: the design, the diagrams drawn from it, and the documentation tasks in batches of at most 20 stale documents, with the diagrams and the batches running at the same time. Each part reads only what it answers, each is kept on its own, and a retry re-runs the part that failed. The Domain Specialists start as soon as the design is validated instead of waiting for the whole stage. See [ADR 0007](docs/adrs/0007-the-architect-answers-in-parts.md).
+- A call that outran its timeout is no longer repeated unchanged. The retry used the same payload and the same 180-second budget, so a timed-out stage took 361 seconds to report the same failure. A timed-out call now runs again with half its evidence and says in the payload what it gave up, at most twice; a payload with nothing to give up — the Product Manager's nine product fields, a repair request — fails after one call. This is the rule ADR 0004 set for interpretation, now applied to the avatar stages.
+- A double click on *Retry stage* no longer cancels the call it just started. The second click restarted the run, throwing away up to three minutes of billed work; it is now refused, the window is told the stage is still running, and the button reads *Retrying…* until the board moves.
+
 ## [0.5.0] - 2026-10-23
 
 ### Added

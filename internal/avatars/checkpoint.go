@@ -55,6 +55,12 @@ type runState struct {
 	Arch  draftRec
 	Specs map[string]draftRec
 
+	// The architect stage answers in parts (see architect.go). A part that
+	// finished is kept, so a retry re-runs only the part that failed.
+	ArchDesign   draftRec
+	ArchDiagrams draftRec
+	ArchDocs     []docBatchRec
+
 	// Critiques is the authoritative set, valid only for CriticHash in
 	// CriticCycle.
 	Critiques   []contracts.Critique
@@ -99,6 +105,7 @@ func (s *runState) clone() *runState {
 	for k, v := range s.Revs {
 		c.Revs[k] = v
 	}
+	c.ArchDocs = append([]docBatchRec(nil), s.ArchDocs...)
 	c.Critiques = append([]contracts.Critique(nil), s.Critiques...)
 	c.Decisions = append([]contracts.Decision(nil), s.Decisions...)
 	c.Pending = append([]contracts.Decision(nil), s.Pending...)
@@ -196,6 +203,17 @@ func (c *CheckpointStore) load(runID string) (*runState, bool) {
 func (s *runState) afterDecode() {
 	s.PM.Raw = definedRaw(s.PM.Raw)
 	s.Arch.Raw = definedRaw(s.Arch.Raw)
+	s.ArchDesign.Raw = definedRaw(s.ArchDesign.Raw)
+	s.ArchDiagrams.Raw = definedRaw(s.ArchDiagrams.Raw)
+	docs := s.ArchDocs[:0]
+	for _, rec := range s.ArchDocs {
+		rec.Draft.Raw = definedRaw(rec.Draft.Raw)
+		if !rec.Draft.present() {
+			continue
+		}
+		docs = append(docs, rec)
+	}
+	s.ArchDocs = docs
 	if s.Specs == nil {
 		s.Specs = map[string]draftRec{}
 	}

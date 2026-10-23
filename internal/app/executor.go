@@ -52,6 +52,10 @@ const (
 const (
 	avatarPM          = "pm"
 	avatarSynthesizer = "synthesizer"
+	// busyDeliberation and busySynthesis name the pipeline work the executor
+	// runs one at a time.
+	busyDeliberation  = "deliberation"
+	busySynthesis     = "synthesis"
 	schemaSynthesisV1 = "synthesis.v1"
 	avatarIngestion   = "ingestion"
 )
@@ -171,12 +175,17 @@ type executor struct {
 	// run over the same baseline; an approved plan clears it.
 	checkpoints *avatars.CheckpointStore
 
-	mu          sync.Mutex
-	phase       relay.Phase
-	runID       string
-	cycle       int
-	runCancel   context.CancelFunc
-	runGen      int
+	mu        sync.Mutex
+	phase     relay.Phase
+	runID     string
+	cycle     int
+	runCancel context.CancelFunc
+	runGen    int
+	// busy names the pipeline work in flight: one deliberation or one
+	// synthesis at a time. A second request for work that is already running is
+	// refused, so a double click cannot cancel a call that is already paid for
+	// and start it again.
+	busy        string
 	decisions   chan contracts.Decision
 	runInput    *avatars.RunInput
 	converged   *contracts.SynthesisInput
@@ -639,12 +648,35 @@ func (e *executor) finish(phase SessionPhase, message string, artifacts []string
 
 // --- deliberation ------------------------------------------------------------------------------------
 
+// claimRun marks the pipeline busy with stage. It reports the work already in
+// flight when there is some, and claims nothing in that case.
+func (e *executor) claimRun(stage string) (string, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.busy != "" {
+		return e.busy, false
+	}
+	e.busy = stage
+	return stage, true
+}
+
+// releaseRun frees the claim of a finished goroutine. A goroutine whose run was
+// superseded frees nothing: the claim belongs to the run that replaced it.
+func (e *executor) releaseRun(gen int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if gen == e.runGen {
+		e.busy = ""
+	}
+}
+
 // stopRun cancels the active pipeline goroutine, if any.
 func (e *executor) stopRun() {
 	e.mu.Lock()
 	cancel := e.runCancel
 	e.runCancel = nil
 	e.runGen++
+	e.busy = ""
 	e.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -673,6 +705,10 @@ func (e *executor) startRun(runID string, startCycle int) {
 	if runID == "" {
 		return
 	}
+	if busy, ok := e.claimRun(busyDeliberation); !ok {
+		e.log.Info("a run is already in flight; the request was ignored", "busy", busy, "run", runID)
+		return
+	}
 	e.mu.Lock()
 	e.converged, e.synthesized, e.synthHash = nil, nil, ""
 	e.cycle = startCycle
@@ -695,9 +731,27 @@ func (e *executor) retryStage(p relay.RetryStagePayload) {
 		if cycle < 1 {
 			cycle = 1
 		}
+		if _, ok := e.claimRun(busyDeliberation); !ok {
+			e.stageAlreadyRunning(runID, p.StageID, cycle)
+			return
+		}
 		ctx, gen, decisions := e.newRunContext(runID)
 		go e.deliberate(ctx, gen, runID, cycle, decisions)
 	}
+}
+
+// stageAlreadyRunning answers a retry of work that is still in flight. The
+// window hears the stage is running rather than nothing at all, so a second
+// click re-synchronises the card instead of cancelling a paid call.
+func (e *executor) stageAlreadyRunning(runID, stage string, cycle int) {
+	if stage == "" {
+		stage = relay.StageArchitect
+	}
+	e.log.Info("retry ignored: the stage is still running", "stage", stage, "run", runID)
+	_ = e.cfg.Auth.Emit(relay.EventAvatarThought, relay.AvatarThoughtPayload{
+		RunID: runID, AvatarID: stage, Cycle: cycle, Status: "Thinking",
+		PublicSummary: "This stage is already running; the retry was ignored. Wait for it to finish or stop the run.",
+	})
 }
 
 func (e *executor) current(gen int) bool {
@@ -755,6 +809,7 @@ func productKeywords(p contracts.ProductPRD) []string {
 }
 
 func (e *executor) deliberate(ctx context.Context, gen int, runID string, startCycle int, decisions <-chan contracts.Decision) {
+	defer e.releaseRun(gen)
 	norm, err := e.interpret(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
@@ -844,11 +899,16 @@ func (e *executor) startSynthesis(runID string) {
 		}, "")
 		return
 	}
+	if _, ok := e.claimRun(busySynthesis); !ok {
+		e.stageAlreadyRunning(runID, relay.StageSynthesizer, 1)
+		return
+	}
 	ctx, gen, _ := e.newRunContext(runID)
 	go e.synthesize(ctx, gen, runID, *in, *si)
 }
 
 func (e *executor) synthesize(ctx context.Context, gen int, runID string, in avatars.RunInput, si contracts.SynthesisInput) {
+	defer e.releaseRun(gen)
 	out, err := avatars.Synthesize(ctx, in, si, e.cfg.Gen, e.emitFor(ctx))
 	if !e.current(gen) || ctx.Err() != nil {
 		return
