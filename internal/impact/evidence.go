@@ -22,7 +22,7 @@ const (
 	// model in one call. Longer runs are split into more calls.
 	//
 	// The bound is the call timeout, not the model's context window: one call
-	// must finish inside contracts.MaxGenerateTimeout (180s) or the host kills
+	// must finish inside contracts.DefaultGenerateTimeout (180s) or the host kills
 	// it. This is the rule ADR 0004 established for normalization sections,
 	// applied to the unit this stage splits on.
 	//

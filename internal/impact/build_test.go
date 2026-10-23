@@ -160,7 +160,7 @@ func TestBuildRequestShapeAndPayload(t *testing.T) {
 	if req.ModelSlot != contracts.SlotMain {
 		t.Errorf("slot = %q, want MAIN", req.ModelSlot)
 	}
-	if req.SchemaID != MapSchemaID || req.Timeout != contracts.MaxGenerateTimeout {
+	if req.SchemaID != MapSchemaID || req.Timeout != contracts.DefaultGenerateTimeout {
 		t.Errorf("schema %q timeout %v", req.SchemaID, req.Timeout)
 	}
 	if len(req.UserPayload) > contracts.MaxStagePayloadBytes {

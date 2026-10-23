@@ -79,8 +79,8 @@ func TestLiveMeasureEvidenceBudget(t *testing.T) {
 			t.Errorf("batch %d failed: %v", i+1, err)
 			continue
 		}
-		if elapsed > contracts.MaxGenerateTimeout {
-			t.Errorf("batch %d took %v, over the %v call timeout: MaxEvidenceChars is too high", i+1, elapsed, contracts.MaxGenerateTimeout)
+		if elapsed > contracts.DefaultGenerateTimeout {
+			t.Errorf("batch %d took %v, over the %v call timeout: MaxEvidenceChars is too high", i+1, elapsed, contracts.DefaultGenerateTimeout)
 		}
 		for _, n := range notes {
 			t.Logf("  note: %s", n)

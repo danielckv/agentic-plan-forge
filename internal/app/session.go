@@ -179,7 +179,39 @@ func resolveHosts(ctx context.Context, router *host.Router, requested string) (H
 		JudgeHost: string(judge.Kind), JudgeModel: judge.Model, CriticSharesMain: judge.SharesMain,
 		Differs: requested != "" && requested != string(main.Kind),
 	}
+	// Place every role now. It costs at most one preflight per host, and it
+	// buys two things: a host that cannot serve is reported before the window
+	// opens rather than mid-cycle, and the room can name the host under a
+	// face that has not spoken yet.
+	for _, role := range roleSlots {
+		p, err := router.PlaceRole(ctx, role.id, role.slot)
+		if err != nil {
+			return HostSummary{}, err
+		}
+		sum.Roles = append(sum.Roles, RolePlacement{
+			Role: string(role.id), Host: string(p.Kind), Model: p.Model,
+		})
+	}
+	for _, skip := range router.SkipReasons() {
+		sum.Skipped = append(sum.Skipped, HostSkip{
+			Host: string(skip.Kind), Probe: skip.Probe, Reason: skip.Reason,
+		})
+	}
 	return sum, nil
+}
+
+// roleSlots is every avatar role a run places, with the slot it resolves on.
+// The critic is on JUDGE so it cannot simply agree with what it reviews.
+var roleSlots = []struct {
+	id   contracts.RoleID
+	slot contracts.ModelSlot
+}{
+	{contracts.RoleProductManager, contracts.SlotMain},
+	{contracts.RoleArchitect, contracts.SlotMain},
+	{contracts.RoleSpecialist, contracts.SlotMain},
+	{contracts.RoleCritic, contracts.SlotJudge},
+	{contracts.RoleSynthesizer, contracts.SlotMain},
+	{contracts.RoleNarrator, contracts.SlotMain},
 }
 
 // wireSolo connects a Solo room to its executor: every document change

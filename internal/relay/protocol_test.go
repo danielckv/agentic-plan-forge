@@ -154,12 +154,16 @@ func TestDocumentAndFrameBoundsAreOrdered(t *testing.T) {
 
 func TestClampTimeoutAndOutput(t *testing.T) {
 	req := contracts.GenerateRequest{}
-	if got := req.ClampTimeout(); got != contracts.MaxGenerateTimeout {
-		t.Fatalf("unset timeout = %v, want the maximum", got)
+	if got := req.ClampTimeout(); got != contracts.DefaultGenerateTimeout {
+		t.Fatalf("unset timeout = %v, want the default %v", got, contracts.DefaultGenerateTimeout)
 	}
-	req.Timeout = 10 * time.Minute
+	req.Timeout = contracts.MaxGenerateTimeout + time.Minute
 	if got := req.ClampTimeout(); got != contracts.MaxGenerateTimeout {
 		t.Fatalf("oversized timeout = %v, want it clamped to %v", got, contracts.MaxGenerateTimeout)
+	}
+	req.Timeout = 10 * time.Minute
+	if got := req.ClampTimeout(); got != 10*time.Minute {
+		t.Fatalf("in-range timeout = %v, want it preserved", got)
 	}
 	req.Timeout = 30 * time.Second
 	if got := req.ClampTimeout(); got != 30*time.Second {

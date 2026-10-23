@@ -13,7 +13,7 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 )
 
-// timeoutGen is the host killing a call that outran contracts.MaxGenerateTimeout:
+// timeoutGen is the host killing a call that outran contracts.DefaultGenerateTimeout:
 // any section longer than limit fails with context.DeadlineExceeded.
 type timeoutGen struct {
 	limit int

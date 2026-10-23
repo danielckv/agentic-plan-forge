@@ -98,7 +98,7 @@ func callBatch(ctx context.Context, gen contracts.Generator, batch []pack, index
 			SystemPrompt: systemPrompt,
 			UserPayload:  raw,
 			SchemaID:     MapSchemaID,
-			Timeout:      contracts.MaxGenerateTimeout,
+			Timeout:      contracts.DefaultGenerateTimeout,
 			MaxOutput:    contracts.MaxStageOutputBytes,
 		}, func(contracts.GenerationEvent) error { return ctx.Err() })
 		if err != nil {

@@ -50,6 +50,30 @@ export const WORKING_STATUS: ReadonlySet<string> = new Set([
 /** The avatar that locks the design once the cycle is finished. */
 export const SYNTHESIZER_ID = "synthesizer";
 
+/**
+ * The avatar that narrates the run. It holds no draft, publishes only the
+ * status below, and is never one of the avatarIds the room counts, so it can
+ * never keep a finished cycle from synthesizing.
+ */
+export const NARRATOR_ID = "narrator";
+
+/** The only status the narrator publishes. It is not a working status. */
+export const NARRATING_STATUS = "Narrating";
+
+/**
+ * A heartbeat is the progress line a running call emits every few seconds
+ * ("Running for 40s, 7.2 KB written, now on contracts"). The avatar card
+ * wants the newest one; the discussion wants none of them, or a slow stage
+ * buries every other line.
+ *
+ * The shape is fixed by the executor's progressLine, so matching its opening
+ * is enough — and a miss is cheap: one extra timeline line, never a lost
+ * status.
+ */
+export function isHeartbeat(summary: string): boolean {
+  return summary.startsWith("Running for ");
+}
+
 export interface RoomThought {
   avatarId: string;
   status: string;

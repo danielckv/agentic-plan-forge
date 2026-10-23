@@ -22,7 +22,19 @@ const (
 	// its own role rather than a second ingestion call so a receipt names the
 	// prompt that actually ran.
 	RoleImpact RoleID = "impact"
+	// RoleNarrator turns the step records the other avatars emit into one
+	// short, live statement of what the run is doing. It never produces a
+	// draft and never blocks a stage: a narrator failure is dropped.
+	RoleNarrator RoleID = "narrator"
 )
+
+// Placement names the host and model that served, or will serve, one role.
+type Placement struct {
+	Role    RoleID `json:"role"`
+	Host    string `json:"host"`
+	Version string `json:"version,omitempty"`
+	Model   string `json:"model,omitempty"`
+}
 
 // ModelSlot selects which configured model an invocation uses. The critic runs
 // on JUDGE so it cannot simply agree with the drafts it reviews.
@@ -34,9 +46,19 @@ const (
 	SlotJudge ModelSlot = "JUDGE"
 )
 
-// MaxGenerateTimeout bounds a single provider call regardless of what a caller
-// requests.
-const MaxGenerateTimeout = 180 * time.Second
+// DefaultGenerateTimeout is the budget one provider call gets when its caller
+// asks for none. Ingestion and impact size their inputs against it (ADR 0004):
+// a section or an evidence batch is built to finish inside it.
+const DefaultGenerateTimeout = 180 * time.Second
+
+// MaxGenerateTimeout is the ceiling a caller may raise its own budget to. The
+// deliberation stages need more than the default and say so explicitly: the
+// architect design part reads the whole repository graph and writes the
+// workstream DAG and every interface contract in one call. Measured on
+// `claude -p --model opus` with a 206 KiB payload: 110 seconds, 94,184 input
+// tokens, 12,075 output tokens. That is the floor, before project context,
+// resolved decisions or a revision's previous draft. See ADR 0009.
+const MaxGenerateTimeout = 30 * time.Minute
 
 // MaxStageOutputBytes bounds one stage's raw output before schema validation.
 const MaxStageOutputBytes = 2 << 20
@@ -63,11 +85,11 @@ type GenerateRequest struct {
 }
 
 // ClampTimeout returns the request timeout bounded by MaxGenerateTimeout, and
-// the default when the caller left it unset.
+// DefaultGenerateTimeout when the caller left it unset.
 func (r GenerateRequest) ClampTimeout() time.Duration {
 	switch {
 	case r.Timeout <= 0:
-		return MaxGenerateTimeout
+		return DefaultGenerateTimeout
 	case r.Timeout > MaxGenerateTimeout:
 		return MaxGenerateTimeout
 	default:
@@ -95,6 +117,9 @@ const (
 	EventUsage         GenerationEventKind = "usage"
 	EventFinal         GenerationEventKind = "final"
 	EventError         GenerationEventKind = "error"
+	// EventPlacement reports which host and model a generator selected, before
+	// any output arrives. A generator that does not route may never send it.
+	EventPlacement GenerationEventKind = "placement"
 )
 
 // GenerationEvent is one streamed item from a provider invocation.
@@ -103,9 +128,10 @@ type GenerationEvent struct {
 	Text string              `json:"text,omitempty"`
 	// PublicSummary carries the short user-facing rationale summary. It is an
 	// explicit model output field, never a transcript of private reasoning.
-	PublicSummary string `json:"public_summary,omitempty"`
-	Usage         *Usage `json:"usage,omitempty"`
-	Err           string `json:"error,omitempty"`
+	PublicSummary string     `json:"public_summary,omitempty"`
+	Usage         *Usage     `json:"usage,omitempty"`
+	Placement     *Placement `json:"placement,omitempty"`
+	Err           string     `json:"error,omitempty"`
 }
 
 // Usage reports provider token accounting when the adapter can observe it.

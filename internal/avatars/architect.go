@@ -21,8 +21,8 @@ import (
 // project context, and then write a workstream DAG, the interface contracts,
 // two diagrams and one documentation task per confirmed drift item. On a
 // repository with real drift that call cannot finish inside
-// contracts.MaxGenerateTimeout, and a run died at `architect stage failed:
-// context deadline exceeded`.
+// the call timeout, and a run died at `architect stage failed: context
+// deadline exceeded`.
 //
 // The parts are:
 //
@@ -40,7 +40,7 @@ import (
 const (
 	// docBatchItems bounds how many drift items one documentation-task call
 	// answers. Each item costs one task of roughly 500 bytes of JSON.
-	docBatchItems = 30
+	docBatchItems = 20
 	// docBatchBytes bounds the drift evidence of one documentation-task call.
 	docBatchBytes = 24 << 10
 )
@@ -216,7 +216,7 @@ func (o *orchestrator) architectDesign(ctx context.Context, c int, prev draftRec
 
 	sp := o.architectSpec(c, statusThinking,
 		"Part 1 of 3: mapping the stories onto module boundaries, contracts and a workstream DAG.")
-	sp.system = ArchitectDesignSystemPrompt()
+	sp.system, sp.step = ArchitectDesignSystemPrompt(), "design 1/3"
 	var rev *revisionInput
 	if prev.present() {
 		rev = &revisionInput{PreviousDraft: prev.Raw, RequiredChanges: o.requiredFor("")}
@@ -405,7 +405,7 @@ func (o *orchestrator) architectRest(ctx context.Context, c int, design synthesi
 // architectDiagrams runs the diagram part over the decided design.
 func (o *orchestrator) architectDiagrams(ctx context.Context, c int, design synthesizer.ArchitectDoc) (json.RawMessage, error) {
 	sp := o.architectSpec(c, statusDrafting, "Part 2 of 3: drawing the architecture and sequence diagrams of the design.")
-	sp.system = ArchitectDiagramsSystemPrompt()
+	sp.system, sp.step = ArchitectDiagramsSystemPrompt(), "diagrams 2/3"
 	o.mu.Lock()
 	stories := o.pm.Stories
 	o.mu.Unlock()
@@ -422,6 +422,7 @@ func (o *orchestrator) architectDocBatch(ctx context.Context, c int, design synt
 	sp := o.architectSpec(c, statusDrafting,
 		fmt.Sprintf("Part 3 of 3: writing documentation tasks for %d stale documents (batch %d of %d).", len(b.items), b.index, total))
 	sp.system = ArchitectDocTasksSystemPrompt()
+	sp.step = fmt.Sprintf("docs 3/3 · batch %d/%d", b.index, total)
 	in, err := fitPayload(sp.avatar, &architectDocsPayload{
 		Cycle: c, Batch: b.index, Batches: total, IDPrefix: b.prefix, Summary: design.Summary,
 		Workstreams: design.Workstreams, DocDrift: b.items, UnverifiableItems: unverifiableCount(o.in.DocDrift),

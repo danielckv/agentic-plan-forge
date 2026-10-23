@@ -205,7 +205,7 @@ func TestRunHappyPathStageOrderAndModels(t *testing.T) {
 		if r.ModelSlot != wantSlot || r.Model != wantModel {
 			t.Errorf("%s uses %s/%s, want %s/%s", c.Key, r.ModelSlot, r.Model, wantSlot, wantModel)
 		}
-		if r.RunID != h.in.RunID || r.Timeout != contracts.MaxGenerateTimeout || r.MaxOutput != contracts.MaxStageOutputBytes {
+		if r.RunID != h.in.RunID || r.Timeout != avatars.DefaultStageTimeout || r.MaxOutput != contracts.MaxStageOutputBytes {
 			t.Errorf("%s request bounds = %q %v %d", c.Key, r.RunID, r.Timeout, r.MaxOutput)
 		}
 		if r.SchemaID != "" {
@@ -681,14 +681,24 @@ func TestCallTimeoutIsBoundedAndNotRepeated(t *testing.T) {
 	if got := h.stub.callsOf("pm")[0].Req.Timeout; got != 25*time.Millisecond {
 		t.Errorf("request timeout = %v", got)
 	}
-	// An over-long configured timeout is clamped to the 180 s ceiling.
+	// An over-long configured timeout is clamped to the ceiling, and an unset
+	// one takes the stage default rather than the ceiling: a hung host must
+	// not hold a run open for the whole of contracts.MaxGenerateTimeout.
 	h2 := newHarness(t, synthtest.Sample())
 	h2.in.CallTimeout = time.Hour
 	if _, err := h2.run(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := h2.stub.callsOf("pm")[0].Req.Timeout; got != 180*time.Second {
-		t.Errorf("clamped timeout = %v, want 180s", got)
+	if got := h2.stub.callsOf("pm")[0].Req.Timeout; got != contracts.MaxGenerateTimeout {
+		t.Errorf("clamped timeout = %v, want %v", got, contracts.MaxGenerateTimeout)
+	}
+	h3 := newHarness(t, synthtest.Sample())
+	h3.in.CallTimeout = 0
+	if _, err := h3.run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := h3.stub.callsOf("pm")[0].Req.Timeout; got != avatars.DefaultStageTimeout {
+		t.Errorf("unset timeout = %v, want the stage default %v", got, avatars.DefaultStageTimeout)
 	}
 }
 

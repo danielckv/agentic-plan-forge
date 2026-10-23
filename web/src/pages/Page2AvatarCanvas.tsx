@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  Cpu,
   Crown,
   FileText,
   Gauge,
@@ -8,6 +9,7 @@ import {
   LoaderCircle,
   MessagesSquare,
   Network,
+  Radio,
   ShieldAlert,
   TriangleAlert,
   WifiOff,
@@ -33,11 +35,12 @@ import {
   runFailure,
   workingAvatars,
   KNOWN_STATUS,
+  NARRATOR_ID,
   WORKING_STATUS,
   type AvatarStatus,
   type RoomInput,
 } from "../ui/room";
-import type { CritiqueIssue, DecisionCard, SyncState, TimelineEntry } from "../store/syncStore";
+import type { AvatarThought, CritiqueIssue, DecisionCard, SyncState, TimelineEntry } from "../store/syncStore";
 import { SkeletonCard, SkeletonLines } from "../ui/Skeleton";
 
 /**
@@ -75,6 +78,54 @@ const STATUS_CHIP: Record<AvatarStatus, string> = {
 
 type PlanTab = "epics" | "architecture" | "findings" | "usage";
 
+/**
+ * What one avatar is running on and how far it has got: the host and model
+ * serving it, the part of the stage in flight, the evidence that part can
+ * see, and the progress of the call. Each piece is optional — a stage that
+ * has not resolved a host yet simply shows fewer of them — so the row is
+ * built from whatever arrived.
+ */
+function AvatarMeta({ thought }: { thought: AvatarThought | undefined }): React.ReactElement | null {
+  if (thought === undefined) return null;
+  const where = [thought.model, thought.host].filter((v) => v !== undefined && v !== "").join(" on ");
+  const progress =
+    thought.elapsedMs !== undefined && thought.elapsedMs > 0
+      ? `${Math.round(thought.elapsedMs / 1000)}s${
+          thought.outputBytes !== undefined && thought.outputBytes > 0
+            ? ` · ${(thought.outputBytes / 1024).toFixed(1)} KB`
+            : ""
+        }`
+      : "";
+  if (where === "" && (thought.step ?? "") === "" && progress === "" && (thought.contextNote ?? "") === "") {
+    return null;
+  }
+  return (
+    <span className="pf-roster-meta">
+      {where !== "" && (
+        <span className="pf-tag" title="The host and model serving this avatar">
+          <Cpu size={10} aria-hidden="true" />
+          {where}
+        </span>
+      )}
+      {thought.step !== undefined && thought.step !== "" && (
+        <span className="pf-tag" title="The part of the stage in progress">
+          {thought.step}
+        </span>
+      )}
+      {progress !== "" && (
+        <span className="pf-tag pf-tag--live" title="Time and output of the call in flight">
+          {progress}
+        </span>
+      )}
+      {thought.contextNote !== undefined && thought.contextNote !== "" && (
+        <span className="pf-roster-context" title="The evidence this call can see">
+          {thought.contextNote}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function Page2AvatarCanvas(): React.ReactElement {
   const sync = useSync();
   const cycle = sync.cycle;
@@ -101,6 +152,11 @@ export function Page2AvatarCanvas(): React.ReactElement {
   );
   const working = workingIds.map((id) => avatarSpec(id).name);
   const workingCount = working.length;
+
+  // The narrator is not one of the four: it holds no draft and must never
+  // count as an avatar still working, or a finished cycle could not
+  // synthesize while it spoke.
+  const narration = sync.thoughts[NARRATOR_ID];
 
   const openCritiques = sync.critiques.filter((c) => !c.resolved && c.severity !== "MEDIUM");
   const openDecisions = sync.decisions.filter((d) => d.resolvedOptionId === undefined && !d.stale);
@@ -184,6 +240,19 @@ export function Page2AvatarCanvas(): React.ReactElement {
             </p>
           </header>
 
+          {narration !== undefined && narration.summary !== "" && (
+            <p className="pf-narration" role="status" aria-live="polite">
+              <Radio size={13} aria-hidden="true" className={workingCount > 0 ? "pf-spin-slow" : undefined} />
+              <span className="pf-narration-text">{narration.summary}</span>
+              {narration.model !== undefined && narration.model !== "" && (
+                <span className="pf-tag" title="The host and model narrating this run">
+                  <Cpu size={10} aria-hidden="true" />
+                  {[narration.model, narration.host].filter((v) => v !== undefined && v !== "").join(" on ")}
+                </span>
+              )}
+            </p>
+          )}
+
           <div className="pf-roster" role="group" aria-label="Avatars">
             {MAIN_AVATARS.map((a) => {
               const status = statusFor(a.id);
@@ -208,6 +277,7 @@ export function Page2AvatarCanvas(): React.ReactElement {
                       <span className="pf-dot" />
                       {status}
                     </span>
+                    <AvatarMeta thought={thought} />
                     {thought !== undefined && thought.summary !== "" ? (
                       <span className="pf-roster-say">{thought.summary}</span>
                     ) : WORKING_STATUS.has(status) ? (

@@ -28,8 +28,12 @@ const (
 	statusRevising   = "Revising"
 	statusSynced     = "Synced"
 	statusFailed     = "Failed"
-	statusCancelled  = "Cancelled"
-	statusStale      = "Stale"
+	// statusNarrating belongs to the narrator alone. It is deliberately not a
+	// working status: the narrator holds no draft, so it must never keep the
+	// room from reading a finished cycle as finished.
+	statusNarrating = "Narrating"
+	statusCancelled = "Cancelled"
+	statusStale     = "Stale"
 )
 
 // orchestrator holds the state of one Run or Synthesize call.
@@ -47,6 +51,14 @@ type orchestrator struct {
 	// avatars that never ran a terminal status instead of leaving them queued.
 	seen map[string]string
 
+	// liveMu guards live. It is separate from mu because a heartbeat reads it
+	// while a stage holds mu to write a draft.
+	liveMu sync.Mutex
+	// live is what the room shows under each face: which host and model serve
+	// the avatar, which part of its stage is running, what evidence that part
+	// can see, and how far the call in flight has got.
+	live map[string]*liveDetail
+
 	// mu guards st, specs and early while specialists run concurrently.
 	mu    sync.Mutex
 	st    *runState
@@ -57,6 +69,55 @@ type orchestrator struct {
 	// early holds the non-authoritative findings of the in-stage critic. The
 	// barrier receives them as hints; they never certify or block anything.
 	early []contracts.Critique
+
+	// tell is the live status avatar, or nil when the owner turned it off or
+	// the call is a one-shot synthesis. Every method on it tolerates nil.
+	tell *narrator
+}
+
+// liveDetail is the per-avatar detail the avatar room shows while a stage
+// runs. Every field is optional: an avatar whose host is not resolved yet
+// simply shows nothing where the host would be.
+type liveDetail struct {
+	host, model string
+	step        string
+	contextNote string
+	// started is when the call in flight began; zero between calls.
+	started time.Time
+	// outputBytes is what the call in flight has streamed so far.
+	outputBytes int
+	// headline is the top-level JSON key the output is currently filling.
+	headline string
+}
+
+// heartbeatEvery is how often a running call reports its progress to the room.
+// A stage call now has minutes to run (DefaultStageTimeout), so without a
+// heartbeat a card sits on one sentence for the whole stage and reads as hung.
+const heartbeatEvery = 10 * time.Second
+
+// detail returns the live record of an avatar, creating it when absent.
+func (o *orchestrator) detail(avatar string) *liveDetail {
+	o.liveMu.Lock()
+	defer o.liveMu.Unlock()
+	if o.live == nil {
+		o.live = map[string]*liveDetail{}
+	}
+	d, ok := o.live[avatar]
+	if !ok {
+		d = &liveDetail{}
+		o.live[avatar] = d
+	}
+	return d
+}
+
+// snapshotDetail copies an avatar's live record for one event.
+func (o *orchestrator) snapshotDetail(avatar string) liveDetail {
+	o.liveMu.Lock()
+	defer o.liveMu.Unlock()
+	if d, ok := o.live[avatar]; ok {
+		return *d
+	}
+	return liveDetail{}
 }
 
 // genFailure is a failed provider call: whether the provider had already
@@ -102,9 +163,21 @@ func (o *orchestrator) thought(ctx context.Context, avatar string, cycle int, st
 	}
 	o.seen[avatar] = status
 	o.mu.Unlock()
-	return o.emitEvent(ctx, relay.EventAvatarThought, relay.AvatarThoughtPayload{
+	d := o.snapshotDetail(avatar)
+	payload := relay.AvatarThoughtPayload{
 		RunID: o.in.RunID, AvatarID: avatar, Cycle: cycle, Status: status, PublicSummary: cleanSummary(summary),
+		Host: d.host, Model: d.model, Step: d.step, ContextNote: d.contextNote,
+		OutputBytes: d.outputBytes,
+	}
+	if !d.started.IsZero() && !terminalStatus(status) {
+		payload.ElapsedMS = time.Since(d.started).Milliseconds()
+	}
+	o.tell.record(stepRecord{
+		Avatar: avatar, Cycle: cycle, Status: status, Step: d.step,
+		Host: d.host, Model: d.model, Context: d.contextNote,
+		Summary: payload.PublicSummary, Seconds: int(payload.ElapsedMS / 1000),
 	})
+	return o.emitEvent(ctx, relay.EventAvatarThought, payload)
 }
 
 // terminalStatus reports whether a status ends an avatar's work for this run.
@@ -192,6 +265,9 @@ type stageSpec struct {
 	cycle   int
 	status  string
 	summary string
+	// step names the part of the stage this call is, such as "design 1/3" or
+	// "docs batch 3/7". A stage that runs as one call leaves it empty.
+	step string
 }
 
 // requestSchemaID returns label when it names an embedded schema and "" when
@@ -227,11 +303,15 @@ const maxTimeoutShrinks = 2
 type stageInput struct {
 	raw json.RawMessage
 	src trimmable
+	// note is the one-line statement of what evidence this call can see.
+	note string
 }
 
 // fixedInput is a payload with no evidence to give up: the Product Manager
 // input, a repair input and the synthesis input are all already minimal.
-func fixedInput(raw json.RawMessage) *stageInput { return &stageInput{raw: raw} }
+func fixedInput(raw json.RawMessage) *stageInput {
+	return &stageInput{raw: raw, note: contextNote(raw)}
+}
 
 // halve trims evidence until the payload is at most half the size it was, and
 // returns one note naming what went. ok is false when nothing is left to give.
@@ -254,6 +334,7 @@ func (s *stageInput) halve(budget time.Duration) (string, bool) {
 	if len(notes) == 0 {
 		return "", false
 	}
+	s.note = contextNote(s.raw)
 	return fmt.Sprintf("The call outran its %d second budget, so it is running again with less evidence (%d of %d KiB). %s",
 		int(budget.Seconds()), len(s.raw)>>10, was>>10, strings.Join(notes, " ")), true
 }
@@ -285,18 +366,146 @@ func transient(err error) bool {
 	return true
 }
 
+// jsonCursor follows a streamed JSON object and reports which top-level key
+// is being filled. It is a depth counter that tracks strings and escapes, not
+// a parser: it never validates, and malformed input costs only an empty
+// answer. It is what lets a card say "now on contracts" instead of counting
+// bytes at the user.
+type jsonCursor struct {
+	depth    int
+	inString bool
+	escaped  bool
+	buf      []byte
+	pending  string
+	key      string
+}
+
+// maxCursorKey bounds the key text kept while a string is read, so a long
+// value at depth one cannot grow the cursor.
+const maxCursorKey = 64
+
+func (c *jsonCursor) write(s string) {
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case c.escaped:
+			c.escaped = false
+		case c.inString && ch == '\\':
+			c.escaped = true
+		case c.inString && ch == '"':
+			c.inString = false
+			if c.depth == 1 {
+				c.pending = string(c.buf)
+			}
+			c.buf = c.buf[:0]
+		case c.inString:
+			if c.depth == 1 && len(c.buf) < maxCursorKey {
+				c.buf = append(c.buf, ch)
+			}
+		case ch == '"':
+			c.inString = true
+			c.buf = c.buf[:0]
+		case ch == '{' || ch == '[':
+			c.depth++
+		case ch == '}' || ch == ']':
+			c.depth--
+		case ch == ':':
+			if c.depth == 1 && c.pending != "" {
+				c.key = c.pending
+			}
+			c.pending = ""
+		case ch == ',':
+			c.pending = ""
+		}
+	}
+}
+
+// progressLine is what a heartbeat says: how long the call has run, how much
+// it has written, and which part of the document it is on.
+func progressLine(d liveDetail) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Running for %ds", int(time.Since(d.started).Seconds())))
+	if d.outputBytes > 0 {
+		fmt.Fprintf(&b, ", %.1f KB written", float64(d.outputBytes)/1024)
+	}
+	if d.headline != "" {
+		fmt.Fprintf(&b, ", now on %s", strings.ReplaceAll(d.headline, "_", " "))
+	}
+	b.WriteString(".")
+	return b.String()
+}
+
 // attempt runs one provider call and reports whether it streamed any output.
+// While the call runs it reports progress to the room every heartbeatEvery:
+// a stage call has minutes to run, and a card that says nothing for minutes
+// is indistinguishable from a hung one.
 func (o *orchestrator) attempt(ctx context.Context, sp stageSpec, req contracts.GenerateRequest) (json.RawMessage, bool, error) {
 	callCtx, cancel := context.WithTimeout(ctx, req.ClampTimeout())
 	defer cancel()
 	var sawOutput atomic.Bool
 	var final atomic.Value
 	var refused atomic.Value // always an errBox: atomic.Value rejects mixed concrete types
+	var cursor jsonCursor
+
+	d := o.detail(sp.avatar)
+	o.liveMu.Lock()
+	d.started, d.outputBytes, d.headline = time.Now(), 0, ""
+	o.liveMu.Unlock()
+	defer func() {
+		o.liveMu.Lock()
+		d.started, d.outputBytes, d.headline = time.Time{}, 0, ""
+		o.liveMu.Unlock()
+	}()
+
+	// The heartbeat must not outlive the call. Closing the channel alone is
+	// not enough: a beat already blocked on the emit mutex would land after
+	// the stage published Synced, putting a finished avatar back on a working
+	// status — and a working status keeps the room from reading the cycle as
+	// finished. So attempt waits for the beat goroutine to return.
+	beats := make(chan struct{})
+	beatsDone := make(chan struct{})
+	defer func() {
+		close(beats)
+		<-beatsDone
+	}()
+	go func() {
+		defer close(beatsDone)
+		t := time.NewTicker(o.in.heartbeat())
+		defer t.Stop()
+		for {
+			select {
+			case <-beats:
+				return
+			case <-callCtx.Done():
+				return
+			case <-t.C:
+				snap := o.snapshotDetail(sp.avatar)
+				if snap.started.IsZero() {
+					continue
+				}
+				// A refused heartbeat is not a stage failure: the call owns
+				// that decision, and it is already watching callCtx.
+				_ = o.thought(callCtx, sp.avatar, sp.cycle, sp.status, progressLine(snap))
+			}
+		}
+	}()
+
 	res, err := o.gen.GenerateStream(callCtx, req, func(ev contracts.GenerationEvent) error {
 		switch ev.Kind {
+		case contracts.EventPlacement:
+			if ev.Placement != nil {
+				o.liveMu.Lock()
+				d.host, d.model = ev.Placement.Host, ev.Placement.Model
+				o.liveMu.Unlock()
+			}
 		case contracts.EventTextDelta:
 			if ev.Text != "" {
 				sawOutput.Store(true)
+				cursor.write(ev.Text)
+				o.liveMu.Lock()
+				d.outputBytes += len(ev.Text)
+				d.headline = cursor.key
+				o.liveMu.Unlock()
 			}
 		case contracts.EventPublicSummary:
 			summary := ev.PublicSummary
@@ -378,6 +587,12 @@ func (o *orchestrator) generate(ctx context.Context, sp stageSpec, in *stageInpu
 		if overranCallTimeout(ctx, err) && shrinks < maxTimeoutShrinks {
 			if note, ok := in.halve(o.in.callTimeout()); ok {
 				shrinks++
+				// The card must state the evidence the next call can see, not
+				// the evidence the one that timed out could.
+				d := o.detail(sp.avatar)
+				o.liveMu.Lock()
+				d.contextNote = in.note
+				o.liveMu.Unlock()
 				if terr := o.thought(ctx, sp.avatar, sp.cycle, sp.status, note); terr != nil {
 					return nil, terr
 				}
@@ -472,6 +687,10 @@ func repairPayload(input, previous json.RawMessage, err error) json.RawMessage {
 // stage. Repair is separate from the transient retry and happens at most once.
 func runStage[T any](o *orchestrator, ctx context.Context, sp stageSpec, in *stageInput, parse func(json.RawMessage) (T, json.RawMessage, error)) (T, json.RawMessage, error) {
 	var zero T
+	d := o.detail(sp.avatar)
+	o.liveMu.Lock()
+	d.step, d.contextNote = sp.step, in.note
+	o.liveMu.Unlock()
 	if err := o.thought(ctx, sp.avatar, sp.cycle, sp.status, sp.summary); err != nil {
 		return zero, nil, err
 	}

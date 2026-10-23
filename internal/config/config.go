@@ -23,23 +23,63 @@ const (
 	DefaultMaxCycles    = 3
 	DefaultMaxParallel  = 3
 	DefaultOCRLanguage  = "eng"
+	// DefaultStageTimeoutSeconds is the budget one deliberation call gets. The
+	// architect design part was measured at 110 seconds on opus with a minimal
+	// payload, so the old 180-second cap left a real cycle no room (ADR 0009).
+	DefaultStageTimeoutSeconds = 600
+	// MinStageTimeoutSeconds and MaxStageTimeoutSeconds bound the setting. The
+	// floor keeps a typo from failing every stage; the ceiling keeps a hung
+	// host from holding a run open indefinitely.
+	MinStageTimeoutSeconds = 60
+	MaxStageTimeoutSeconds = 1800
 )
+
+// Avatar roles that can be pinned to a host and a model. The set is closed and
+// matches contracts.RoleID; config stays free of other packages, so the names
+// are repeated here rather than imported.
+var validRoles = map[string]bool{
+	"pm": true, "architect": true, "specialist": true,
+	"critic": true, "synthesizer": true, "narrator": true,
+}
+
+// RoleNames lists the pinnable roles in the order a run uses them.
+func RoleNames() []string {
+	return []string{"pm", "architect", "specialist", "critic", "synthesizer", "narrator"}
+}
+
+// RoleBinding pins one avatar role to a host, a model, or both. An empty Host
+// lets the router spread the role across whatever hosts are ready; an empty
+// Model lets the chosen host pick its own default.
+type RoleBinding struct {
+	Host  string `json:"host,omitempty"`
+	Model string `json:"model,omitempty"`
+}
 
 // Config is the persisted settings file. Unknown keys survive a load/save round
 // trip so a newer build can add settings without an older build erasing them.
 type Config struct {
-	SchemaVersion     int      `json:"schema_version"`
-	RelayServerURL    string   `json:"relay_server_url,omitempty"`
-	DefaultMainModel  string   `json:"default_main_model,omitempty"`
-	DefaultJudgeModel string   `json:"default_judge_model,omitempty"`
-	MainHost          string   `json:"main_host,omitempty"`
-	JudgeHost         string   `json:"judge_host,omitempty"`
-	HumanWorkdayHours float64  `json:"human_workday_hours"`
-	MaxCycles         int      `json:"max_cycles"`
-	MaxParallel       int      `json:"max_parallel"`
-	BrowserPath       string   `json:"browser_path,omitempty"`
-	OCRLanguage       string   `json:"ocr_language,omitempty"`
-	HostEnvAllow      []string `json:"host_env_allow,omitempty"`
+	SchemaVersion     int     `json:"schema_version"`
+	RelayServerURL    string  `json:"relay_server_url,omitempty"`
+	DefaultMainModel  string  `json:"default_main_model,omitempty"`
+	DefaultJudgeModel string  `json:"default_judge_model,omitempty"`
+	MainHost          string  `json:"main_host,omitempty"`
+	JudgeHost         string  `json:"judge_host,omitempty"`
+	HumanWorkdayHours float64 `json:"human_workday_hours"`
+	MaxCycles         int     `json:"max_cycles"`
+	MaxParallel       int     `json:"max_parallel"`
+	// StageTimeoutSeconds bounds one deliberation call. Zero selects
+	// DefaultStageTimeoutSeconds.
+	StageTimeoutSeconds int `json:"stage_timeout_seconds"`
+	// DisableNarrator turns off the live status avatar. It is off by name
+	// rather than on by name so an existing config keeps the narrator.
+	DisableNarrator bool `json:"disable_narrator,omitempty"`
+	// RoleModels pins avatar roles to hosts and models, keyed by role name. A
+	// role with no entry is spread across the ready hosts by the router, so a
+	// default install uses every host it is signed in to rather than one.
+	RoleModels   map[string]RoleBinding `json:"role_models,omitempty"`
+	BrowserPath  string                 `json:"browser_path,omitempty"`
+	OCRLanguage  string                 `json:"ocr_language,omitempty"`
+	HostEnvAllow []string               `json:"host_env_allow,omitempty"`
 
 	// unknown preserves keys written by another build.
 	unknown map[string]json.RawMessage
@@ -54,11 +94,12 @@ func IsValidHost(h string) bool { return validHosts[h] }
 // Default returns the configuration used when no file exists.
 func Default() Config {
 	return Config{
-		SchemaVersion:     SchemaVersion,
-		HumanWorkdayHours: DefaultWorkdayHours,
-		MaxCycles:         DefaultMaxCycles,
-		MaxParallel:       DefaultMaxParallel,
-		OCRLanguage:       DefaultOCRLanguage,
+		SchemaVersion:       SchemaVersion,
+		HumanWorkdayHours:   DefaultWorkdayHours,
+		MaxCycles:           DefaultMaxCycles,
+		MaxParallel:         DefaultMaxParallel,
+		OCRLanguage:         DefaultOCRLanguage,
+		StageTimeoutSeconds: DefaultStageTimeoutSeconds,
 	}
 }
 
@@ -125,6 +166,7 @@ var knownKeys = map[string]bool{
 	"default_judge_model": true, "main_host": true, "judge_host": true,
 	"human_workday_hours": true, "max_cycles": true, "max_parallel": true,
 	"browser_path": true, "ocr_language": true, "host_env_allow": true,
+	"stage_timeout_seconds": true, "role_models": true, "disable_narrator": true,
 }
 
 // Save writes the configuration atomically: same-directory temporary file,
@@ -211,6 +253,20 @@ func Validate(cfg Config) error {
 	}
 	if !IsValidHost(cfg.JudgeHost) {
 		return fmt.Errorf("judge_host %q is not one of claude, omp, agy", cfg.JudgeHost)
+	}
+	if cfg.StageTimeoutSeconds != 0 &&
+		(cfg.StageTimeoutSeconds < MinStageTimeoutSeconds || cfg.StageTimeoutSeconds > MaxStageTimeoutSeconds) {
+		return fmt.Errorf("stage_timeout_seconds must be between %d and %d, got %d",
+			MinStageTimeoutSeconds, MaxStageTimeoutSeconds, cfg.StageTimeoutSeconds)
+	}
+	for role, binding := range cfg.RoleModels {
+		if !validRoles[role] {
+			return fmt.Errorf("role_models has unknown role %q; known roles are %s",
+				role, strings.Join(RoleNames(), ", "))
+		}
+		if !IsValidHost(binding.Host) {
+			return fmt.Errorf("role_models[%q].host %q is not one of claude, omp, agy", role, binding.Host)
+		}
 	}
 	if cfg.RelayServerURL != "" {
 		if err := ValidateRelayURL(cfg.RelayServerURL); err != nil {
@@ -359,20 +415,38 @@ func originOf(raw string) string {
 // credentials: those live in a separate file that is never printed.
 func (c Config) Redacted() map[string]any {
 	out := map[string]any{
-		"schema_version":      c.SchemaVersion,
-		"relay_server_url":    c.RelayServerURL,
-		"default_main_model":  c.DefaultMainModel,
-		"default_judge_model": c.DefaultJudgeModel,
-		"main_host":           c.MainHost,
-		"judge_host":          c.JudgeHost,
-		"human_workday_hours": c.HumanWorkdayHours,
-		"max_cycles":          c.MaxCycles,
-		"max_parallel":        c.MaxParallel,
-		"browser_path":        c.BrowserPath,
-		"ocr_language":        c.OCRLanguage,
-		"host_env_allow":      c.HostEnvAllow,
+		"schema_version":        c.SchemaVersion,
+		"relay_server_url":      c.RelayServerURL,
+		"default_main_model":    c.DefaultMainModel,
+		"default_judge_model":   c.DefaultJudgeModel,
+		"main_host":             c.MainHost,
+		"judge_host":            c.JudgeHost,
+		"human_workday_hours":   c.HumanWorkdayHours,
+		"max_cycles":            c.MaxCycles,
+		"max_parallel":          c.MaxParallel,
+		"stage_timeout_seconds": c.StageTimeout(),
+		"role_models":           c.RoleModels,
+		"disable_narrator":      c.DisableNarrator,
+		"browser_path":          c.BrowserPath,
+		"ocr_language":          c.OCRLanguage,
+		"host_env_allow":        c.HostEnvAllow,
 	}
 	return out
+}
+
+// StageTimeout returns the configured deliberation call budget in seconds,
+// or DefaultStageTimeoutSeconds when none is set.
+func (c Config) StageTimeout() int {
+	if c.StageTimeoutSeconds <= 0 {
+		return DefaultStageTimeoutSeconds
+	}
+	return c.StageTimeoutSeconds
+}
+
+// RoleBindingFor returns the binding pinned to a role, and whether one exists.
+func (c Config) RoleBindingFor(role string) (RoleBinding, bool) {
+	b, ok := c.RoleModels[role]
+	return b, ok
 }
 
 // WriteJSON renders v as indented JSON with a trailing newline.

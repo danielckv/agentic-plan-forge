@@ -28,6 +28,27 @@ type Resolution struct {
 	SharesMain bool   `json:"shares_main,omitempty"`
 }
 
+// roleHostOrder is the order each avatar role tries the adapters in. The
+// orders are rotations of each other, so an installation signed in to more
+// than one host spreads its roles across them instead of sending every call to
+// one: one host's rate limit then slows one role rather than the whole run,
+// and the critic reviews on a different host than the architect drafted on.
+//
+// A role walks its order until a host is ready, so an installation signed in
+// to one host still works and says in its skip reasons what it fell back from.
+// An explicit main_host or judge_host overrides the order entirely; a
+// role_models entry overrides it for that role alone.
+var roleHostOrder = map[contracts.RoleID][]Kind{
+	contracts.RoleProductManager: {KindClaude, KindOMP, KindAGY},
+	contracts.RoleArchitect:      {KindClaude, KindAGY, KindOMP},
+	contracts.RoleSpecialist:     {KindOMP, KindAGY, KindClaude},
+	contracts.RoleCritic:         {KindAGY, KindOMP, KindClaude},
+	contracts.RoleSynthesizer:    {KindClaude, KindOMP, KindAGY},
+	contracts.RoleNarrator:       {KindAGY, KindOMP, KindClaude},
+	contracts.RoleIngestion:      {KindClaude, KindOMP, KindAGY},
+	contracts.RoleImpact:         {KindOMP, KindClaude, KindAGY},
+}
+
 // NoHostError means no authenticated adapter satisfied the tool-free gate. CLI
 // callers map it to exit code 3.
 type NoHostError struct {
@@ -66,7 +87,17 @@ type Router struct {
 	ready   map[Kind]resolvedAdapter
 	main    *resolvedAdapter
 	judge   *resolvedAdapter
+	byRole  map[contracts.RoleID]Placement
+	models  map[Kind]map[string]bool
 	reasons []SkipReason
+}
+
+// Placement is the host, version and model one role's calls go to.
+type Placement struct {
+	adapter Adapter
+	Kind    Kind
+	Version string
+	Model   string
 }
 
 var _ contracts.Generator = (*Router)(nil)
@@ -79,6 +110,8 @@ func NewRouter(cfg config.Config, invokedHost Kind) *Router {
 		invokedHost: invokedHost,
 		adapters:    registeredMap(cfg.HostEnvAllow),
 		ready:       make(map[Kind]resolvedAdapter),
+		byRole:      make(map[contracts.RoleID]Placement),
+		models:      make(map[Kind]map[string]bool),
 	}
 }
 
@@ -105,24 +138,72 @@ func (r *Router) Resolve(ctx context.Context, slot contracts.ModelSlot) (Resolut
 	}, nil
 }
 
-// GenerateStream implements contracts.Generator.
+// GenerateStream implements contracts.Generator. It routes by role, so the
+// avatars of one run are served by every host the installation is signed in
+// to, and reports the placement before any output arrives.
 func (r *Router) GenerateStream(ctx context.Context, req contracts.GenerateRequest, emit func(contracts.GenerationEvent) error) (contracts.GenerationResult, error) {
 	slot := req.ModelSlot
 	if slot == "" {
 		slot = contracts.SlotMain
 		req.ModelSlot = slot
 	}
-
-	r.mu.Lock()
-	resolved, _, err := r.resolveLocked(ctx, slot)
-	r.mu.Unlock()
+	place, err := r.PlaceRole(ctx, req.Role, slot)
 	if err != nil {
 		return contracts.GenerationResult{}, err
 	}
 	if req.Model == "" {
-		req.Model = r.modelForSlot(slot)
+		req.Model = place.Model
 	}
-	return resolved.adapter.Generate(ctx, req, emit)
+	if emit != nil {
+		err := emit(contracts.GenerationEvent{Kind: contracts.EventPlacement, Placement: &contracts.Placement{
+			Role: req.Role, Host: string(place.Kind), Version: place.Version, Model: req.Model,
+		}})
+		if err != nil {
+			return contracts.GenerationResult{}, err
+		}
+	}
+	return place.adapter.Generate(ctx, req, emit)
+}
+
+// PlaceRole resolves the host and model one role's calls use. The answer is
+// cached per role, so every call of a role in a session lands on the same host
+// and the room never shows an avatar changing hosts mid-cycle.
+func (r *Router) PlaceRole(ctx context.Context, role contracts.RoleID, slot contracts.ModelSlot) (Placement, error) {
+	if slot == "" {
+		slot = contracts.SlotMain
+	}
+	if slot != contracts.SlotMain && slot != contracts.SlotJudge {
+		return Placement{}, fmt.Errorf("unknown model slot %q", slot)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p, ok := r.byRole[role]; ok {
+		return p, nil
+	}
+	resolved, err := r.selectCandidatesLocked(ctx, slot, r.roleCandidates(role, slot))
+	if err != nil {
+		return Placement{}, err
+	}
+	p := Placement{
+		adapter: resolved.adapter,
+		Kind:    resolved.adapter.Kind(),
+		Version: resolved.version,
+	}
+	p.Model = r.modelForRoleLocked(ctx, role, slot, p.Kind)
+	r.byRole[role] = p
+	return p, nil
+}
+
+// Placements reports the host and model resolved for every role so far,
+// keyed by role. It never resolves a new one.
+func (r *Router) Placements() map[contracts.RoleID]Placement {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make(map[contracts.RoleID]Placement, len(r.byRole))
+	for role, p := range r.byRole {
+		out[role] = p
+	}
+	return out
 }
 
 // Models returns one adapter's discovered models. Configured full IDs are
@@ -248,6 +329,68 @@ func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.Mode
 
 func (r *Router) mainCandidates() []Kind {
 	return []Kind{Kind(r.cfg.MainHost), r.invokedHost, KindClaude, KindOMP, KindAGY}
+}
+
+// roleCandidates orders the adapters one role tries. A role_models host comes
+// first, then an explicitly configured slot host, then the role's own
+// rotation, then everything else. An owner who pins main_host still gets one
+// host for every MAIN role; an owner who pins nothing gets the rotation, which
+// is what spreads a run across the hosts it is signed in to.
+func (r *Router) roleCandidates(role contracts.RoleID, slot contracts.ModelSlot) []Kind {
+	var out []Kind
+	if b, ok := r.cfg.RoleBindingFor(string(role)); ok {
+		out = append(out, Kind(b.Host))
+	}
+	if slot == contracts.SlotJudge {
+		out = append(out, Kind(r.cfg.JudgeHost))
+	} else {
+		out = append(out, Kind(r.cfg.MainHost))
+	}
+	out = append(out, roleHostOrder[role]...)
+	return append(out, r.invokedHost, KindClaude, KindOMP, KindAGY)
+}
+
+// modelForRoleLocked picks the model id for a role on the host that will serve
+// it. An explicit role_models model wins. Otherwise the configured slot model
+// applies only to a host that actually lists it: "opus" means nothing to OMP,
+// and sending it there is the 404 ADR 0004 traced. A host that lists no match
+// is left to its own default.
+func (r *Router) modelForRoleLocked(ctx context.Context, role contracts.RoleID, slot contracts.ModelSlot, kind Kind) string {
+	if b, ok := r.cfg.RoleBindingFor(string(role)); ok && b.Model != "" {
+		return b.Model
+	}
+	want := r.modelForSlot(slot)
+	if want == "" || r.hostListsModelLocked(ctx, kind, want) {
+		return want
+	}
+	return ""
+}
+
+// hostListsModelLocked reports whether a host advertises a model id. A host
+// that cannot list its models answers true: the configured id is then the only
+// evidence available, and refusing it would be worse than trying it.
+func (r *Router) hostListsModelLocked(ctx context.Context, kind Kind, id string) bool {
+	known, cached := r.models[kind]
+	if !cached {
+		adapter, ok := r.adapters[kind]
+		if !ok {
+			return true
+		}
+		models, err := adapter.Models(ctx)
+		if err != nil || len(models) == 0 {
+			r.models[kind] = nil
+			return true
+		}
+		known = make(map[string]bool, len(models))
+		for _, m := range models {
+			known[m.ID] = true
+		}
+		r.models[kind] = known
+	}
+	if known == nil {
+		return true
+	}
+	return known[id]
 }
 
 func (r *Router) judgeCandidates() []Kind {

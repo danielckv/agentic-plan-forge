@@ -28,6 +28,7 @@ import {
 } from "../protocol/bridge";
 import { validate } from "../protocol/schema";
 import { insertAllowed, textSha256 } from "../collab/model";
+import { isHeartbeat } from "../ui/room";
 import { toastStore } from "../ui/toasts";
 
 export type ConnState = "connecting" | "open" | "resyncing" | "offline" | "closed";
@@ -99,6 +100,16 @@ export interface AvatarThought {
   cycle: number;
   status: string;
   summary: string;
+  /** The host adapter and model id serving this avatar, when resolved. */
+  host?: string | undefined;
+  model?: string | undefined;
+  /** The part of the stage in progress, such as "design 1/3". */
+  step?: string | undefined;
+  /** The slice of evidence this call can see. */
+  contextNote?: string | undefined;
+  /** Progress of the call in flight; both absent between calls. */
+  elapsedMs?: number | undefined;
+  outputBytes?: number | undefined;
 }
 
 /** A critic finding carried by AVATAR_CRITIQUE (see protocol/drafts.ts). */
@@ -438,27 +449,39 @@ function handleEnvelope(env: WSEnvelope): void {
         cycle?: number;
         status?: string;
         public_summary?: string;
+        host?: string;
+        model?: string;
+        step?: string;
+        context_note?: string;
+        elapsed_ms?: number;
+        output_bytes?: number;
       };
       const avatarId = p.avatar_id ?? "?";
+      const cycle = p.cycle ?? state.cycle;
+      const status = p.status ?? "Thinking";
+      const summary = p.public_summary ?? "";
+      const thought: AvatarThought = {
+        avatarId,
+        cycle,
+        status,
+        summary,
+        host: p.host,
+        model: p.model,
+        step: p.step,
+        contextNote: p.context_note,
+        elapsedMs: p.elapsed_ms,
+        outputBytes: p.output_bytes,
+      };
+      // A heartbeat repeats the running status with new progress. Keeping
+      // every one would bury the discussion in "Running for 20s" lines, so
+      // the card takes them and the timeline does not.
+      const heartbeat = isHeartbeat(summary);
       setState({
-        timeline: appendTimeline(env, {
-          kind: "thought",
-          at: Date.now(),
-          avatarId,
-          cycle: p.cycle ?? state.cycle,
-          status: p.status ?? "Thinking",
-          summary: p.public_summary ?? "",
-        }),
-        thoughts: {
-          ...state.thoughts,
-          [avatarId]: {
-            avatarId,
-            cycle: p.cycle ?? state.cycle,
-            status: p.status ?? "Thinking",
-            summary: p.public_summary ?? "",
-          },
-        },
-        cycle: p.cycle ?? state.cycle,
+        timeline: heartbeat
+          ? state.timeline
+          : appendTimeline(env, { kind: "thought", at: Date.now(), avatarId, cycle, status, summary }),
+        thoughts: { ...state.thoughts, [avatarId]: thought },
+        cycle,
         runId: state.runId ?? p.run_id ?? null,
       });
       break;

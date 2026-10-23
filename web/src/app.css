@@ -3524,6 +3524,76 @@ figure > .pf-diagram-source { border-top: none; }
   line-clamp: 2;
 }
 
+/*
+ * Under each face: which host and model serve the avatar, which part of its
+ * stage is running, how far the call has got, and what evidence that call can
+ * see. It wraps, because a specialist's workstream id can be long and the
+ * line must never push the card wider.
+ */
+.pf-roster-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.pf-roster-meta .pf-tag {
+  flex: none;
+}
+
+.pf-tag--live {
+  border-color: var(--pf-accent-soft);
+  color: var(--pf-accent);
+}
+
+.pf-roster-context {
+  width: 100%;
+  overflow: hidden;
+  color: var(--pf-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The narrator's line: one statement of what the whole run is doing, above
+ * the four faces. It is a status, never a control, so it is quiet by default
+ * and only its icon moves while a cycle runs.
+ */
+.pf-narration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel-subtle);
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pf-narration > svg {
+  flex: none;
+  color: var(--pf-accent);
+}
+
+.pf-narration-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-spin-slow {
+  animation: pf-pulse-soft 2s ease-in-out infinite;
+}
+
+@keyframes pf-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .pf-roster-main .pf-skeleton-stack {
   width: 100%;
 }
