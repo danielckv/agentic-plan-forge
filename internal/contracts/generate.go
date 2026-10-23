@@ -18,6 +18,10 @@ const (
 	RoleCritic         RoleID = "critic"
 	RoleSynthesizer    RoleID = "synthesizer"
 	RoleIngestion      RoleID = "ingestion"
+	// RoleImpact maps the interpreted requirements onto the repository. It is
+	// its own role rather than a second ingestion call so a receipt names the
+	// prompt that actually ran.
+	RoleImpact RoleID = "impact"
 )
 
 // ModelSlot selects which configured model an invocation uses. The critic runs

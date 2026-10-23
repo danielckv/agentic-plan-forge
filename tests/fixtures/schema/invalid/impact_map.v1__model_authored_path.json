@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "epic_id": "E1",
+      "candidate_id": "internal/billing/export.go",
+      "area": "Invoice export",
+      "verdict": "change",
+      "reason": "The model wrote a path where a candidate identifier belongs.",
+      "confidence": "HIGH"
+    }
+  ]
+}

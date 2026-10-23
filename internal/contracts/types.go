@@ -234,6 +234,121 @@ type ContextHit struct {
 	Score   float64 `json:"score"`
 }
 
+// Impact verdicts: what happens to one part of the project when the
+// requirements land.
+const (
+	// ImpactChange marks an existing part that must be modified.
+	ImpactChange = "change"
+	// ImpactAdd marks work that has nothing to build on yet.
+	ImpactAdd = "add"
+	// ImpactReuse marks an existing part that already does the job.
+	ImpactReuse = "reuse"
+	// ImpactConflict marks a requirement that contradicts what a document or
+	// decision record already states.
+	ImpactConflict = "conflicts_with"
+)
+
+// Impact link kinds: what the link points at.
+const (
+	ImpactKindCode     = "code"
+	ImpactKindDoc      = "doc"
+	ImpactKindSpec     = "spec"
+	ImpactKindDecision = "decision"
+)
+
+// Impact link sources. A lexical link is a keyword match and carries no
+// reason; a model link carries the plain-language sentence.
+const (
+	ImpactSourceLexical = "lexical"
+	ImpactSourceModel   = "model"
+)
+
+// Impact map states, as Page 1 reports them.
+const (
+	// ImpactPending means no map has been built yet.
+	ImpactPending = "pending"
+	// ImpactReady means the model read the repository and answered.
+	ImpactReady = "ready"
+	// ImpactLexical means the keyword ranking is showing: either the model is
+	// still reading, or it could not answer.
+	ImpactLexical = "lexical"
+	// ImpactFailed means the pass failed. Notes says why.
+	ImpactFailed = "failed"
+)
+
+// ImpactLink is one part of the project the requirements touch, as a reader
+// who does not read code sees it.
+//
+// Path, Line and the symbol fields are resolved from the repository graph
+// against an identifier the model returned; the model never writes them. It
+// chooses among numbered candidates it was shown, so it cannot name a file
+// that does not exist.
+type ImpactLink struct {
+	ID   string `json:"id"`
+	Area string `json:"area"`
+	Kind string `json:"kind"`
+	Path string `json:"path,omitempty"`
+	Line int    `json:"line,omitempty"`
+
+	SymbolID   string `json:"symbol_id,omitempty"`
+	SymbolName string `json:"symbol_name,omitempty"`
+	SymbolKind string `json:"symbol_kind,omitempty"`
+	Heading    string `json:"heading,omitempty"`
+
+	// Verdict is what happens to this part. It is empty on a lexical link:
+	// a name match says the part exists and shares a word with the
+	// requirements, and nothing more.
+	Verdict string `json:"verdict"`
+	// Reason is one plain-language sentence. It is empty on a lexical link.
+	Reason     string `json:"reason,omitempty"`
+	Confidence string `json:"confidence,omitempty"`
+	Source     string `json:"source"`
+	// Provenance is the exact candidate text the model was shown: a signature
+	// or a documentation excerpt. It is evidence, not a claim.
+	Provenance string `json:"provenance,omitempty"`
+}
+
+// ImpactEpic is one draft epic's links.
+type ImpactEpic struct {
+	EpicID string       `json:"epic_id"`
+	Title  string       `json:"title"`
+	Links  []ImpactLink `json:"links"`
+}
+
+// ImpactMap is what the requirements touch, shown on Page 1 before any avatar
+// runs.
+//
+// It is derived from the already-normalized PRD, the repository graph and the
+// project context. It is never an input to ingestion.Normalize and never
+// reaches the Product Manager: the separation of product requirements from
+// technical material is upstream of it.
+type ImpactMap struct {
+	SchemaVersion int    `json:"schema_version"`
+	State         string `json:"state"`
+	// Revision moves on every map the executor publishes, so the window
+	// refetches when the model result replaces the keyword ranking.
+	Revision uint64 `json:"revision"`
+	// PRDRevision is the interpretation this map explains.
+	PRDRevision uint64 `json:"prd_revision"`
+	// PRDHash and WorktreeHash identify the inputs, so a stored map is never
+	// shown for a PRD or a working tree it was not built from.
+	PRDHash      string `json:"prd_hash,omitempty"`
+	WorktreeHash string `json:"worktree_hash,omitempty"`
+	// Summary is one sentence for a reader who opens nothing else.
+	Summary string `json:"summary,omitempty"`
+	// Whole holds the links about the requirements as a whole rather than
+	// about one epic.
+	Whole []ImpactLink `json:"whole"`
+	Epics []ImpactEpic `json:"epics"`
+	// Conflicts repeats every ImpactConflict link, so the window shows them in
+	// one place.
+	Conflicts []ImpactLink `json:"conflicts"`
+	// Notes explain a pass that fell back, or that saw less than the whole
+	// project.
+	Notes       []string  `json:"notes,omitempty"`
+	GeneratedAt time.Time `json:"generated_at,omitempty"`
+}
+
 // DocDriftItem is one documentation claim that no longer matches the code.
 type DocDriftItem struct {
 	ID              string `json:"id"`

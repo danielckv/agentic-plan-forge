@@ -1092,6 +1092,48 @@ func queriesDigest() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// CacheDir returns <root>/docs/plans/.plan/cache, and with create also makes
+// the missing components and the .plan/.gitignore that keeps the cache out of
+// commits. Each component must be a plain directory, never a symbolic link.
+//
+// Other packages that cache derived repository state — internal/impact — call
+// this, so one implementation owns the layout, the permissions and the symlink
+// refusal.
+func CacheDir(root string, create bool) (string, error) {
+	dir, err := cacheDir(root, create)
+	if err != nil {
+		return "", err
+	}
+	if !create {
+		return dir, nil
+	}
+	if err := ensurePlanGitignore(dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// ensurePlanGitignore writes .plan/.gitignore when it is absent. An existing
+// file is never rewritten: the user's own exceptions stay.
+func ensurePlanGitignore(cacheDir string) error {
+	path := filepath.Join(filepath.Dir(cacheDir), ".gitignore")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	switch {
+	case errors.Is(err, fs.ErrExist):
+		return nil
+	case err != nil:
+		return fmt.Errorf("cannot create .plan/.gitignore")
+	}
+	_, werr := f.WriteString(planGitignore)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return fmt.Errorf("cannot write .plan/.gitignore")
+	}
+	return nil
+}
+
 // cacheDir returns <root>/docs/plans/.plan/cache. Each component must be a plain
 // directory, never a symbolic link; with create the missing ones are made.
 func cacheDir(root string, create bool) (string, error) {
@@ -1156,21 +1198,9 @@ const planGitignore = "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json
 // .plan/.gitignore when absent so the cache never reaches a commit, and
 // replaces the cache file atomically.
 func writeCache(root, digest string, started time.Time, files []string, results []fileResult) error {
-	dir, err := cacheDir(root, true)
+	dir, err := CacheDir(root, true)
 	if err != nil {
 		return err
-	}
-	ignorePath := filepath.Join(filepath.Dir(dir), ".gitignore")
-	if f, oerr := os.OpenFile(ignorePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600); oerr == nil {
-		_, werr := f.WriteString(planGitignore)
-		if cerr := f.Close(); werr == nil {
-			werr = cerr
-		}
-		if werr != nil {
-			return fmt.Errorf("cannot write .plan/.gitignore")
-		}
-	} else if !errors.Is(oerr, fs.ErrExist) {
-		return fmt.Errorf("cannot create .plan/.gitignore")
 	}
 
 	racyAfter := started.Add(-racyWindow).UnixNano()

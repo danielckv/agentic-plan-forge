@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "epic_id": "E1",
+      "candidate_id": "c3",
+      "area": "Invoice export",
+      "verdict": "change",
+      "reason": "Invoices are exported here today, and this adds the date range the finance team asked for.",
+      "confidence": "HIGH"
+    },
+    {
+      "epic_id": "E1",
+      "area": "Monthly schedule",
+      "verdict": "add",
+      "reason": "Nothing in the project runs an export on a schedule yet.",
+      "confidence": "MEDIUM"
+    },
+    {
+      "epic_id": "E2",
+      "candidate_id": "c11",
+      "area": "Export format",
+      "verdict": "conflicts_with",
+      "reason": "The recorded decision fixes the export as CSV, and these requirements ask for a spreadsheet instead.",
+      "confidence": "HIGH"
+    },
+    {
+      "epic_id": "",
+      "candidate_id": "c7",
+      "area": "Invoice record",
+      "verdict": "reuse",
+      "reason": "The invoice record already holds every field the export needs.",
+      "confidence": "LOW"
+    }
+  ]
+}
