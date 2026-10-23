@@ -1,4 +1,4 @@
-# <img src="docs/logo.svg" alt="" width="30" height="30" align="top"> Agentic Plan Forge
+# <img src="docs/logo.svg" alt="" width="30" height="30" align="middle"> Agentic Plan Forge
 
 [![CI](https://github.com/danielckv/agentic-plan-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/danielckv/agentic-plan-forge/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
