@@ -9,7 +9,7 @@ import (
 // markerName is written when Plan Forge first creates its home directory. It is
 // the guard that stops `uninstall --purge` from deleting a directory Plan Forge
 // does not own, such as a user's home directory when PLAN_FORGE_HOME=$HOME.
-const markerName = ".plan-forge-home"
+const markerName = ".plan-forge"
 
 // ErrNotOwned reports that a directory lacks the Plan Forge marker file.
 var ErrNotOwned = errors.New("directory is not owned by plan-forge (missing " + markerName + ")")

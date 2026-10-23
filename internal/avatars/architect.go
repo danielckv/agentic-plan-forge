@@ -40,7 +40,7 @@ import (
 const (
 	// docBatchItems bounds how many drift items one documentation-task call
 	// answers. Each item costs one task of roughly 500 bytes of JSON.
-	docBatchItems = 20
+	docBatchItems = 30
 	// docBatchBytes bounds the drift evidence of one documentation-task call.
 	docBatchBytes = 24 << 10
 )

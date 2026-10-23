@@ -21,7 +21,7 @@ import (
 	"unicode/utf8"
 )
 
-// DocumentIDPRD is the v1 editable document. Unknown IDs are rejected by the
+// Documentation is the v1 editable document. Unknown IDs are rejected by the
 // transport before reaching the authority.
 const DocumentIDPRD = "prd"
 

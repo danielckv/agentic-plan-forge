@@ -96,7 +96,7 @@ func (o *orchestrator) run(ctx context.Context) (contracts.SynthesisInput, error
 
 // endRunOnFailure closes a run that stopped on a failed stage: every avatar
 // that never ran gets a terminal status, so no card waits for work that will
-// not come. A cancelled context and an emit failure are not stage failures and
+// not come. A canceled context and an emit failure are not stage failures and
 // leave the board alone; the window already knows the session ended.
 func (o *orchestrator) endRunOnFailure(ctx context.Context, cycle int, err error) {
 	if ctx.Err() != nil {
@@ -923,10 +923,10 @@ func (o *orchestrator) synthesisInput() contracts.SynthesisInput {
 	}
 	crit := append([]contracts.Critique(nil), o.st.Critiques...)
 	sort.SliceStable(crit, func(i, j int) bool { return crit[i].ID < crit[j].ID })
-	decs := append([]contracts.Decision(nil), o.st.Decisions...)
-	sort.SliceStable(decs, func(i, j int) bool { return decs[i].ID < decs[j].ID })
+	_decisions := append([]contracts.Decision(nil), o.st.Decisions...)
+	sort.SliceStable(_decisions, func(i, j int) bool { return _decisions[i].ID < _decisions[j].ID })
 	return contracts.SynthesisInput{
 		PRD: o.in.PRD, PM: append(json.RawMessage(nil), o.st.PM.Raw...), Architecture: append(json.RawMessage(nil), o.st.Arch.Raw...),
-		Specialists: specs, Critiques: crit, Decisions: decs, Graph: o.in.Graph, DocDrift: o.in.DocDrift,
+		Specialists: specs, Critiques: crit, Decisions: _decisions, Graph: o.in.Graph, DocDrift: o.in.DocDrift,
 	}
 }

@@ -21,7 +21,7 @@ const SchemaVersion = 1
 const (
 	DefaultWorkdayHours = 9
 	DefaultMaxCycles    = 3
-	DefaultMaxParallel  = 4
+	DefaultMaxParallel  = 3
 	DefaultOCRLanguage  = "eng"
 )
 
