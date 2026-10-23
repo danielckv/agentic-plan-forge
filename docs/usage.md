@@ -5,6 +5,62 @@ request (`plan-forge context`, below) and asks a few questions to agree a short 
 default browser and waits, so the agent's terminal stays blocked until you approve a plan. Closing the tab without
 approving ends the session.
 
+## How a plan is made
+
+```mermaid
+flowchart TD
+    classDef input fill:#DEEBFF,stroke:#0052CC,color:#172B4D
+    classDef avatar fill:#FFFFFF,stroke:#0052CC,color:#172B4D
+    classDef critic fill:#FFEBE6,stroke:#DE350B,color:#172B4D
+    classDef output fill:#E3FCEF,stroke:#006644,color:#172B4D
+    classDef human fill:#FFFAE6,stroke:#FF991F,color:#172B4D
+    classDef infra fill:#F4F5F7,stroke:#5E6C84,color:#172B4D
+
+    subgraph IN["Inputs"]
+        REQ["Requirements<br/>composer, .docx, .pdf, .md"]:::input
+        PRD["Normalized PRD<br/>product vs technical split, draft epics"]:::input
+        GROUND["Repository grounding<br/>Tree-sitter symbols, docs drift"]:::input
+        CONTEXT["Project context<br/>decision records, specs, notes, recent commits"]:::input
+    end
+
+    subgraph DELIB["Deliberation: fresh, tool-free host CLI call per avatar"]
+        PM["1 Product Manager<br/>product context only, never code"]:::avatar
+        ARCH["2 Architect<br/>interfaces, diagrams, workstream DAG"]:::avatar
+        DOMAIN["3 Domain Specialist<br/>deep-dives each workstream"]:::avatar
+        CRITIC["Red-Team Critic<br/>separate model slot"]:::critic
+        DECIDE{{"Human decision<br/>trade-offs and the cycle limit"}}:::human
+        SYNTH["4 Synthesizer<br/>spec, epics, subtasks,<br/>human and agent schedules"]:::avatar
+    end
+
+    MAP["Impact map<br/>what the requirements touch,<br/>in plain language"]:::input
+    RELAY["Optional relay<br/>live shared PRD, roles, decisions"]:::infra
+    REVIEW["Review and approve<br/>in the three-page UI"]:::human
+    OUT[".plan/synthesized_spec.md<br/>.plan/plan_manifest.json"]:::output
+
+    REQ --> PRD
+    PRD --> MAP
+    GROUND -. "numbered candidates" .-> MAP
+    CONTEXT -. "numbered candidates" .-> MAP
+    MAP -. "shown to the author, never to an avatar" .-> REVIEW
+    PRD --> PM
+    PM --> ARCH
+    GROUND -. "symbols, signatures, drift" .-> ARCH
+    GROUND -. "symbols, signatures, drift" .-> DOMAIN
+    CONTEXT -. "what was already decided" .-> ARCH
+    CONTEXT -. "what was already decided" .-> DOMAIN
+    CONTEXT -. "what was already decided" .-> CRITIC
+    ARCH --> DOMAIN
+    DOMAIN -- "draft" --> CRITIC
+    CRITIC -- "severity-ranked critiques<br/>force a revision" --> DOMAIN
+    CRITIC -- "unresolved" --> DECIDE
+    DECIDE --> DOMAIN
+    CRITIC -- "accepted" --> SYNTH
+    SYNTH --> REVIEW
+    RELAY -. "remote mode" .- REVIEW
+    REVIEW -- "approve" --> OUT
+    REVIEW -- "edit baseline" --> PRD
+```
+
 ## The three pages
 
 The window has three pages in order. The top bar shows the project, its branch, the phase, who is here, the

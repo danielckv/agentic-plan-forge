@@ -11,6 +11,27 @@ Thank you for your interest in contributing. This document describes how to part
 
 For large changes, open an issue first to discuss the proposal before writing code. This avoids duplicated effort and ensures the change fits the project's direction.
 
+## Repository Layout
+
+```text
+cmd/client, cmd/relay       entrypoints, separated by build tags
+internal/contracts          shared data shapes, schemas and error codes
+internal/ingestion          document parsing, PRD normalization and draft epics
+internal/ast                Tree-sitter grounding and documentation drift
+internal/gather             project context: recall index, notes and specs, Git state
+internal/impact             what the requirements touch, for the first page
+internal/host               agent CLI adapters and skill installation
+internal/avatars            staged deliberation and prompt contracts
+internal/synthesizer        specification, manifest and effort schedules
+internal/session, collab    authoritative state and shared-document editing
+internal/relay              protocol, hub and local bridge
+web                         embedded React UI
+integrations                skill, command and hook templates
+```
+
+The `client` and `server` build tags are mutually exclusive. Most of `internal/` is client-tagged, so a plain
+`go build ./...` silently skips it; pass `-tags client`, and build `web/dist` first because the client embeds it.
+
 ## Development Workflow
 
 1. Fork the repository and clone your fork.

@@ -19,48 +19,12 @@ It ships as one Go binary with an embedded web UI, plus an optional relay server
 curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | sh
 ```
 
-Restart your agent, then type `/plan-forge`. Windows, manual installs and the full host matrix are in
-[docs/install.md](docs/install.md).
+Restart your agent, then type `/plan-forge`. You need Git, a browser, and Claude Code or OMP signed in. The planning
+window opens as a tab in your default browser when you run `/plan-forge`, and only then. Plan Forge never asks for or
+stores provider API keys: it uses the credentials your host agent already has.
 
-You need Git, a browser, and Claude Code or OMP signed in. The planning window opens as a tab in your default browser
-when you run `/plan-forge`, and only then. Plan Forge never asks for or stores provider API keys: it uses the credentials
-your host agent already has.
-
-### Update, reinstall and remove
-
-There is no separate update command and nothing to force: the install command replaces the binary in place and
-re-registers every skill and hook with the new path, whether or not one is already there.
-
-```sh
-# Update, or reinstall the same version over itself
-curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | sh
-
-# Install one exact release, to test a build or to roll back
-curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | PLAN_FORGE_VERSION=v0.4.0 sh
-
-# Re-register skills and hooks without downloading anything
-plan-forge install
-
-# Overwrite a skill or settings file you edited yourself (see below)
-plan-forge install --force
-
-# Remove what Plan Forge installed, restoring any settings file it changed
-plan-forge uninstall --host all
-
-# ...and delete its own config, credentials, backups and caches too
-plan-forge uninstall --host all --purge
-```
-
-Two things that look like a failed update but are not:
-
-- **A planning session already open keeps the old build.** Replacing the binary does not change a running process.
-  Approve or close the tab, then run `/plan-forge` again.
-- **`plan-forge install` exits 5 and leaves a file alone** when its contents no longer match what Plan Forge wrote,
-  which means you edited it. That is deliberate — it will not throw away your edit. `--force` overwrites it. The other
-  exit codes are 3 (no supported agent found) and 4 (you declined the prompt).
-
-If a new build seems to have no effect, check `which -a plan-forge`: an older copy earlier on `PATH` shadows the one in
-`~/.local/bin`. Uninstalling never touches a repository's `.plan/` folder, so approved plans and caches survive.
+Re-run the same command to update; it replaces the binary and re-registers the skills, so there is nothing to force.
+Windows, pinning a version, `plan-forge uninstall` and the full host matrix are in [docs/install.md](docs/install.md).
 
 ## A look inside
 
@@ -68,10 +32,9 @@ If a new build seems to have no effect, check `which -a plan-forge`: an older co
 or a diagram, and `@` to use the exact name of a component in your code. On the right, the requirements become epic files
 as you write, each linked to the code it touches.
 
-**See what it touches, before anything runs.** The Impact tab names the parts of your project this work affects and what
-happens to each — changes, new, already there, or clashes with a decision the team already recorded — one sentence each,
-in language that does not assume you read code. It is cached and recomputed only when the requirements, the code or the
-project's notes change.
+**See what it touches.** The Impact tab names the parts of your project the work affects and what happens to each:
+changes, new, already there, or clashes with a decision the team already recorded. One sentence apiece, in language that
+does not assume you read code.
 
 ![The composer: a Markdown editor with the requirements on the left and three epic files on the right, each listing the components it touches](docs/images/composer.png)
 
@@ -98,9 +61,7 @@ trusts documentation that no longer matches the code, forgets what the team deci
 requirements with low-level technical constraints. Plan Forge inserts a deliberation step that is slower and more
 sceptical on purpose:
 
-- Requirements are separated from technical constraints, so product decisions are not made by code-level accident. The
-  impact map on the first page is derived from the interpreted requirements, never fed back into them, and the Product
-  Manager never sees it.
+- Requirements are separated from technical constraints, so product decisions are not made by code-level accident.
 - Proposals are grounded in the repository's real structure, and documentation drift is reported instead of trusted.
 - The avatars read the team's decision records, specs and notes, so a plan builds on earlier decisions instead of
   reopening them.
@@ -108,60 +69,6 @@ sceptical on purpose:
 - The result is a contract-verified specification with explicit targets, verification commands and effort estimates.
 
 ## How it works
-
-```mermaid
-flowchart TD
-    classDef input fill:#DEEBFF,stroke:#0052CC,color:#172B4D
-    classDef avatar fill:#FFFFFF,stroke:#0052CC,color:#172B4D
-    classDef critic fill:#FFEBE6,stroke:#DE350B,color:#172B4D
-    classDef output fill:#E3FCEF,stroke:#006644,color:#172B4D
-    classDef human fill:#FFFAE6,stroke:#FF991F,color:#172B4D
-    classDef infra fill:#F4F5F7,stroke:#5E6C84,color:#172B4D
-
-    subgraph IN["Inputs"]
-        REQ["Requirements<br/>composer, .docx, .pdf, .md"]:::input
-        PRD["Normalized PRD<br/>product vs technical split, draft epics"]:::input
-        GROUND["Repository grounding<br/>Tree-sitter symbols, docs drift"]:::input
-        CONTEXT["Project context<br/>decision records, specs, notes, recent commits"]:::input
-    end
-
-    subgraph DELIB["Deliberation: fresh, tool-free host CLI call per avatar"]
-        PM["1 Product Manager<br/>product context only, never code"]:::avatar
-        ARCH["2 Architect<br/>interfaces, diagrams, workstream DAG"]:::avatar
-        DOMAIN["3 Domain Specialist<br/>deep-dives each workstream"]:::avatar
-        CRITIC["Red-Team Critic<br/>separate model slot"]:::critic
-        DECIDE{{"Human decision<br/>trade-offs and the cycle limit"}}:::human
-        SYNTH["4 Synthesizer<br/>spec, epics, subtasks,<br/>human and agent schedules"]:::avatar
-    end
-
-    MAP["Impact map<br/>what the requirements touch,<br/>in plain language"]:::input
-    RELAY["Optional relay<br/>live shared PRD, roles, decisions"]:::infra
-    REVIEW["Review and approve<br/>in the three-page UI"]:::human
-    OUT[".plan/synthesized_spec.md<br/>.plan/plan_manifest.json"]:::output
-
-    REQ --> PRD
-    PRD --> MAP
-    GROUND -. "numbered candidates" .-> MAP
-    CONTEXT -. "numbered candidates" .-> MAP
-    MAP -. "shown to the author, never to an avatar" .-> REVIEW
-    PRD --> PM
-    PM --> ARCH
-    GROUND -. "symbols, signatures, drift" .-> ARCH
-    GROUND -. "symbols, signatures, drift" .-> DOMAIN
-    CONTEXT -. "what was already decided" .-> ARCH
-    CONTEXT -. "what was already decided" .-> DOMAIN
-    CONTEXT -. "what was already decided" .-> CRITIC
-    ARCH --> DOMAIN
-    DOMAIN -- "draft" --> CRITIC
-    CRITIC -- "severity-ranked critiques<br/>force a revision" --> DOMAIN
-    CRITIC -- "unresolved" --> DECIDE
-    DECIDE --> DOMAIN
-    CRITIC -- "accepted" --> SYNTH
-    SYNTH --> REVIEW
-    RELAY -. "remote mode" .- REVIEW
-    REVIEW -- "approve" --> OUT
-    REVIEW -- "edit baseline" --> PRD
-```
 
 Each avatar runs as a fresh, tool-free model invocation through the host agent CLI you already have installed and
 authenticated. The Product Manager receives product requirements only: no file trees, no symbol graphs, no code, no
@@ -172,26 +79,15 @@ route registrations; documentation is cross-referenced against that graph so sta
 documentation-sync tasks instead of silent assumptions. Parse coverage gaps are reported as gaps, and structural matches
 are never treated as proof that behaviour is complete.
 
+Before the avatars start, Plan Forge gathers what the repository already says about the work: decision records, specs,
+notes and recent commit subjects, matched against your requirements and bounded to 12 excerpts. The Impact tab then asks
+the model which of those parts the requirements actually affect. It answers by picking from a numbered shortlist rather
+than writing paths, so every file it names exists. That map is for you; the avatars never receive it.
+
 Effort is estimated twice from the same task graph: a human schedule based on a 9-hour productive day, and an agent
 schedule based on declared parallelism. Estimates are labelled as estimates unless they come from recorded runs.
 
-### What it reads before planning
-
-Before the avatars start, Plan Forge collects what the repository already says about the work, matched against your
-requirements. It reads, read-only and without a model call:
-
-1. A project-memory recall index, when one exists: the SQLite full-text index the [`agents`](docs/adrs/0002-read-agents-recall-index.md) workflow keeps at `<git-common-dir>/agents-local/recall.db`, or the older `.agents/index/recall.db`.
-2. Otherwise the same files directly: `.agents/STATE.md`, `.agents/lanes/`, `.agents/sessions/`, `docs/specs/`, `docs/plans/`, `docs/adrs/` and `specs/`.
-3. The branch, `HEAD` and recent commit subjects.
-
-At most 12 excerpts and 64 KiB, with machine paths rewritten. The Notes tab on the first page shows exactly what the
-avatars will read, and `plan-forge context --query "<topic>"` prints it in your terminal. None of these files is required:
-without them the plan is grounded in the code alone.
-
-The Impact tab goes one step further and asks the model which of those parts the requirements actually affect. It is
-shown a numbered shortlist of declarations and excerpts and answers with their numbers, so every file it names exists.
-The result is advisory: it is shown to you, cached in `docs/plans/.plan/cache/`, and never given to the avatars, who read
-the code and the decisions for themselves. See [ADR 0005](docs/adrs/0005-prd-impact-map.md).
+The whole flow, page by page, is in [docs/usage.md](docs/usage.md).
 
 ## Documentation
 
@@ -202,7 +98,7 @@ the code and the decisions for themselves. See [ADR 0005](docs/adrs/0005-prd-imp
 | [Configuration](docs/configuration.md) | Hosts, models, workday baseline and self-hosting the relay |
 | [Decision records](docs/adrs/) | Why the live task views were removed, how project context is read, why the text is not scanned, how the impact map is built |
 | [Requirements catalogue](docs/requirements/) | Owners, acceptance criteria and traceability for every requirement |
-| [Contributing](CONTRIBUTING.md) | Development workflow and the full local check suite |
+| [Contributing](CONTRIBUTING.md) | Repository layout, development workflow and the full local check suite |
 
 ## Privacy and security
 
@@ -215,23 +111,6 @@ the code and the decisions for themselves. See [ADR 0005](docs/adrs/0005-prd-imp
   tripwire aborts a run if a tool call appears anyway.
 - A relay never accepts requests from a browser, requires TLS off loopback, and stores only hashes of credentials.
 - Security reports are welcome, and should not be filed as public issues. See [SECURITY.md](SECURITY.md).
-
-## Repository layout
-
-```text
-cmd/client, cmd/relay       entrypoints, separated by build tags
-internal/contracts          shared data shapes, schemas and error codes
-internal/ingestion          document parsing, PRD normalization and draft epics
-internal/ast                Tree-sitter grounding and documentation drift
-internal/gather             project context: recall index, notes and specs, Git state
-internal/host               agent CLI adapters and skill installation
-internal/avatars            staged deliberation and prompt contracts
-internal/synthesizer        specification, manifest and effort schedules
-internal/session, collab    authoritative state and shared-document editing
-internal/relay              protocol, hub and local bridge
-web                         embedded React UI
-integrations                skill, command and hook templates
-```
 
 ## Project status
 
