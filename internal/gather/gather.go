@@ -111,7 +111,7 @@ func Collect(ctx context.Context, opts Options) (contracts.ProjectContext, error
 		out.Notes = append(out.Notes, "no requirements text to match yet")
 	}
 	scrub(&out, opts.Repo)
-	fitBudget(&out, opts.Budget)
+	FitBudget(&out, opts.Budget)
 	return out, nil
 }
 
@@ -268,9 +268,10 @@ func scrub(c *contracts.ProjectContext, repo string) {
 	}
 }
 
-// fitBudget drops the lowest-ranked excerpts, then the oldest commit subjects,
-// until the marshalled context fits budget.
-func fitBudget(c *contracts.ProjectContext, budget int) {
+// FitBudget drops the lowest-ranked excerpts, then the oldest commit subjects,
+// until the marshalled context fits budget. A stage that must shrink its
+// payload further calls it with a smaller budget.
+func FitBudget(c *contracts.ProjectContext, budget int) {
 	size := func() int {
 		raw, err := json.Marshal(c)
 		if err != nil {

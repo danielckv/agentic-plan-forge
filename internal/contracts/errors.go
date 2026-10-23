@@ -85,10 +85,17 @@ type ErrBound struct {
 	Name     string
 	Limit    int64
 	Observed int64
+	// Detail names what filled the input, so the next step is to shrink that
+	// part rather than to guess. It is optional.
+	Detail string
 }
 
 func (e *ErrBound) Error() string {
-	return fmt.Sprintf("bound exceeded: %s limit %d, observed %d", e.Name, e.Limit, e.Observed)
+	s := fmt.Sprintf("bound exceeded: %s limit %d, observed %d", e.Name, e.Limit, e.Observed)
+	if e.Detail != "" {
+		s += " (" + e.Detail + ")"
+	}
+	return s
 }
 
 // ErrEncrypted reports an encrypted or password-protected input document.

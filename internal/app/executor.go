@@ -166,6 +166,11 @@ type executor struct {
 
 	normTrigger chan bool // true = immediate (Re-interpret)
 
+	// checkpoints keeps the resumable drafts of the current run, in memory and
+	// in docs/plans/.plan/run.json. An unfinished run is adopted by the next
+	// run over the same baseline; an approved plan clears it.
+	checkpoints *avatars.CheckpointStore
+
 	mu          sync.Mutex
 	phase       relay.Phase
 	runID       string
@@ -219,6 +224,10 @@ func newExecutor(cfg executorConfig) *executor {
 			Impact: impactPending, ImpactDetail: impactPendingDetail, HostSummary: cfg.Hosts,
 		},
 	}
+	e.checkpoints = avatars.NewCheckpointStore()
+	e.checkpoints.Persist(newRunCheckpointSink(cfg.Repo), func(err error) {
+		e.log.Warn("the unfinished run was not kept on disk", "err", err)
+	})
 	return e
 }
 
@@ -716,6 +725,21 @@ func (e *executor) stageFailed(runID, avatar string, err error) {
 	})
 }
 
+// cancelDeliberation gives the deliberation avatars a terminal status after a
+// failure that stopped the run before they could start. Without it their cards
+// stay queued for a run that is over.
+func (e *executor) cancelDeliberation(runID, failed string) {
+	for _, avatar := range []string{avatarPM, relay.StageArchitect, relay.StageCritic, avatarSynthesizer} {
+		if avatar == failed {
+			continue
+		}
+		_ = e.cfg.Auth.Emit(relay.EventAvatarThought, relay.AvatarThoughtPayload{
+			RunID: runID, AvatarID: avatar, Cycle: 1, Status: "Cancelled",
+			PublicSummary: "The run stopped before this avatar started. Retry the stage or revise the baseline.",
+		})
+	}
+}
+
 func hashJSON(v any) string {
 	raw, _ := json.Marshal(v)
 	sum := sha256.Sum256(raw)
@@ -735,6 +759,7 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 	if err != nil {
 		if ctx.Err() == nil {
 			e.stageFailed(runID, avatarPM, err)
+			e.cancelDeliberation(runID, avatarPM)
 		}
 		return
 	}
@@ -752,7 +777,15 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 			Coverage:      contracts.Coverage{Notes: []string{"the repository scan failed; no code context is available"}},
 		}
 	}
-	snap, _ := ast.Snapshot(g, ast.SnapshotOptions{Keywords: productKeywords(norm.Product)})
+	keywords := productKeywords(norm.Product)
+	snap, _ := ast.Snapshot(g, ast.SnapshotOptions{Keywords: keywords})
+	// Drift detection caps items per document but not across them, so the list
+	// is bounded here, the way the graph is.
+	drift, driftInfo := ast.DriftDigest(g.DocDriftReports, ast.DriftDigestOptions{Keywords: keywords})
+	var notes []string
+	if driftInfo.Statement != "" {
+		notes = append(notes, driftInfo.Statement)
+	}
 	// The context is gathered again for the frozen PRD, so the avatars never
 	// see notes matched against a draft the user has since changed.
 	pc := e.collectContext(ctx, normalizedText(norm))
@@ -765,10 +798,11 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 	e.mu.Unlock()
 	cfg := e.cfg.Config
 	in := avatars.RunInput{
-		RunID: runID, PRD: norm, Graph: snap, GraphHash: hashJSON(snap), DocDrift: g.DocDriftReports,
-		Context: pc, ContextHash: hashJSON(pc),
+		RunID: runID, PRD: norm, Graph: snap, GraphHash: hashJSON(snap), DocDrift: drift,
+		EvidenceNotes: notes, Context: pc, ContextHash: hashJSON(pc),
 		Models:    avatars.ModelSlots{Main: cfg.DefaultMainModel, Judge: cfg.DefaultJudgeModel},
 		MaxCycles: cfg.MaxCycles, MaxParallel: cfg.MaxParallel, StartCycle: startCycle,
+		Checkpoints: e.checkpoints,
 	}
 	e.mu.Lock()
 	e.runInput = &in
@@ -901,6 +935,12 @@ func (e *executor) commitApproval(p relay.ApprovalPreparedPayload) {
 	if err := planstate.RecordApproval(e.cfg.Repo, res.ManifestSHA256, p.ApprovalID); err != nil {
 		e.log.Warn("could not record the approval in the local ledger", "err", err)
 	}
+	// The plan is approved: the drafts it was built from are no longer work in
+	// progress, so the unfinished run is removed from the plan directory.
+	e.mu.Lock()
+	runID := e.runID
+	e.mu.Unlock()
+	e.checkpoints.Forget(runID)
 	if e.cfg.Upload != nil {
 		if err := e.cfg.Upload(e.ctx, p.ApprovalID, plan.SpecMarkdown, plan.ManifestJSON); err != nil {
 			e.log.Warn("artifact upload failed", "err", err)

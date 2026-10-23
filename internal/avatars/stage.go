@@ -27,6 +27,7 @@ const (
 	statusRevising   = "Revising"
 	statusSynced     = "Synced"
 	statusFailed     = "Failed"
+	statusCancelled  = "Cancelled"
 	statusStale      = "Stale"
 )
 
@@ -41,6 +42,9 @@ type orchestrator struct {
 	par       int
 
 	emitMu sync.Mutex
+	// seen is the last status emitted per avatar, so a failed run can give the
+	// avatars that never ran a terminal status instead of leaving them queued.
+	seen map[string]string
 
 	// mu guards st, specs and early while specialists run concurrently.
 	mu    sync.Mutex
@@ -91,9 +95,48 @@ func (o *orchestrator) emitEvent(ctx context.Context, t relay.WSEventType, paylo
 }
 
 func (o *orchestrator) thought(ctx context.Context, avatar string, cycle int, status, summary string) error {
+	o.mu.Lock()
+	if o.seen == nil {
+		o.seen = map[string]string{}
+	}
+	o.seen[avatar] = status
+	o.mu.Unlock()
 	return o.emitEvent(ctx, relay.EventAvatarThought, relay.AvatarThoughtPayload{
 		RunID: o.in.RunID, AvatarID: avatar, Cycle: cycle, Status: status, PublicSummary: cleanSummary(summary),
 	})
+}
+
+// terminalStatus reports whether a status ends an avatar's work for this run.
+func terminalStatus(s string) bool {
+	switch s {
+	case statusSynced, statusFailed, statusCancelled, statusStale:
+		return true
+	}
+	return false
+}
+
+// cancelPending gives every avatar that has not reached a terminal status one,
+// so a failed run leaves no card waiting forever. The avatars Page 2 shows are
+// always announced; a specialist only when it was part of this run.
+func (o *orchestrator) cancelPending(ctx context.Context, cycle int, cause string) {
+	o.mu.Lock()
+	roster := []string{relay.StagePM, relay.StageArchitect, relay.StageCritic, relay.StageSynthesizer}
+	for avatar := range o.seen {
+		if !containsString(roster, avatar) {
+			roster = append(roster, avatar)
+		}
+	}
+	pending := roster[:0:0]
+	for _, avatar := range roster {
+		if !terminalStatus(o.seen[avatar]) {
+			pending = append(pending, avatar)
+		}
+	}
+	o.mu.Unlock()
+	sort.Strings(pending)
+	for _, avatar := range pending {
+		_ = o.thought(ctx, avatar, cycle, statusCancelled, cause)
+	}
 }
 
 func (o *orchestrator) cycleStart(ctx context.Context, cycle int) error {
@@ -396,6 +439,7 @@ type architectPayload struct {
 	Graph             contracts.RepoContextGraph `json:"repository_graph"`
 	DocDrift          []contracts.DocDriftItem   `json:"documentation_drift"`
 	Context           *contracts.ProjectContext  `json:"project_context,omitempty"`
+	EvidenceNotes     []string                   `json:"evidence_notes,omitempty"`
 	Decisions         []contracts.Decision       `json:"resolved_decisions,omitempty"`
 	Revision          *revisionInput             `json:"revision,omitempty"`
 }
@@ -407,20 +451,21 @@ type adoptInput struct {
 }
 
 type specialistPayload struct {
-	Cycle        int                           `json:"cycle"`
-	WorkstreamID string                        `json:"workstream_id"`
-	Workstream   contracts.Workstream          `json:"workstream"`
-	Workstreams  []contracts.Workstream        `json:"workstreams"`
-	Summary      string                        `json:"architecture_summary"`
-	Constraints  []string                      `json:"architecture_constraints"`
-	Contracts    []contracts.InterfaceContract `json:"contracts"`
-	Epics        []contracts.Epic              `json:"epics"`
-	Stories      []contracts.Story             `json:"stories"`
-	Graph        contracts.RepoContextGraph    `json:"repository_graph"`
-	Context      *contracts.ProjectContext     `json:"project_context,omitempty"`
-	Decisions    []contracts.Decision          `json:"resolved_decisions,omitempty"`
-	Adopt        *adoptInput                   `json:"adopt_claim,omitempty"`
-	Revision     *revisionInput                `json:"revision,omitempty"`
+	Cycle         int                           `json:"cycle"`
+	WorkstreamID  string                        `json:"workstream_id"`
+	Workstream    contracts.Workstream          `json:"workstream"`
+	Workstreams   []contracts.Workstream        `json:"workstreams"`
+	Summary       string                        `json:"architecture_summary"`
+	Constraints   []string                      `json:"architecture_constraints"`
+	Contracts     []contracts.InterfaceContract `json:"contracts"`
+	Epics         []contracts.Epic              `json:"epics"`
+	Stories       []contracts.Story             `json:"stories"`
+	Graph         contracts.RepoContextGraph    `json:"repository_graph"`
+	Context       *contracts.ProjectContext     `json:"project_context,omitempty"`
+	EvidenceNotes []string                      `json:"evidence_notes,omitempty"`
+	Decisions     []contracts.Decision          `json:"resolved_decisions,omitempty"`
+	Adopt         *adoptInput                   `json:"adopt_claim,omitempty"`
+	Revision      *revisionInput                `json:"revision,omitempty"`
 }
 
 type criticPayload struct {
@@ -432,6 +477,7 @@ type criticPayload struct {
 	Stories       []contracts.Story           `json:"stories"`
 	Graph         contracts.RepoContextGraph  `json:"repository_graph"`
 	Context       *contracts.ProjectContext   `json:"project_context,omitempty"`
+	EvidenceNotes []string                    `json:"evidence_notes,omitempty"`
 	KnownTargets  []string                    `json:"known_targets"`
 	Prior         []contracts.Critique        `json:"prior_critiques,omitempty"`
 	Deterministic []contracts.Critique        `json:"deterministic_findings,omitempty"`
@@ -455,6 +501,12 @@ func (o *orchestrator) graphForPrompt() contracts.RepoContextGraph {
 	g := o.in.Graph
 	g.RootPath = ""
 	return g
+}
+
+// evidenceNotes repeats what the caller cut when it bounded the evidence, so
+// every stage payload says which gaps are cuts rather than absences.
+func (o *orchestrator) evidenceNotes() []string {
+	return append([]string(nil), o.in.EvidenceNotes...)
 }
 
 // contextForPrompt is the project context handed to technical avatars, or nil

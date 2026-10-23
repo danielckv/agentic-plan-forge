@@ -47,6 +47,10 @@ type RunInput struct {
 	GraphHash string
 	// DocDrift is the documentation-drift evidence the architect must cover.
 	DocDrift []contracts.DocDriftItem
+	// EvidenceNotes name evidence the caller cut to fit the stage bounds, in
+	// the words the avatars read. A stage repeats them in its payload and adds
+	// its own when it has to cut further.
+	EvidenceNotes []string
 	// Context is what the repository already says about itself: excerpts from
 	// its notes, specs, plans and decision records, and its Git state. The
 	// architect, specialists and critic receive it; the Product Manager never

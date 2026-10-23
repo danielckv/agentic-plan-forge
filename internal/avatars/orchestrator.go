@@ -76,6 +76,7 @@ func (o *orchestrator) run(ctx context.Context) (contracts.SynthesisInput, error
 	for c := start; c <= o.maxC; c++ {
 		converged, err := o.cycle(ctx, c)
 		if err != nil {
+			o.endRunOnFailure(ctx, c, err)
 			return contracts.SynthesisInput{}, err
 		}
 		if !converged {
@@ -83,7 +84,9 @@ func (o *orchestrator) run(ctx context.Context) (contracts.SynthesisInput, error
 		}
 		si := o.synthesisInput()
 		if _, err := synthesizer.Validate(si); err != nil {
-			return contracts.SynthesisInput{}, &StageError{Stage: "validation", Err: err}
+			verr := &StageError{Stage: "validation", Err: err}
+			o.endRunOnFailure(ctx, c, verr)
+			return contracts.SynthesisInput{}, verr
 		}
 		return si, nil
 	}
@@ -91,14 +94,33 @@ func (o *orchestrator) run(ctx context.Context) (contracts.SynthesisInput, error
 	return contracts.SynthesisInput{}, &PausedError{Cycle: o.maxC, Blockers: pausedBlockers(o.st.Critiques)}
 }
 
+// endRunOnFailure closes a run that stopped on a failed stage: every avatar
+// that never ran gets a terminal status, so no card waits for work that will
+// not come. A cancelled context and an emit failure are not stage failures and
+// leave the board alone; the window already knows the session ended.
+func (o *orchestrator) endRunOnFailure(ctx context.Context, cycle int, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	var stage *StageError
+	if !errors.As(err, &stage) {
+		return
+	}
+	o.cancelPending(ctx, cycle, "The run stopped: the "+stage.Stage+" stage failed. Retry it or revise the baseline.")
+}
+
 // restore loads a compatible checkpoint or starts a fresh state. A checkpoint
 // made for another PRD revision, product content, graph or model slot is
 // discarded: stale success is revalidated, never replayed.
 func (o *orchestrator) restore(ctx context.Context) error {
 	pmHash := sha256Hex(o.pmIn)
-	if cp := o.store.load(o.in.RunID); cp != nil {
+	if cp, fromDisk := o.store.load(o.in.RunID); cp != nil {
 		if cp.compatible(o.in, pmHash) && o.adopt(cp) {
-			return nil
+			if !fromDisk {
+				// This process published these drafts already.
+				return nil
+			}
+			return o.republish(ctx)
 		}
 		o.store.Forget(o.in.RunID)
 		if err := o.thought(ctx, relay.StagePM, 1, statusStale,
@@ -138,6 +160,45 @@ func (o *orchestrator) adopt(cp *runState) bool {
 	}
 	o.st, o.pm, o.arch, o.specs = cp, pm, arch, specs
 	return true
+}
+
+// republish sends the adopted drafts to the window. A resumed run does not
+// re-run the stages it already paid for, so without this the board would show
+// nothing for them: the epics, the architecture and the finished workstreams
+// come back exactly as they were saved.
+func (o *orchestrator) republish(ctx context.Context) error {
+	cycle := max(o.st.Cycle, 1)
+	type adopted struct {
+		avatar string
+		schema string
+		rec    draftRec
+	}
+	list := []adopted{
+		{relay.StagePM, synthesizer.SchemaPM, o.st.PM},
+		{relay.StageArchitect, synthesizer.SchemaArchitect, o.st.Arch},
+	}
+	wss := make([]string, 0, len(o.st.Specs))
+	for ws := range o.st.Specs {
+		wss = append(wss, ws)
+	}
+	sort.Strings(wss)
+	for _, ws := range wss {
+		list = append(list, adopted{relay.StageSpecialistPrefix + ws, synthesizer.SchemaSpecialist, o.st.Specs[ws]})
+	}
+	for _, a := range list {
+		if !a.rec.present() || a.rec.Stale {
+			continue
+		}
+		if err := o.publishDraft(ctx, a.avatar, a.schema, cycle, a.rec.Raw, a.rec.Rev); err != nil {
+			return err
+		}
+	}
+	if len(o.st.Critiques) > 0 {
+		if err := o.publishCritique(ctx, cycle, o.st.Critiques); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // cycle runs one full design/review pass and reports whether the run converged.
@@ -395,10 +456,14 @@ func (o *orchestrator) runArchitect(ctx context.Context, c int) error {
 		sp.status = statusRevising
 		sp.summary = "Revising the architecture for the open critiques; unaffected drafts are kept."
 	}
-	payload := mustJSON(architectPayload{
+	payload, err := fitPayload(sp.avatar, &architectPayload{
 		Cycle: c, PM: o.pm, TechnicalAppendix: o.in.PRD.TechnicalAppendix, Graph: o.graphForPrompt(),
-		DocDrift: nonNilDrift(o.in.DocDrift), Context: o.contextForPrompt(), Decisions: decisions, Revision: rev,
+		DocDrift: nonNilDrift(o.in.DocDrift), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
+		Decisions: decisions, Revision: rev,
 	})
+	if err != nil {
+		return o.failStage(ctx, sp, err)
+	}
 	doc, raw, err := runStage(o, ctx, sp, payload, o.parseArchitect)
 	if err != nil {
 		return err
@@ -627,11 +692,15 @@ func (o *orchestrator) runSpecialist(ctx context.Context, c int, ws string, adop
 		sp.status = statusRevising
 		sp.summary = fmt.Sprintf("Revising workstream %s for the open findings.", ws)
 	}
-	payload := mustJSON(specialistPayload{
+	payload, err := fitPayload(sp.avatar, &specialistPayload{
 		Cycle: c, WorkstreamID: ws, Workstream: w, Workstreams: arch.Workstreams, Summary: arch.Summary,
 		Constraints: nonNil(arch.Constraints), Contracts: relevant, Epics: pm.Epics, Stories: pm.Stories,
-		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), Decisions: decisions, Adopt: adopt, Revision: rev,
+		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
+		Decisions: decisions, Adopt: adopt, Revision: rev,
 	})
+	if err != nil {
+		return o.failStage(ctx, sp, err)
+	}
 	doc, raw, err := runStage(o, ctx, sp, payload, o.parseSpecialist(ws))
 	if err != nil {
 		return err
@@ -735,14 +804,20 @@ func (o *orchestrator) earlyCritic(ctx context.Context, c int) error {
 		pending = append(pending, id)
 	}
 	known := o.knownTargetsLocked()
-	payload := mustJSON(criticPayload{
+	p := &criticPayload{
 		Cycle: c, Barrier: false, Architect: o.arch, Specialists: done, NotYetDrafted: pending,
-		Stories: o.pm.Stories, Graph: o.graphForPrompt(), Context: o.contextForPrompt(), KnownTargets: sortedKeys(known),
+		Stories: o.pm.Stories, Graph: o.graphForPrompt(), Context: o.contextForPrompt(),
+		EvidenceNotes: o.evidenceNotes(), KnownTargets: sortedKeys(known),
 		Prior: append([]contracts.Critique{}, o.st.Critiques...), Decisions: append([]contracts.Decision{}, o.st.Decisions...),
-	})
+	}
 	o.mu.Unlock()
 
-	doc, _, err := runStage(o, ctx, o.criticSpec(c, false), payload, parseCritic(known))
+	sp := o.criticSpec(c, false)
+	payload, err := fitPayload(sp.avatar, p)
+	if err != nil {
+		return o.failStage(ctx, sp, err)
+	}
+	doc, _, err := runStage(o, ctx, sp, payload, parseCritic(known))
 	if err != nil {
 		return err
 	}
@@ -852,14 +927,20 @@ func (o *orchestrator) criticBarrier(ctx context.Context, c int) error {
 	o.mu.Lock()
 	known := o.knownTargetsLocked()
 	prior := append([]contracts.Critique{}, o.st.Critiques...)
-	payload := mustJSON(criticPayload{
+	p := &criticPayload{
 		Cycle: c, Barrier: true, Architect: o.arch, Specialists: o.specSliceLocked(), Stories: o.pm.Stories,
-		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), KnownTargets: sortedKeys(known), Prior: prior, Deterministic: det,
+		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
+		KnownTargets: sortedKeys(known), Prior: prior, Deterministic: det,
 		Earlier: append([]contracts.Critique{}, o.early...), Decisions: append([]contracts.Decision{}, o.st.Decisions...),
-	})
+	}
 	o.mu.Unlock()
 
-	doc, _, err := runStage(o, ctx, o.criticSpec(c, true), payload, parseCritic(known))
+	sp := o.criticSpec(c, true)
+	payload, err := fitPayload(sp.avatar, p)
+	if err != nil {
+		return o.failStage(ctx, sp, err)
+	}
+	doc, _, err := runStage(o, ctx, sp, payload, parseCritic(known))
 	if err != nil {
 		return err
 	}

@@ -131,6 +131,21 @@ The four avatars sit across the top with what each is doing now. Click one to sh
 decision waits. A run that reaches the cycle limit with blocking findings pauses and offers to retry the architect or
 revise the requirements.
 
+**When a stage fails.** The room says which stage failed and offers **Retry stage** and **Revise baseline**. The avatars
+that never ran are marked cancelled rather than left waiting. Retrying re-runs only the failed stage: every draft that
+was already validated is kept.
+
+**When you come back.** An unfinished run is kept in `docs/plans/.plan/run.json`, so closing the window or losing the
+process does not throw away work a model was already paid for. The next run over the same requirements picks the drafts
+up and puts the epics and the architecture straight back on the board; only the stages that never finished run again.
+Change the requirements, the code or the configured models and the saved drafts no longer match — the page says so and
+the run starts over. Approving a plan deletes the file.
+
+**What the avatars are given.** Each technical stage receives a bounded view of the repository: the code graph (200 KiB),
+the project notes (64 KiB) and the documentation drift list (128 KiB, confirmed drift first, then what your stories are
+about). When a stage input still does not fit its limit, evidence is given up in that order and the payload says what was
+cut, so the model treats the gap as unchecked rather than as nothing to do.
+
 ### 3. Synthesis: the specification
 
 A Confluence-style specification with diagrams, Jira-style epics and subtasks, documentation-sync tasks and the two
