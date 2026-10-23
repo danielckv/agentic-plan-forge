@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-23
+
 ### Added
 
 - The first page says what the work touches, in words. A new Impact tab names the parts of your project the requirements affect and what happens to each — changes, new, already there, or clashes with a decision the team already recorded — one sentence each, without assuming you read code. Each epic file carries the same list. Until now the page matched requirement keywords against declaration names, so a PRD written in business language matched nothing and the page said "No existing component matches this epic yet. It may need new code." — which reads as *this is all new work*. Nothing noticed a requirement that contradicted a recorded decision, either.
@@ -200,7 +202,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.1.3...v0.2.0
