@@ -2870,8 +2870,12 @@ figure > .pf-diagram-source { border-top: none; }
 .pf-rail-tab {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
+  gap: 5px;
+  /* Four tabs share the rail's width, so each gives up what it can rather than pushing the last one off the edge. */
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 0 7px;
+  overflow: hidden;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -2879,7 +2883,13 @@ figure > .pf-diagram-source { border-top: none; }
   font: inherit;
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   cursor: pointer;
+}
+
+.pf-rail-tab > svg {
+  flex: none;
 }
 
 .pf-rail-tab:hover {
@@ -3040,6 +3050,112 @@ figure > .pf-diagram-source { border-top: none; }
 .pf-tag--more {
   font-family: inherit;
   color: var(--pf-muted);
+}
+
+/* Impact verdicts: what happens to one part of the project. */
+.pf-tag--change {
+  border-color: var(--pf-accent-border);
+  background: var(--pf-accent-soft);
+  color: var(--pf-accent);
+}
+
+.pf-tag--add {
+  border-color: var(--pf-ok-border);
+  background: var(--pf-ok-soft);
+  color: var(--pf-ok);
+}
+
+.pf-tag--reuse {
+  border-color: var(--pf-border);
+  background: var(--pf-inset);
+  color: var(--pf-muted);
+}
+
+.pf-tag--conflict {
+  border-color: var(--pf-danger-border);
+  background: var(--pf-danger-soft);
+  color: var(--pf-danger);
+}
+
+.pf-tag--muted {
+  color: var(--pf-muted);
+}
+
+/* the "What changes" rail tab */
+.pf-impact {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+}
+
+.pf-impact-summary {
+  margin: 0;
+}
+
+.pf-impact-warn {
+  color: var(--pf-danger);
+}
+
+.pf-impact-group,
+.pf-impact-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-impact-heading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--pf-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pf-impact-conflicts .pf-impact-heading {
+  color: var(--pf-danger);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+.pf-impact-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--pf-border);
+  border-radius: 6px;
+  background: var(--pf-panel);
+}
+
+.pf-impact-conflicts .pf-impact-row {
+  border-color: var(--pf-danger-border);
+}
+
+.pf-impact-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pf-impact-area {
+  min-width: 0;
+  font-weight: 600;
+}
+
+/* The verdict is the shortest thing in the row and the most load-bearing: a long area name wraps rather than truncating it. */
+.pf-impact-row-head .pf-tag {
+  flex: none;
+}
+
+.pf-impact-row .pf-body {
+  margin: 0;
 }
 
 /* epic modal */

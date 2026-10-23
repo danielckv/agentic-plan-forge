@@ -514,7 +514,7 @@ function EpicsPanel({ pm }: { pm: PMDraft | null }): React.ReactElement {
               { label: ["story", "stories"], value: stories.length },
               { label: ["criterion", "criteria"], value: stories.reduce((n, s) => n + s.criteria.length, 0) },
             ]}
-            tags={[...new Set(stories.map((s) => s.actor))]}
+            tags={[...new Set(stories.map((s) => s.actor))].map((actor) => ({ text: actor }))}
             onOpen={() => setOpen(i)}
           />
         );

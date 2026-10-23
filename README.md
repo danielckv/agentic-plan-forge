@@ -32,6 +32,11 @@ your host agent already has.
 or a diagram, and `@` to use the exact name of a component in your code. On the right, the requirements become epic files
 as you write, each linked to the code it touches.
 
+**See what it touches, before anything runs.** The Impact tab names the parts of your project this work affects and what
+happens to each — changes, new, already there, or clashes with a decision the team already recorded — one sentence each,
+in language that does not assume you read code. It is cached and recomputed only when the requirements, the code or the
+project's notes change.
+
 ![The composer: a Markdown editor with the requirements on the left and three epic files on the right, each listing the components it touches](docs/images/composer.png)
 
 | Open an epic as a document | Browse the codebase while you write |
@@ -57,7 +62,9 @@ trusts documentation that no longer matches the code, forgets what the team deci
 requirements with low-level technical constraints. Plan Forge inserts a deliberation step that is slower and more
 sceptical on purpose:
 
-- Requirements are separated from technical constraints, so product decisions are not made by code-level accident.
+- Requirements are separated from technical constraints, so product decisions are not made by code-level accident. The
+  impact map on the first page is derived from the interpreted requirements, never fed back into them, and the Product
+  Manager never sees it.
 - Proposals are grounded in the repository's real structure, and documentation drift is reported instead of trusted.
 - The avatars read the team's decision records, specs and notes, so a plan builds on earlier decisions instead of
   reopening them.
@@ -91,11 +98,16 @@ flowchart TD
         SYNTH["4 Synthesizer<br/>spec, epics, subtasks,<br/>human and agent schedules"]:::avatar
     end
 
+    MAP["Impact map<br/>what the requirements touch,<br/>in plain language"]:::input
     RELAY["Optional relay<br/>live shared PRD, roles, decisions"]:::infra
     REVIEW["Review and approve<br/>in the three-page UI"]:::human
     OUT[".plan/synthesized_spec.md<br/>.plan/plan_manifest.json"]:::output
 
     REQ --> PRD
+    PRD --> MAP
+    GROUND -. "numbered candidates" .-> MAP
+    CONTEXT -. "numbered candidates" .-> MAP
+    MAP -. "shown to the author, never to an avatar" .-> REVIEW
     PRD --> PM
     PM --> ARCH
     GROUND -. "symbols, signatures, drift" .-> ARCH
@@ -140,6 +152,11 @@ At most 12 excerpts and 64 KiB, with machine paths rewritten. The Notes tab on t
 avatars will read, and `plan-forge context --query "<topic>"` prints it in your terminal. None of these files is required:
 without them the plan is grounded in the code alone.
 
+The Impact tab goes one step further and asks the model which of those parts the requirements actually affect. It is
+shown a numbered shortlist of declarations and excerpts and answers with their numbers, so every file it names exists.
+The result is advisory: it is shown to you, cached in `docs/plans/.plan/cache/`, and never given to the avatars, who read
+the code and the decisions for themselves. See [ADR 0005](docs/adrs/0005-prd-impact-map.md).
+
 ## Documentation
 
 | Guide | What it covers |
@@ -147,7 +164,7 @@ without them the plan is grounded in the code alone.
 | [Install](docs/install.md) | Requirements, one-command and manual install, what gets written per host, hooks, update and uninstall |
 | [Usage](docs/usage.md) | The composer, the avatar room, the specification, Plan Mode handoff, `plan-forge validate` and `context` |
 | [Configuration](docs/configuration.md) | Hosts, models, workday baseline and self-hosting the relay |
-| [Decision records](docs/adrs/) | Why the live task views were removed, how project context is read, why the text is not scanned |
+| [Decision records](docs/adrs/) | Why the live task views were removed, how project context is read, why the text is not scanned, how the impact map is built |
 | [Requirements catalogue](docs/requirements/) | Owners, acceptance criteria and traceability for every requirement |
 | [Contributing](CONTRIBUTING.md) | Development workflow and the full local check suite |
 

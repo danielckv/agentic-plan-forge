@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "impact_map.v1.json",
+  "title": "Impact entries produced by the impact-map stage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "entries": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["epic_id", "area", "verdict", "reason", "confidence"],
+        "properties": {
+          "epic_id": { "type": "string", "maxLength": 64 },
+          "candidate_id": { "type": "string", "pattern": "^c[0-9]{1,4}$" },
+          "area": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "verdict": { "type": "string", "enum": ["change", "add", "reuse", "conflicts_with"] },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] }
+        }
+      }
+    }
+  }
+}

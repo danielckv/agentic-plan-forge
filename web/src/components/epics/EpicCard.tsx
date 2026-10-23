@@ -13,8 +13,12 @@ export interface EpicCardProps {
   filename: string;
   /** Counts with a singular and plural label, such as ["requirement", "requirements"]. */
   stats: Array<{ label: [string, string]; value: number }>;
-  /** Component names, shown as chips; at most four are shown. */
-  tags: string[];
+  /**
+   * What the epic touches, shown as chips; at most four are shown. The tone
+   * colours the chip by verdict, so a clash with a recorded decision reads
+   * differently from an ordinary change. A tag without a tone is neutral.
+   */
+  tags: Array<{ text: string; tone?: string }>;
   onOpen: () => void;
 }
 
@@ -42,8 +46,11 @@ export function EpicCard({ id, title, goal, filename, stats, tags, onOpen }: Epi
         {shown.length > 0 && (
           <span className="pf-epic-card-tags">
             {shown.map((tag) => (
-              <code key={tag} className="pf-tag">
-                {tag}
+              <code
+                key={tag.text}
+                className={tag.tone === undefined ? "pf-tag" : `pf-tag pf-tag--${tag.tone}`}
+              >
+                {tag.text}
               </code>
             ))}
             {more > 0 && <span className="pf-tag pf-tag--more">+{more}</span>}

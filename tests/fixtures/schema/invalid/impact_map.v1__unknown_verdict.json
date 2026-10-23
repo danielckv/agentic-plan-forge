@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "epic_id": "E1",
+      "candidate_id": "c3",
+      "area": "Invoice export",
+      "verdict": "rewrite",
+      "reason": "Invoices are exported here today.",
+      "confidence": "HIGH"
+    }
+  ]
+}

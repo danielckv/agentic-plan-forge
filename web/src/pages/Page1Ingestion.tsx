@@ -8,6 +8,7 @@ import {
   Paperclip,
   ScanText,
   TriangleAlert,
+  Waypoints,
   X,
 } from "lucide-react";
 
@@ -17,7 +18,7 @@ import type { RecoveryItem, StatusView } from "../store/syncStore";
 import { MarkdownEditor, type EditorApi } from "../ui/editor/MarkdownEditor";
 import { SkeletonChip, SkeletonLines } from "../ui/Skeleton";
 import { PlanRail } from "./composer/PlanRail";
-import { useComponentBlocks, usePlanFiles, useProjectContext } from "./composer/usePlanData";
+import { useComponentBlocks, useImpact, usePlanFiles, useProjectContext } from "./composer/usePlanData";
 
 /**
  * Page 1 — the composer.
@@ -84,7 +85,11 @@ export function Page1Ingestion(): React.ReactElement {
   // the next status poll lands, whichever comes first.
   const draftRevision = Number(sync.drafts.find((d) => d.avatarId === "ingestion")?.revision ?? 0);
   const revision = Math.max(status.interpretation ?? 0, Number.isFinite(draftRevision) ? draftRevision : 0);
-  const plan = usePlanFiles(revision);
+  // The impact map moves on its own: it is published twice per interpretation,
+  // once with the keyword matches and once when the model has read the project.
+  const impactRevision = Number(status.impactRevision ?? 0);
+  const plan = usePlanFiles(revision, impactRevision);
+  const impact = useImpact(impactRevision);
   const ctx = useProjectContext(`${status.context ?? ""}|${status.contextDetail ?? ""}|${revision}`);
   const scanDone = status.ast !== "scanning";
   const blocks = useComponentBlocks(scanDone && sync.statusLoaded);
@@ -236,6 +241,7 @@ export function Page1Ingestion(): React.ReactElement {
             blocks={blocks}
             scanning={!scanDone}
             ctx={ctx}
+            impact={impact}
             onInsert={(text) => editorApi.current?.insertText(text)}
           />
         </div>
@@ -247,6 +253,7 @@ export function Page1Ingestion(): React.ReactElement {
             <>
               <Pill kind="ast" status={status} />
               <Pill kind="docHealth" status={status} />
+              <Pill kind="impact" status={status} />
               <Pill kind="context" status={status} />
               {status.ocr === "missing" && <Pill kind="ocr" status={status} />}
             </>
@@ -296,7 +303,7 @@ function useInterpreting(hasText: boolean, lastLocalEdit: number, revision: numb
   return waiting && Date.now() - since < INTERPRETING_WINDOW_MS;
 }
 
-function Pill(props: { kind: "ast" | "docHealth" | "context" | "ocr"; status: StatusView }): React.ReactElement {
+function Pill(props: { kind: "ast" | "docHealth" | "context" | "impact" | "ocr"; status: StatusView }): React.ReactElement {
   const { kind, status } = props;
   let tone: string;
   let label: string;
@@ -323,6 +330,21 @@ function Pill(props: { kind: "ast" | "docHealth" | "context" | "ocr"; status: St
       label = c === "gathering" ? "Reading notes" : c === "ok" ? "Project notes found" : c === "failed" ? "Notes unavailable" : "No related notes";
       title = status.contextDetail ?? "";
       Icon = BookOpen;
+      break;
+    }
+    case "impact": {
+      const i = status.impact ?? "mapping";
+      tone = i === "mapping" || i === "quick" ? "pf-chip--accent pf-chip--live" : i === "ok" ? "pf-chip--ok" : "pf-chip--warn";
+      label =
+        i === "mapping"
+          ? "Finding what this touches"
+          : i === "quick"
+            ? "Quick match"
+            : i === "ok"
+              ? "Mapped"
+              : "Map unavailable";
+      title = status.impactDetail ?? "";
+      Icon = Waypoints;
       break;
     }
     default:

@@ -17,6 +17,10 @@ export interface ComponentRef {
   signature?: string;
   module: string;
   language: string;
+  /** Carried only when the impact map put this declaration on an epic. */
+  verdict?: ImpactVerdict;
+  reason?: string;
+  confidence?: string;
 }
 
 /** One block: a directory of one language (`app.ComponentModule`). */
@@ -54,6 +58,54 @@ export interface ProjectContext {
   notes?: string[];
 }
 
+/**
+ * What happens to one part of the project (`contracts.Impact*`). An empty
+ * verdict is a keyword match: it names a part and claims nothing more.
+ */
+export type ImpactVerdict = "" | "change" | "add" | "reuse" | "conflicts_with";
+
+/** One part of the project the requirements touch (`contracts.ImpactLink`). */
+export interface ImpactLink {
+  id: string;
+  area: string;
+  kind: "code" | "doc" | "spec" | "decision";
+  path?: string;
+  line?: number;
+  symbol_id?: string;
+  symbol_name?: string;
+  symbol_kind?: string;
+  heading?: string;
+  verdict: ImpactVerdict;
+  /** One plain-language sentence. Empty on a keyword match. */
+  reason?: string;
+  confidence?: string;
+  source: "lexical" | "model";
+  provenance?: string;
+}
+
+/** One draft epic's links (`contracts.ImpactEpic`). */
+export interface ImpactEpic {
+  epic_id: string;
+  title: string;
+  links: ImpactLink[];
+}
+
+/** GET /api/impact (`contracts.ImpactMap`). */
+export interface ImpactMap {
+  schema_version: number;
+  state: "pending" | "ready" | "lexical" | "failed";
+  revision: number;
+  prd_revision: number;
+  prd_hash?: string;
+  worktree_hash?: string;
+  summary?: string;
+  whole: ImpactLink[];
+  epics: ImpactEpic[];
+  conflicts: ImpactLink[];
+  notes?: string[];
+  generated_at?: string;
+}
+
 /** One draft epic rendered as a file (`app.PlanFile`). */
 export interface PlanFile {
   id: string;
@@ -65,6 +117,7 @@ export interface PlanFile {
   criteria: number;
   components: ComponentRef[];
   notes: ContextHit[];
+  links: ImpactLink[];
 }
 
 /** GET /api/plan-files (`app.PlanFilesView`). */
@@ -85,6 +138,10 @@ export function fetchPlanFiles(): Promise<PlanFilesView> {
 
 export function fetchProjectContext(): Promise<ProjectContext> {
   return getJSON<ProjectContext>("/api/context");
+}
+
+export function fetchImpact(): Promise<ImpactMap> {
+  return getJSON<ImpactMap>("/api/impact");
 }
 
 /** The blocks (no argument), one block's declarations, or a name search. */

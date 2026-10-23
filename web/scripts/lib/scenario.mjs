@@ -23,6 +23,8 @@ export const STATUS = {
   hostDiffers: false,
   context: "ok",
   contextDetail: "4 related note(s) from the recall index",
+  impact: "ok",
+  impactDetail: "9 part(s) of the project, 1 clash(es) with a decision already made",
 };
 
 export const BRIEF = `# Invoice exports for finance
@@ -117,47 +119,119 @@ export const CONTEXT = {
   ],
 };
 
-function planFile(id, title, goal, requirements, criteria, components, notes) {
+const VERDICT_WORD = { change: "Change", add: "New", reuse: "Already there", conflicts_with: "Clashes" };
+
+/** One code link, as the impact map resolves it from a candidate. */
+function codeLink(epicID, component, verdict, reason) {
+  return {
+    id: `${epicID}:code:${component.path}#${component.name}`,
+    area: component.module, kind: "code", path: component.path, line: component.line,
+    symbol_id: component.id, symbol_name: component.name, symbol_kind: component.kind,
+    verdict, reason, confidence: "HIGH", source: "model", provenance: component.signature ?? "",
+  };
+}
+
+/** One documentation, specification or decision link. */
+function docLink(epicID, hit, verdict, reason) {
+  const kind = hit.path.includes("/adrs/") ? "decision" : hit.path.startsWith("specs/") ? "spec" : "doc";
+  return {
+    id: `${epicID}:${kind}:${hit.path}#${hit.heading}`,
+    area: hit.heading, kind, path: hit.path, heading: hit.heading,
+    verdict, reason, confidence: "HIGH", source: "model", provenance: hit.text,
+  };
+}
+
+function planFile(id, title, goal, requirements, criteria, links) {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const table = components.length
-    ? "| Component | Kind | Where |\n| :--- | :--- | :--- |\n" +
-      components.map((c) => `| \`${c.name}\` | ${c.kind} | \`${c.path}:${c.line}\` |`).join("\n") + "\n"
-    : "_No existing component matches this epic yet. It may need new code._\n";
+  const touches = links.filter((l) => l.verdict !== "conflicts_with");
+  const conflicts = links.filter((l) => l.verdict === "conflicts_with");
+  const table = touches.length
+    ? "| Part of the project | What happens | Where | Why |\n| :--- | :--- | :--- | :--- |\n" +
+      touches
+        .map((l) => {
+          const what = l.symbol_name ? `\`${l.symbol_name}\`` : l.heading || l.area;
+          const where = l.path ? `\`${l.path}${l.line ? `:${l.line}` : ""}\`` : "_nothing yet_";
+          return `| ${what} | ${VERDICT_WORD[l.verdict] ?? "Possibly involved"} | ${where} | ${l.reason} |`;
+        })
+        .join("\n") + "\n"
+    : "_Nothing in this project matches this epic. It looks like new work._\n";
   const markdown =
     `# ${id} · ${title}\n\n> ${goal}\n\n## Requirements\n\n${requirements.map((r) => `- [ ] ${r}`).join("\n")}\n\n` +
-    `## Acceptance criteria\n\n${criteria.map((c) => `- ${c}`).join("\n")}\n\n## Related code\n\n${table}` +
-    (notes.length ? `\n## Related notes\n\n${notes.map((n) => `- \`${n.path}\` — ${n.heading}`).join("\n")}\n` : "");
+    `## Acceptance criteria\n\n${criteria.map((c) => `- ${c}`).join("\n")}\n\n## What this touches\n\n${table}` +
+    (conflicts.length
+      ? `\n## Conflicts with decisions already made\n\n${conflicts
+          .map((l) => `- \`${l.path}\` — **${l.heading}**: ${l.reason}`)
+          .join("\n")}\n`
+      : "");
   return {
     id, title, goal, filename: `${id.toLowerCase()}-${slug}.md`, markdown,
-    requirements: requirements.length, criteria: criteria.length, components, notes,
+    requirements: requirements.length, criteria: criteria.length, links,
+    components: links
+      .filter((l) => l.kind === "code")
+      .map((l) => ({
+        id: l.symbol_id, name: l.symbol_name, kind: l.symbol_kind, path: l.path, line: l.line,
+        module: l.area, language: "go", verdict: l.verdict, reason: l.reason, confidence: l.confidence,
+      })),
+    notes: links
+      .filter((l) => l.kind !== "code")
+      .map((l) => ({ path: l.path, heading: l.heading, text: l.provenance, score: 0 })),
   };
 }
 
 const byName = (...names) => names.map((n) => COMPONENTS.find((c) => c.name === n));
+
+const one = (name) => byName(name)[0];
 
 export const PLAN_FILES = [
   planFile(
     "E1", "CSV invoice export", "Finance downloads any date range of invoices as a CSV file.",
     ["Export invoices as CSV for any date range.", "Exports over 10,000 rows finish without a timeout."],
     ["One month of invoices downloads in under 30 seconds."],
-    byName("QueryInvoices", "Range", "ExportHandler", "ListInvoices", "Invoice"),
-    [CONTEXT.hits[0], CONTEXT.hits[3]],
+    [
+      codeLink("E1", one("QueryInvoices"), "change", "Invoices are read here today, and this adds the date range finance asked for."),
+      codeLink("E1", one("Range"), "reuse", "A date range is already described this way, so the export can use it unchanged."),
+      codeLink("E1", one("ExportHandler"), "change", "This is what answers an export request, and it has to learn the new range."),
+      codeLink("E1", one("Invoice"), "reuse", "The invoice record already holds every field the file needs."),
+      docLink("E1", CONTEXT.hits[0], "change", "The notes describe the export as a one-click action, which this work finally delivers."),
+    ],
   ),
   planFile(
     "E2", "Export audit trail", "Every export can be traced to a person, a range and a time.",
     ["Every export records who ran it, which range, and when."],
     ["An auditor can list every export for a quarter."],
-    byName("RecordEvent", "Event", "RequireRole"),
-    [CONTEXT.hits[1]],
+    [
+      codeLink("E2", one("RecordEvent"), "change", "Events are written here today; exports are not among them yet."),
+      codeLink("E2", one("Event"), "change", "The record of an event has no room for a date range, so it gains one."),
+      codeLink("E2", one("RequireRole"), "reuse", "Who may run an export is already decided here."),
+      docLink("E2", CONTEXT.hits[1], "conflicts_with", "The recorded decision keeps the audit trail out of the request path, and these requirements write to it on every export."),
+    ],
   ),
   planFile(
     "E3", "Export history", "Finance can download a recent export again without re-running it.",
     ["Finance can download the last 20 exports again."],
     ["A re-download returns the same file as the first one."],
-    byName("ObjectStore", "SignedURL"),
-    [CONTEXT.hits[3]],
+    [
+      codeLink("E3", one("ObjectStore"), "reuse", "Finished files are already kept here, so a re-download reads one back."),
+      codeLink("E3", one("SignedURL"), "reuse", "A time-limited download link is already produced this way."),
+      { id: "E3:new:history", area: "Export history list", kind: "code", verdict: "add", confidence: "MEDIUM", source: "model",
+        reason: "Nothing in the project keeps a list of past exports for someone to pick from." },
+      docLink("E3", CONTEXT.hits[3], "change", "The plan lists re-download as a later ask, and this brings it forward."),
+    ],
   ),
 ];
+
+/** GET /api/impact, as the model's pass would leave it. */
+export const IMPACT = {
+  schema_version: 1,
+  state: "ready",
+  revision: 2,
+  prd_revision: 1,
+  summary: "This work touches 9 parts of the project: 4 change, 1 is new, 4 are reused, 1 clashes with a decision already made.",
+  whole: PLAN_FILES.flatMap((f) => f.links).filter((l) => l.verdict !== "conflicts_with").slice(0, 8),
+  epics: PLAN_FILES.map((f) => ({ epic_id: f.id, title: f.title, links: f.links })),
+  conflicts: PLAN_FILES.flatMap((f) => f.links).filter((l) => l.verdict === "conflicts_with"),
+  notes: [],
+};
 
 // --- deliberation (Go-shaped AVATAR_* payloads) ------------------------------------------
 

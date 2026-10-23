@@ -28,16 +28,39 @@ each other's edits live.
 
 The right rail shows the plan as it forms:
 
+- **Impact.** Which parts of your project this work touches, in plain language, so you do not have to read code to know
+  what will change. See below.
 - **Epics.** A few seconds after you stop typing, the interpretation groups your requirements into epics. Each shows as a
-  file such as `e1-csv-invoice-export.md`, with its requirements, acceptance criteria and the existing components whose
-  names match it. Click one to read it as a document or copy its Markdown.
+  file such as `e1-csv-invoice-export.md`, with its requirements, acceptance criteria and what it touches. Click one to
+  read it as a document or copy its Markdown.
 - **Codebase.** The repository's blocks and their public declarations, with search. Click a name to write it into the
   requirements.
 - **Notes.** The project context the technical avatars will read (see below).
 
-The footer shows whether the code is indexed, whether any documentation is stale and whether related notes were found.
-**Confirm Context & Launch Avatars** freezes the document and starts the run. Plan Forge does not scan or block what you
-write.
+The footer shows whether the code is indexed, whether any documentation is stale, what the work touches and whether
+related notes were found. **Confirm Context & Launch Avatars** freezes the document and starts the run. Plan Forge does
+not scan or block what you write.
+
+#### What this touches
+
+Each epic names the parts of your project it affects, and says what happens to each:
+
+| | |
+| :--- | :--- |
+| **Changes** | This part exists and the work modifies it. |
+| **New** | Nothing in the project does this yet. |
+| **Already there** | This part already does the job and is used unchanged. |
+| **Clashes** | The requirement contradicts a decision or specification the team already recorded. The contradicted document is named, with what it says. |
+| **Possibly involved** | A name match only, shown while the full read is still running. It claims nothing more. |
+
+The panel paints immediately with name matches, then the model reads your repository's code, documentation and decision
+records and replaces them with the list above, usually within a minute. Every file it names exists: the model chooses
+among declarations and excerpts it was shown, so it cannot invent a path. The map is advisory and is not given to the
+avatars, who read the code and the decisions for themselves.
+
+It is recomputed only when something changed — the requirements, the code, or the project's notes — and cached in
+`docs/plans/.plan/cache/`, which is not committed. Without a signed-in agent CLI the name matches are all you get, and
+the panel says so. See [ADR 0005](adrs/0005-prd-impact-map.md).
 
 ### 2. Deliberation: the avatar room
 
