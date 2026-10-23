@@ -47,10 +47,16 @@ func TestSystemPromptsStartWithTheirPreamble(t *testing.T) {
 		"specialist":          avatars.SpecialistSystemPrompt(),
 		"critic":              avatars.CriticSystemPrompt(),
 		"synthesizer":         avatars.SynthesizerSystemPrompt(),
+		// The narrator is not one of the plan's five avatars, so it is absent
+		// from preambles() and from the plan-verbatim check. It holds the
+		// same boundary as the rest: its own preamble, the untrusted-input
+		// instruction, and one declared reply shape.
+		"narrator": avatars.NarratorSystemPrompt(),
 	}
 	pres := preambles()
 	pres["architect diagrams"] = avatars.ArchitectPreamble
 	pres["architect doc tasks"] = avatars.ArchitectPreamble
+	pres["narrator"] = avatars.NarratorPreamble
 	for name, p := range prompts {
 		pre := pres[name]
 		if !strings.HasPrefix(p, pre) {
@@ -64,7 +70,10 @@ func TestSystemPromptsStartWithTheirPreamble(t *testing.T) {
 			t.Errorf("%s system prompt lacks the output shape", name)
 		}
 	}
-	roles := []contracts.RoleID{contracts.RoleProductManager, contracts.RoleArchitect, contracts.RoleSpecialist, contracts.RoleCritic, contracts.RoleSynthesizer}
+	roles := []contracts.RoleID{
+		contracts.RoleProductManager, contracts.RoleArchitect, contracts.RoleSpecialist,
+		contracts.RoleCritic, contracts.RoleSynthesizer, contracts.RoleNarrator,
+	}
 	for _, r := range roles {
 		if avatars.Preamble(r) == "" {
 			t.Errorf("role %s has no preamble", r)
