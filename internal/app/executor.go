@@ -93,6 +93,27 @@ type HostSummary struct {
 	// Differs reports that the resolved main host is not the --host the
 	// invoking skill passed: the owner must acknowledge it before confirming.
 	Differs bool `json:"hostDiffers"`
+	// Roles is where each avatar will run, resolved before the run starts so
+	// the room can name the host under a face that has not spoken yet.
+	Roles []RolePlacement `json:"roles,omitempty"`
+	// Skipped names the hosts that could not serve and why, so an
+	// installation signed in to three hosts but running on one can see which
+	// one dropped out and at which probe.
+	Skipped []HostSkip `json:"skipped,omitempty"`
+}
+
+// RolePlacement is one avatar role and the host and model serving it.
+type RolePlacement struct {
+	Role  string `json:"role"`
+	Host  string `json:"host"`
+	Model string `json:"model,omitempty"`
+}
+
+// HostSkip is one host that could not serve, and the probe that rejected it.
+type HostSkip struct {
+	Host   string `json:"host"`
+	Probe  string `json:"probe"`
+	Reason string `json:"reason"`
 }
 
 // StatusView is the body of GET /api/status: the Page 1 pills plus the
@@ -855,8 +876,17 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 	in := avatars.RunInput{
 		RunID: runID, PRD: norm, Graph: snap, GraphHash: hashJSON(snap), DocDrift: drift,
 		EvidenceNotes: notes, Context: pc, ContextHash: hashJSON(pc),
-		Models:    avatars.ModelSlots{Main: cfg.DefaultMainModel, Judge: cfg.DefaultJudgeModel},
+		Models: avatars.ModelSlots{
+			Main:     cfg.DefaultMainModel,
+			Judge:    cfg.DefaultJudgeModel,
+			Narrator: cfg.RoleModels["narrator"].Model,
+		},
 		MaxCycles: cfg.MaxCycles, MaxParallel: cfg.MaxParallel, StartCycle: startCycle,
+		// The stages get their own budget, not contracts.DefaultGenerateTimeout:
+		// the architect design part alone was measured at 110 seconds on opus
+		// with a minimal payload (ADR 0009).
+		CallTimeout: time.Duration(cfg.StageTimeout()) * time.Second,
+		NoNarrator:  cfg.DisableNarrator,
 		Checkpoints: e.checkpoints,
 	}
 	e.mu.Lock()

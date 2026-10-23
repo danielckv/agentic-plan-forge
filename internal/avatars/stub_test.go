@@ -143,6 +143,11 @@ func (s *stub) GenerateStream(ctx context.Context, req contracts.GenerateRequest
 		s.mu.Unlock()
 	}()
 
+	if err := emit(contracts.GenerationEvent{Kind: contracts.EventPlacement, Placement: &contracts.Placement{
+		Role: req.Role, Host: s.hostFor(req.Role), Version: "1.0.0", Model: req.Model,
+	}}); err != nil {
+		return contracts.GenerationResult{}, err
+	}
 	if delay > 0 {
 		select {
 		case <-time.After(delay):
@@ -174,6 +179,19 @@ func (s *stub) GenerateStream(ctx context.Context, req contracts.GenerateRequest
 		}
 	}
 	return contracts.GenerationResult{Content: r.Content, Receipt: contracts.ToolFreeReceipt{Host: "stub"}}, nil
+}
+
+// hostFor names the host a role is routed to. The default spreads the roles
+// the way the router does, so a test can tell one avatar's host from another.
+func (s *stub) hostFor(role contracts.RoleID) string {
+	switch role {
+	case contracts.RoleCritic:
+		return "agy"
+	case contracts.RoleSpecialist:
+		return "omp"
+	default:
+		return "claude"
+	}
 }
 
 func (s *stub) defaultReply(key string, in input) reply {

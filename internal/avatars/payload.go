@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/danielckv/agentic-plan-forge/internal/ast"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
@@ -28,6 +29,44 @@ type trimmable interface {
 	addNote(note string)
 }
 
+// contextNote states, in one line, the slice of evidence one call can see:
+// how much of the repository graph, the project context and the drift list
+// reached it, and whether anything was cut to fit. The room shows it under
+// the avatar, so a reader can tell a gap that was cut from one that was never
+// there. It reads the marshalled payload rather than each payload type, so
+// one function covers every stage.
+func contextNote(raw json.RawMessage) string {
+	var p struct {
+		Graph struct {
+			Symbols map[string]json.RawMessage `json:"symbols"`
+		} `json:"repository_graph"`
+		Context *struct {
+			Hits []json.RawMessage `json:"hits"`
+		} `json:"project_context"`
+		Drift []json.RawMessage `json:"documentation_drift"`
+		Notes []string          `json:"evidence_notes"`
+	}
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return fmt.Sprintf("%d KiB of evidence", len(raw)>>10)
+	}
+	var parts []string
+	if n := len(p.Graph.Symbols); n > 0 {
+		parts = append(parts, fmt.Sprintf("graph %d files", n))
+	}
+	if p.Context != nil && len(p.Context.Hits) > 0 {
+		parts = append(parts, fmt.Sprintf("context %d excerpts", len(p.Context.Hits)))
+	}
+	if n := len(p.Drift); n > 0 {
+		parts = append(parts, fmt.Sprintf("drift %d items", n))
+	}
+	parts = append(parts, fmt.Sprintf("%d KiB", len(raw)>>10))
+	note := strings.Join(parts, " · ")
+	if len(p.Notes) > 0 {
+		note += fmt.Sprintf(" · %d evidence cut", len(p.Notes))
+	}
+	return note
+}
+
 // fitPayload marshals p, trimming its evidence until it fits the stage bound.
 // A payload that cannot be made to fit returns an ErrBound naming the parts
 // that filled it. The result keeps p, so a call that outruns the clock can be
@@ -47,7 +86,7 @@ func fitPayload(avatar string, p trimmable) (*stageInput, error) {
 		p.addNote(note)
 		raw = mustJSON(p)
 	}
-	return &stageInput{raw: raw, src: p}, nil
+	return &stageInput{raw: raw, src: p, note: contextNote(raw)}, nil
 }
 
 // largestParts names the biggest top-level fields of a payload, largest first.

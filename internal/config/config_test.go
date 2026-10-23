@@ -184,6 +184,14 @@ func TestValidateBounds(t *testing.T) {
 		func(c *config.Config) { c.MaxParallel = 9 },
 		func(c *config.Config) { c.MainHost = "gemini" },
 		func(c *config.Config) { c.HostEnvAllow = []string{"BAD=1"} },
+		func(c *config.Config) { c.StageTimeoutSeconds = 30 },
+		func(c *config.Config) { c.StageTimeoutSeconds = 3601 },
+		func(c *config.Config) {
+			c.RoleModels = map[string]config.RoleBinding{"designer": {Host: "claude"}}
+		},
+		func(c *config.Config) {
+			c.RoleModels = map[string]config.RoleBinding{"architect": {Host: "gemini"}}
+		},
 	}
 	for i, mutate := range bad {
 		c := config.Default()
@@ -191,6 +199,45 @@ func TestValidateBounds(t *testing.T) {
 		if err := config.Validate(c); err == nil {
 			t.Errorf("case %d: expected validation failure", i)
 		}
+	}
+}
+
+// A role may be pinned to a host, to a model, or to neither. Pinning only a
+// model is what lets an owner say "the narrator uses the cheap model" without
+// also deciding which host serves it.
+func TestRoleBindingsValidateAndResolve(t *testing.T) {
+	cfg := config.Default()
+	cfg.RoleModels = map[string]config.RoleBinding{
+		"architect": {Host: "claude", Model: "opus"},
+		"narrator":  {Model: "gemini-3.8-flash-low"},
+		"critic":    {Host: "agy"},
+	}
+	if err := config.Validate(cfg); err != nil {
+		t.Fatalf("valid role bindings rejected: %v", err)
+	}
+	for _, role := range config.RoleNames() {
+		if _, ok := cfg.RoleBindingFor(role); !ok && cfg.RoleModels[role] != (config.RoleBinding{}) {
+			t.Errorf("RoleBindingFor(%q) found nothing for a pinned role", role)
+		}
+	}
+	if b, ok := cfg.RoleBindingFor("narrator"); !ok || b.Host != "" || b.Model != "gemini-3.8-flash-low" {
+		t.Errorf("narrator binding = %+v, %v", b, ok)
+	}
+	if _, ok := cfg.RoleBindingFor("pm"); ok {
+		t.Error("an unpinned role reported a binding")
+	}
+}
+
+// The stage budget falls back to the measured default rather than to zero: a
+// zero would mean "no budget" to every caller downstream.
+func TestStageTimeoutFallsBackToTheDefault(t *testing.T) {
+	var cfg config.Config
+	if got := cfg.StageTimeout(); got != config.DefaultStageTimeoutSeconds {
+		t.Fatalf("unset stage timeout = %d, want %d", got, config.DefaultStageTimeoutSeconds)
+	}
+	cfg.StageTimeoutSeconds = 900
+	if got := cfg.StageTimeout(); got != 900 {
+		t.Fatalf("configured stage timeout = %d, want 900", got)
 	}
 }
 

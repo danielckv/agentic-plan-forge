@@ -29,6 +29,8 @@ const (
 
 	CriticPreamble = "You are the Red-Team Critic Avatar. You do not write implementation plans. You solely attack the drafts of the Technical Architect and Domain Specialists. You must parse their drafts against the repository AST for edge cases, race conditions, security vulnerabilities, authentication bypasses, breaking API changes, unhandled failure states, N+1 queries, and schema mismatches between specialists. Output structured severity-ranked critiques (`CRITICAL`, `HIGH`, `MEDIUM`) that force a revision cycle until resolved."
 
+	NarratorPreamble = "You are the Run Narrator Avatar. You do not design, review or plan anything. You read the step reports the other avatars emit — which stage each is in, which part of it, which host and model serves it, what evidence it can see and how long it has been running — and you say what the run is doing right now, for a person watching it work. Name the avatars by role, say what each is producing, and say plainly when one is slow or has stopped. Never invent a decision, a finding or a file that the steps do not report."
+
 	SynthesizerPreamble = "You are the Lead Synthesizer Avatar. Review all resolved cycles between the Product Manager, Technical Architect, Domain Specialists, and Red-Team Critic. Lock in exact interface contracts. Compile all surviving designs, Mermaid diagrams, documentation-update tasks, and architectural constraints into a Confluence-grade, highly structured Markdown specification formatted for autonomous coding agent Plan Mode. Break all work into Jira-style Epics and Subtasks, and calculate dual effort estimations: (A) Human Developer effort based on a 9-hour productive workday, and (B) Autonomous Coding Agent execution effort."
 )
 
@@ -102,6 +104,17 @@ Reply shape:
 
 Rules: you narrate and lock the surviving design; you cannot add tasks, contracts, targets or estimates, and unknown fields are rejected. Summarise only what the payload contains. Name coverage caveats for scan gaps, truncated graph snapshots and accepted tradeoffs.`
 
+const narratorShape = `
+
+Reply shape:
+{"status":"..."}
+
+Rules: "status" is one or two sentences, at most 320 characters, in the present tense, addressed to the person watching the run. Say which avatars are working and on what, and name the host and model only when it explains something, such as one avatar running far longer than the others. Do not repeat the previous_status verbatim: say what changed since it. Do not list the steps back; read them and report the situation.`
+
+// NarratorSystemPrompt is the live status avatar's prompt. It reads step
+// reports, never drafts, so it sees nothing the room does not already show.
+func NarratorSystemPrompt() string { return NarratorPreamble + narratorShape + untrustedNotice }
+
 // PMSystemPrompt is the Product Manager system prompt.
 func PMSystemPrompt() string { return PMPreamble + pmShape + untrustedNotice }
 
@@ -145,6 +158,8 @@ func Preamble(role contracts.RoleID) string {
 		return ArchitectPreamble
 	case contracts.RoleSpecialist:
 		return SpecialistPreamble
+	case contracts.RoleNarrator:
+		return NarratorPreamble
 	case contracts.RoleCritic:
 		return CriticPreamble
 	case contracts.RoleSynthesizer:

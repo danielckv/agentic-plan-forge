@@ -25,7 +25,7 @@ const (
 	// the model in one normalization call. Longer documents are split.
 	//
 	// The bound is the call timeout, not the model's context window: one call
-	// must finish inside contracts.MaxGenerateTimeout (180s) or the host kills
+	// must finish inside contracts.DefaultGenerateTimeout (180s) or the host kills
 	// it and the whole interpretation fails. Measured against
 	// claude-opus-5-5-high on OMP, an 18,000-character section took 2m31s and a
 	// 27,000-character one ran past the cap. 8,000 leaves room for a slower
@@ -240,7 +240,7 @@ func normalizeSection(ctx context.Context, gen contracts.Generator, sec textSect
 			SystemPrompt: normalizerSystemPrompt,
 			UserPayload:  raw,
 			SchemaID:     NormalizedPRDSchemaID,
-			Timeout:      contracts.MaxGenerateTimeout,
+			Timeout:      contracts.DefaultGenerateTimeout,
 			MaxOutput:    contracts.MaxStageOutputBytes,
 		}, func(contracts.GenerationEvent) error { return ctx.Err() })
 		if err != nil {
@@ -635,7 +635,7 @@ func halveSection(sec textSection) ([]textSection, bool) {
 }
 
 // overranCallTimeout reports whether err is the host killing a call that ran
-// past contracts.MaxGenerateTimeout, rather than the caller ending the run.
+// past contracts.DefaultGenerateTimeout, rather than the caller ending the run.
 func overranCallTimeout(ctx context.Context, err error) bool {
 	return ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded)
 }

@@ -62,6 +62,11 @@ func newOrchestrator(in RunInput, gen contracts.Generator, emit func(contracts.P
 }
 
 func (o *orchestrator) run(ctx context.Context) (contracts.SynthesisInput, error) {
+	if !o.in.NoNarrator {
+		o.tell = newNarrator(o)
+		o.tell.start(ctx)
+		defer o.tell.close()
+	}
 	o.pmIn = BuildPMInput(o.in.PRD.Product)
 	if err := o.restore(ctx); err != nil {
 		return contracts.SynthesisInput{}, err
@@ -317,6 +322,7 @@ func (o *orchestrator) runPM(ctx context.Context, c int) error {
 		avatar: relay.StagePM, role: contracts.RoleProductManager, slot: contracts.SlotMain, model: o.in.Models.Main,
 		system: PMSystemPrompt(), schema: synthesizer.SchemaPM, cycle: c, status: statusThinking,
 		summary: "Drafting epics and user stories from the approved product requirements.",
+		step:    "epics and stories",
 	}
 	doc, raw, err := runStage(o, ctx, sp, fixedInput(o.pmIn), o.parsePM)
 	if err != nil {
@@ -638,6 +644,7 @@ func (o *orchestrator) runSpecialist(ctx context.Context, c int, ws string, adop
 		avatar: relay.StageSpecialistPrefix + ws, role: contracts.RoleSpecialist, slot: contracts.SlotMain, model: o.in.Models.Main,
 		system: SpecialistSystemPrompt(), schema: synthesizer.SchemaSpecialist, cycle: c, status: statusThinking,
 		summary: fmt.Sprintf("Drafting concrete files, signatures and steps for workstream %s.", ws),
+		step:    "workstream " + ws,
 	}
 	var rev *revisionInput
 	if prev.present() {
@@ -731,12 +738,15 @@ func (o *orchestrator) acceptedLocked() map[string]string {
 
 func (o *orchestrator) criticSpec(c int, barrier bool) stageSpec {
 	summary := "Attacking the complete current drafts for defects, races, security gaps and schema mismatches."
+	step := "barrier review"
 	if !barrier {
 		summary = "Early review of the frozen architect draft and the specialist drafts completed so far."
+		step = "early review"
 	}
 	return stageSpec{
 		avatar: relay.StageCritic, role: contracts.RoleCritic, slot: contracts.SlotJudge, model: o.in.Models.Judge,
 		system: CriticSystemPrompt(), schema: synthesizer.SchemaCritic, cycle: c, status: statusCritiquing, summary: summary,
+		step: step,
 	}
 }
 
@@ -923,10 +933,10 @@ func (o *orchestrator) synthesisInput() contracts.SynthesisInput {
 	}
 	crit := append([]contracts.Critique(nil), o.st.Critiques...)
 	sort.SliceStable(crit, func(i, j int) bool { return crit[i].ID < crit[j].ID })
-	_decisions := append([]contracts.Decision(nil), o.st.Decisions...)
-	sort.SliceStable(_decisions, func(i, j int) bool { return _decisions[i].ID < _decisions[j].ID })
+	decs := append([]contracts.Decision(nil), o.st.Decisions...)
+	sort.SliceStable(decs, func(i, j int) bool { return decs[i].ID < decs[j].ID })
 	return contracts.SynthesisInput{
 		PRD: o.in.PRD, PM: append(json.RawMessage(nil), o.st.PM.Raw...), Architecture: append(json.RawMessage(nil), o.st.Arch.Raw...),
-		Specialists: specs, Critiques: crit, Decisions: _decisions, Graph: o.in.Graph, DocDrift: o.in.DocDrift,
+		Specialists: specs, Critiques: crit, Decisions: decs, Graph: o.in.Graph, DocDrift: o.in.DocDrift,
 	}
 }

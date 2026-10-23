@@ -21,6 +21,11 @@ const (
 	// DefaultRetryBackoff is the base of the exponential backoff before the one
 	// retry of a transient provider failure.
 	DefaultRetryBackoff = time.Second
+	// DefaultStageTimeout is the budget one deliberation call gets when the
+	// owner configures none. It is not contracts.DefaultGenerateTimeout: the
+	// architect design part was measured at 110 seconds on opus with a minimal
+	// payload, so 180 seconds leaves a real cycle no room (ADR 0009).
+	DefaultStageTimeout = 10 * time.Minute
 	// maxSummaryRunes bounds a public summary relayed to the window.
 	maxSummaryRunes = 400
 )
@@ -30,6 +35,10 @@ const (
 type ModelSlots struct {
 	Main  string
 	Judge string
+	// Narrator is the model of the live status avatar. It is its own slot
+	// because the narrator wants the cheapest fast model, never the one the
+	// architect needs.
+	Narrator string
 }
 
 // RunInput is everything one deliberation run is allowed to see. It holds a
@@ -72,8 +81,8 @@ type RunInput struct {
 	// HoursPerDay is the productive human workday frozen into the synthesis
 	// lock. Zero selects the compiler default (9).
 	HoursPerDay float64
-	// CallTimeout bounds one provider call. Zero or more than
-	// contracts.MaxGenerateTimeout selects contracts.MaxGenerateTimeout.
+	// CallTimeout bounds one provider call. Zero selects DefaultStageTimeout;
+	// more than contracts.MaxGenerateTimeout is clamped to it.
 	CallTimeout time.Duration
 	// RetryBackoff is the base backoff before the single transient retry. Zero
 	// selects DefaultRetryBackoff.
@@ -85,6 +94,14 @@ type RunInput struct {
 	// Checkpoints stores resumable run state. Nil selects the process-wide
 	// store.
 	Checkpoints *CheckpointStore
+	// NoNarrator turns the live status avatar off. The zero value runs it.
+	NoNarrator bool
+	// HeartbeatEvery is how often a running call reports its progress. Zero
+	// selects heartbeatEvery.
+	HeartbeatEvery time.Duration
+	// NarrateEvery is the floor between two narrator calls. Zero selects
+	// narrateEvery.
+	NarrateEvery time.Duration
 }
 
 func (in RunInput) maxCycles() int {
@@ -105,10 +122,28 @@ func (in RunInput) parallel() int {
 }
 
 func (in RunInput) callTimeout() time.Duration {
-	if in.CallTimeout <= 0 || in.CallTimeout > contracts.MaxGenerateTimeout {
+	switch {
+	case in.CallTimeout <= 0:
+		return DefaultStageTimeout
+	case in.CallTimeout > contracts.MaxGenerateTimeout:
 		return contracts.MaxGenerateTimeout
+	default:
+		return in.CallTimeout
 	}
-	return in.CallTimeout
+}
+
+func (in RunInput) heartbeat() time.Duration {
+	if in.HeartbeatEvery <= 0 {
+		return heartbeatEvery
+	}
+	return in.HeartbeatEvery
+}
+
+func (in RunInput) narrateEvery() time.Duration {
+	if in.NarrateEvery <= 0 {
+		return narrateEvery
+	}
+	return in.NarrateEvery
 }
 
 func (in RunInput) backoff() time.Duration {

@@ -273,12 +273,29 @@ type CycleStartPayload struct {
 
 // AvatarThoughtPayload is the public progress summary for one avatar. It never
 // carries provider private reasoning.
+//
+// The fields after PublicSummary say where the work is running and how far it
+// has got. They are what the avatar room shows under each face, and all are
+// optional: a thought emitted before a host is resolved carries none of them.
 type AvatarThoughtPayload struct {
 	RunID         string `json:"run_id"`
 	AvatarID      string `json:"avatar_id"`
 	Cycle         int    `json:"cycle"`
 	Status        string `json:"status"`
 	PublicSummary string `json:"public_summary"`
+	// Host and Model name the adapter and model id serving this avatar.
+	Host  string `json:"host,omitempty"`
+	Model string `json:"model,omitempty"`
+	// Step names the part of the stage in progress, such as "design 1/3" or
+	// "docs batch 3/7".
+	Step string `json:"step,omitempty"`
+	// ContextNote states the slice of evidence this call can see, so a reader
+	// can tell a gap that was cut from one that was never there.
+	ContextNote string `json:"context_note,omitempty"`
+	// ElapsedMS and OutputBytes are the progress of the call in flight. Both
+	// are zero outside a streaming call.
+	ElapsedMS   int64 `json:"elapsed_ms,omitempty"`
+	OutputBytes int   `json:"output_bytes,omitempty"`
 }
 
 // AvatarDraftPayload carries one avatar's structured draft.
@@ -447,6 +464,9 @@ const (
 	StageArchitect   = "architect"
 	StageCritic      = "critic"
 	StageSynthesizer = "synthesizer"
+	// StageNarrator is the avatar that watches the others and says what the
+	// run is doing. It produces no draft and is never retried.
+	StageNarrator = "narrator"
 )
 
 // StageSpecialistPrefix prefixes specialist stage IDs: specialist:<workstream>.
