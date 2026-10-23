@@ -24,7 +24,7 @@ const THEME_KEY = "plan-forge:ui:theme";
 const SIDEBAR_KEY = "plan-forge:ui:sidebar";
 
 const SHOTS = [
-  "page1-composer", "page1-epic-modal", "page1-codebase", "page1-dark", "page1-sidebar-collapsed",
+  "page1-composer", "page1-epic-modal", "page1-impact", "page1-codebase", "page1-dark", "page1-sidebar-collapsed",
   "page2-room", "page2-toasts", "help-overlay",
   "page3-synthesis", "page3-matrix", "page3-filter", "page3-mermaid-modal", "page3-handoff",
   "page1-1024", "page2-1024", "page3-1024",
@@ -137,6 +137,24 @@ try {
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "detached" });
   check(await firstCard.evaluate((el) => el === document.activeElement), "Esc closes the epic modal and focus returns to the card");
+
+  // The impact panel: what the requirements touch, in plain language, with the
+  // clash against a recorded decision first.
+  await page.getByRole("tab", { name: /Impact/ }).click();
+  await page.locator(".pf-impact-conflicts").waitFor({ state: "visible" });
+  check(
+    (await page.locator(".pf-impact-summary").innerText()).includes("touches"),
+    "the impact panel opens with one sentence a non-technical reader can act on",
+  );
+  check(
+    (await page.locator(".pf-impact-conflicts .pf-impact-row").count()) === 1,
+    "a requirement that contradicts a recorded decision is listed first, on its own",
+  );
+  check(
+    (await page.locator(".pf-impact-row .pf-body").first().innerText()).length > 20,
+    "every row explains itself in a sentence rather than naming a file alone",
+  );
+  await shot(page, "page1-impact");
 
   // The codebase browser writes a component name into the text.
   await page.getByRole("tab", { name: /Codebase/ }).click();

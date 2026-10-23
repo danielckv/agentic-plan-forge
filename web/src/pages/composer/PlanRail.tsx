@@ -1,20 +1,22 @@
 import { useState } from "react";
-import { BookOpen, Boxes, Layers, LoaderCircle } from "lucide-react";
+import { BookOpen, Boxes, Layers, LoaderCircle, Waypoints } from "lucide-react";
 
 import { EpicCard } from "../../components/epics/EpicCard";
 import { EpicModal } from "../../components/epics/EpicModal";
-import type { ComponentRef, ComponentsView, PlanFile, ProjectContext } from "../../protocol/api";
+import type { ComponentRef, ComponentsView, ImpactMap, PlanFile, ProjectContext } from "../../protocol/api";
 import { componentTerm } from "../../ui/editor/markdownEdits";
 import { ComponentBrowser } from "./ComponentBrowser";
+import { ImpactPanel, VERDICT_TONE } from "./ImpactPanel";
 import { NotesList } from "./NotesList";
 
-type RailTab = "epics" | "code" | "notes";
+type RailTab = "impact" | "epics" | "code" | "notes";
 
 /**
- * The right side of Page 1: the plan as it forms. Epics are files grouped
- * from the requirements; Codebase browses the real components; Notes shows
- * what the repository already says. The rail never edits the document; it
- * hands terms to `onInsert`.
+ * The right side of Page 1: the plan as it forms. Impact says which parts of
+ * the project the requirements touch and what happens to each; Epics are files
+ * grouped from the requirements; Codebase browses the real components; Notes
+ * shows what the repository already says. The rail never edits the document;
+ * it hands terms to `onInsert`.
  */
 export function PlanRail(props: {
   files: PlanFile[];
@@ -24,21 +26,25 @@ export function PlanRail(props: {
   blocks: ComponentsView | null;
   scanning: boolean;
   ctx: ProjectContext | null;
+  impact: ImpactMap | null;
   onInsert: (text: string) => void;
 }): React.ReactElement {
-  const { files, interpreting, hasText, blocks, scanning, ctx, onInsert } = props;
+  const { files, interpreting, hasText, blocks, scanning, ctx, impact, onInsert } = props;
   const [tab, setTab] = useState<RailTab>("epics");
   const [open, setOpen] = useState<number | null>(null);
   const noteCount = ctx?.hits.length ?? 0;
+  const touchCount = (impact?.whole.length ?? 0) + (impact?.conflicts.length ?? 0);
 
   return (
     <aside className="pf-rail" aria-label="Plan">
       <div className="pf-rail-tabs" role="tablist" aria-label="Plan views">
+        <RailTabButton id="impact" current={tab} onSelect={setTab} icon={Waypoints} label="Impact" count={touchCount} />
         <RailTabButton id="epics" current={tab} onSelect={setTab} icon={Layers} label="Epics" count={files.length} />
         <RailTabButton id="code" current={tab} onSelect={setTab} icon={Boxes} label="Codebase" />
         <RailTabButton id="notes" current={tab} onSelect={setTab} icon={BookOpen} label="Notes" count={noteCount} />
       </div>
       <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
+        {tab === "impact" && <ImpactPanel map={impact} />}
         {tab === "epics" && (
           <EpicsTab files={files} interpreting={interpreting} hasText={hasText} onOpen={setOpen} />
         )}
@@ -57,8 +63,8 @@ export function PlanRail(props: {
         onIndex={setOpen}
         footer={(doc) => {
           const file = files.find((f) => f.id === doc.id);
-          if (file === undefined || file.components.length === 0) return null;
-          return <span className="pf-caption">{file.components.length} linked components</span>;
+          if (file === undefined || file.links.length === 0) return null;
+          return <span className="pf-caption">{file.links.length} parts of the project</span>;
         }}
       />
     </aside>
@@ -115,9 +121,12 @@ function EpicsTab(props: {
           stats={[
             { label: ["requirement", "requirements"], value: f.requirements },
             { label: ["criterion", "criteria"], value: f.criteria },
-            { label: ["component", "components"], value: f.components.length },
+            { label: ["part", "parts"], value: f.links.length },
           ]}
-          tags={f.components.map((c) => c.name)}
+          tags={f.links.map((l) => ({
+            text: l.symbol_name !== undefined && l.symbol_name !== "" ? l.symbol_name : l.area,
+            tone: VERDICT_TONE[l.verdict],
+          }))}
           onOpen={() => onOpen(i)}
         />
       ))}

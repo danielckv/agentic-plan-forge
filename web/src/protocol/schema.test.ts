@@ -20,12 +20,14 @@ import { decodeFrame } from "./wire";
 const fixturesRoot = fileURLToPath(new URL("../../../tests/fixtures/", import.meta.url));
 const schemaFixtureDir = join(fixturesRoot, "schema");
 
-type SchemaId = "envelope.v1" | "normalized_prd.v1" | "synthesis.v1";
+type SchemaId = "envelope.v1" | "normalized_prd.v1" | "impact_map.v1" | "synthesis.v1";
+
+const SCHEMA_IDS: readonly SchemaId[] = ["envelope.v1", "normalized_prd.v1", "impact_map.v1", "synthesis.v1"];
 
 /** File name convention: `<schemaId>__<case>.json` — narrows to a schema id. */
 function schemaIdFor(file: string): SchemaId {
   const id = file.split("__")[0] as SchemaId;
-  if (id !== "envelope.v1" && id !== "normalized_prd.v1" && id !== "synthesis.v1") {
+  if (!SCHEMA_IDS.includes(id)) {
     throw new Error(`fixture ${file} does not name a schema id`);
   }
   return id;

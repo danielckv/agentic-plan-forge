@@ -145,6 +145,18 @@ export interface StatusView {
   contextDetail?: string;
   /** Revision of the latest interpretation; 0 before the first one. */
   interpretation?: number;
+  /** Impact map pill: mapping, quick, ok or failed. */
+  impact?: "mapping" | "quick" | "ok" | "failed";
+  impactDetail?: string;
+  /**
+   * Revision of the latest published impact map; 0 before the first one.
+   *
+   * Page 1 refetches on this as well as on `interpretation`: the
+   * interpretation revision does not move when the model's map replaces the
+   * keyword ranking, so keying on that alone would show the first paint
+   * forever.
+   */
+  impactRevision?: number;
 }
 
 export const STATUS_UNKNOWN: StatusView = {
@@ -154,6 +166,9 @@ export const STATUS_UNKNOWN: StatusView = {
   ocr: "unknown",
   repo: "",
   repoPath: "",
+  impact: "mapping",
+  impactDetail: "reading the code, docs and past decisions",
+  impactRevision: 0,
 };
 
 export interface SyncState {

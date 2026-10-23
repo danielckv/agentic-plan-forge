@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 
 import {
   fetchComponents,
+  fetchImpact,
   fetchPlanFiles,
   fetchProjectContext,
   type ComponentsView,
+  type ImpactMap,
   type PlanFile,
   type ProjectContext,
 } from "../../protocol/api";
@@ -22,8 +24,13 @@ export interface PlanFilesState {
   loaded: boolean;
 }
 
-/** The draft epics, refetched whenever the interpretation revision moves. */
-export function usePlanFiles(revision: number): PlanFilesState {
+/**
+ * The draft epics, refetched whenever the interpretation or the impact map
+ * moves. Both matter: the epics change with the interpretation, and their
+ * links change again when the model's map replaces the keyword ranking under
+ * the same interpretation.
+ */
+export function usePlanFiles(revision: number, impactRevision = 0): PlanFilesState {
   const [state, setState] = useState<PlanFilesState>({ files: [], revision: 0, loaded: false });
   useEffect(() => {
     if (revision === 0) return;
@@ -39,8 +46,30 @@ export function usePlanFiles(revision: number): PlanFilesState {
     return () => {
       live = false;
     };
-  }, [revision]);
+  }, [revision, impactRevision]);
   return state;
+}
+
+/**
+ * The impact map, refetched whenever a new one is published. Returns null
+ * until the first answer, which the panel renders as its pending state.
+ */
+export function useImpact(impactRevision: number): ImpactMap | null {
+  const [map, setMap] = useState<ImpactMap | null>(null);
+  useEffect(() => {
+    if (impactRevision === 0) return;
+    let live = true;
+    fetchImpact().then(
+      (v) => {
+        if (live) setMap(v);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [impactRevision]);
+  return map;
 }
 
 /** The project context, refetched whenever the context pill changes. */

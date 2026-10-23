@@ -50,8 +50,15 @@ export async function startFakeSession({ port, dist, brief = S.BRIEF, interprete
     const url = new URL(req.url ?? "/", "http://localhost");
     const p = url.pathname;
     if (p === "/api/session") return json(res, { token: "preview-token" });
-    if (p === "/api/status") return json(res, { ...S.STATUS, interpretation: state.interpretation });
+    if (p === "/api/status") {
+      return json(res, {
+        ...S.STATUS,
+        interpretation: state.interpretation,
+        impactRevision: state.interpretation > 0 ? S.IMPACT.revision : 0,
+      });
+    }
     if (p === "/api/context") return json(res, S.CONTEXT);
+    if (p === "/api/impact") return json(res, S.IMPACT);
     if (p === "/api/plan-files") {
       return json(res, { revision: state.interpretation, files: state.interpretation > 0 ? S.PLAN_FILES : [] });
     }

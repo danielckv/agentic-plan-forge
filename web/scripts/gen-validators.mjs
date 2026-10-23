@@ -30,6 +30,7 @@ const outDTS = path.join(outDir, "validators.generated.d.ts");
 const EXPORTS = {
   "envelope.v1": "envelopeV1",
   "normalized_prd.v1": "normalizedPrdV1",
+  "impact_map.v1": "impactMapV1",
   "synthesis.v1": "synthesisV1",
 };
 
