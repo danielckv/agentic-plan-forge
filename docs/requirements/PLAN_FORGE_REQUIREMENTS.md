@@ -451,10 +451,36 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Category: Functional
 - Owner: @danielckv
 - Source: Maintainer decision (2026-10-22): epic files show linked real code components.
-- Acceptance criteria: `internal/app/planfiles_test.go` (`TestPlanFilesLinkEpicsToCodeAndNotes`: links come only from the scanned graph, ranked by shared terms; an epic with no match says so). `TestPlanFileTableCellsCannotBreakTheTable` covers the rendering.
-- Traces to: `internal/app/planfiles.go`
+- Acceptance criteria: `internal/app/planfiles_test.go` (`TestPlanFilesFallBackToKeywordsBeforeTheFirstMap` and `TestPlanFilesUseTheMapWhenItMatchesTheInterpretation`: links come only from the scanned graph; `componentsOf` drops a link whose declaration is no longer in it). `TestPlanFileTableCellsCannotBreakTheTable` covers the rendering.
+- Traces to: `internal/app/planfiles.go`, `internal/impact/impact.go`
 - Status: met
-- Last reviewed: 2026-10-22
+- Last reviewed: 2026-10-23
+
+### REQ-UI-015 — The impact map
+
+- ID: REQ-UI-015
+- Level: F
+- Statement: Page 1 shall state, for each epic and for the requirements as a whole, which parts of the project the work touches and what happens to each, in language that does not require the reader to read code. Every part named shall exist in the scanned graph or the gathered project context.
+- Category: Functional
+- Owner: @danielckv
+- Source: Maintainer decision (2026-10-23): a PRD written in business language matched no declaration names, so Page 1 reported existing work as new. See [ADR 0005](../adrs/0005-prd-impact-map.md).
+- Acceptance criteria: `internal/impact/build_test.go` (`TestBuildRefusesAPathTheModelInvented`: an answer naming an identifier that was not offered is dropped, and every resolved location is read from the graph; `TestBuildFindsAConflictWithADecisionRecord`; `TestBuildFallsBackToKeywordsAndSaysWhy`). `internal/impact/lexical_test.go` (`TestLexicalClaimsNothingItCannotKnow`: a keyword match carries no verdict and no reason). `internal/app/impactmap_test.go` (the keyword map is published before the model answers; a superseded pass never overwrites a newer one). `web/src/pages/composer/impact.test.ts` (the labels carry no developer vocabulary).
+- Traces to: `internal/impact/`, `internal/app/impactmap.go`, `web/src/pages/composer/ImpactPanel.tsx`, `internal/contracts/schema/impact_map.v1.json`
+- Status: met
+- Last reviewed: 2026-10-23
+
+### REQ-UI-016 — The impact map never reaches the Product Manager
+
+- ID: REQ-UI-016
+- Level: F
+- Statement: The impact map shall be derived from the output of the interpretation and shall never be an input to `ingestion.Normalize` or to the Product Manager payload.
+- Category: Functional
+- Owner: @danielckv
+- Source: [ADR 0005](../adrs/0005-prd-impact-map.md), holding the separation REQ-GATE-004 states.
+- Acceptance criteria: `internal/avatars/prompts_test.go` (`TestPMInputHasExactlyTheProductFields`: the payload is exactly the nine product keys and carries no repository material).
+- Traces to: `internal/avatars/prompts.go`, `internal/impact/build.go`
+- Status: met
+- Last reviewed: 2026-10-23
 
 ### REQ-UI-014 — Epic modal
 

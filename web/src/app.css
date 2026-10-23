@@ -2871,8 +2871,7 @@ figure > .pf-diagram-source { border-top: none; }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  /* Four tabs share the rail's width, so each gives up what it can rather
-     than pushing the last one off the edge. */
+  /* Four tabs share the rail's width, so each gives up what it can rather than pushing the last one off the edge. */
   min-width: 0;
   flex: 0 1 auto;
   padding: 0 7px;
@@ -3150,8 +3149,7 @@ figure > .pf-diagram-source { border-top: none; }
   font-weight: 600;
 }
 
-/* The verdict is the shortest thing in the row and the most load-bearing: a
-   long area name wraps rather than truncating it. */
+/* The verdict is the shortest thing in the row and the most load-bearing: a long area name wraps rather than truncating it. */
 .pf-impact-row-head .pf-tag {
   flex: none;
 }

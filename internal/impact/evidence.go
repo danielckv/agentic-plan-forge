@@ -20,10 +20,18 @@ const (
 	// model in one call. Longer runs are split into more calls.
 	//
 	// The bound is the call timeout, not the model's context window: one call
-	// must finish inside contracts.MaxGenerateTimeout or the host kills it.
-	// This is the rule ADR 0004 established for normalization sections, applied
-	// to the unit this stage splits on.
-	MaxEvidenceChars = 8000
+	// must finish inside contracts.MaxGenerateTimeout (180s) or the host kills
+	// it. This is the rule ADR 0004 established for normalization sections,
+	// applied to the unit this stage splits on.
+	//
+	// Measured against claude-opus-5 on Claude Code, scanning this repository
+	// (269 files, 50 modules): 8,537 characters took 34s, 8,786 took 18s, and
+	// 17,083 took 45s. Normalization needs 8,000 for the same 180s because it
+	// restates every requirement; this stage returns at most eight short
+	// entries per epic, so the same input costs a third of the time. 18,000
+	// leaves a fourfold margin for a slower host. See
+	// TestLiveMeasureEvidenceBudget.
+	MaxEvidenceChars = 18000
 	// MinEvidenceChars is the size below which a pack that overran the call
 	// timeout is no longer shrunk: at this size the timeout is not a size
 	// problem, so shrinking again would only bill the same work twice.
