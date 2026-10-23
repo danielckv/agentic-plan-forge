@@ -184,6 +184,48 @@ func TestPMMustNotReferenceTechnicalDetail(t *testing.T) {
 	}
 }
 
+// Repositories name things with ordinary words: a helper called `article`, a
+// callback called `load`. The Product Manager never reads the repository, so it
+// cannot avoid those words, and matching them rejected drafts it had no way to
+// write differently. Only a code-shaped name is evidence of a leak.
+func TestOrdinaryWordsThatAreAlsoSymbolsAreNotTechnicalDetail(t *testing.T) {
+	g := contracts.RepoContextGraph{Symbols: map[string][]contracts.Symbol{
+		"src/articles.py": {
+			{Name: "article", QualifiedName: "articles.article"},
+			{Name: "load", QualifiedName: "articles.load"},
+			{Name: "connected"},
+			{Name: "Article"},
+			{Name: "load_article_cache"},
+			{Name: "ListInvoices"},
+		},
+	}}
+	symbols := synthesizer.SymbolNames(g)
+	for _, keep := range []string{"load_article_cache", "ListInvoices", "articles.article", "articles.load"} {
+		if _, ok := symbols[keep]; !ok {
+			t.Errorf("SymbolNames dropped the code-shaped name %q", keep)
+		}
+	}
+	for _, drop := range []string{"article", "load", "connected", "Article"} {
+		if _, ok := symbols[drop]; ok {
+			t.Errorf("SymbolNames kept %q, a word product language needs", drop)
+		}
+	}
+	prose := "A researcher opens an article, waits for the load, and stays connected while Article pages render."
+	if ref := synthesizer.TechnicalReference(prose, symbols); ref != "" {
+		t.Errorf("product prose was rejected over %q", ref)
+	}
+	for _, leak := range []string{
+		"the system calls ListInvoices",
+		"clear load_article_cache every night",
+		"read articles.article for the body",
+		"open internal/billing/invoice.go",
+	} {
+		if synthesizer.TechnicalReference(leak, symbols) == "" {
+			t.Errorf("no technical reference found in %q", leak)
+		}
+	}
+}
+
 func TestCompareInterfacesDistinguishesBrokenFromConflict(t *testing.T) {
 	f := synthtest.Sample()
 	if issues := synthesizer.CompareInterfaces(f.Architect, f.Specialists); len(issues) != 0 {

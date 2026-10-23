@@ -361,21 +361,48 @@ func TechnicalReference(text string, symbols map[string]struct{}) string {
 	return ""
 }
 
-// SymbolNames returns the set of symbol names (length >= 4, to avoid matching
-// ordinary words) and qualified names of a graph.
+// SymbolNames returns the symbol and qualified names of a graph that only code
+// could have written: at least 4 characters and code-shaped. A name that reads
+// as ordinary English is left out; see codeShaped.
 func SymbolNames(g contracts.RepoContextGraph) map[string]struct{} {
 	out := map[string]struct{}{}
+	add := func(name string) {
+		if len(name) >= 4 && codeShaped(name) {
+			out[name] = struct{}{}
+		}
+	}
 	for _, syms := range g.Symbols {
 		for _, s := range syms {
-			if len(s.Name) >= 4 {
-				out[s.Name] = struct{}{}
-			}
-			if len(s.QualifiedName) >= 4 {
-				out[s.QualifiedName] = struct{}{}
-			}
+			add(s.Name)
+			add(s.QualifiedName)
 		}
 	}
 	return out
+}
+
+// codeShaped reports whether a name carries a separator, a digit or a capital
+// after the first character: `load_article`, `h2Title`, `billing.Invoice` and
+// `ListInvoices` do, `article` and `Article` do not.
+//
+// The Product Manager never sees the repository, so it cannot know which words
+// that repository happens to declare as identifiers. One 922-file repository
+// declares `article`, `entry`, `load`, `start` and `connected`; 165 of its
+// 18275 symbol names are plain English words, `user`, `search`, `request` and
+// `status` among them. Matching a bare word rejected every draft the Product
+// Manager could write, over language the prompt never forbade. A leak of the
+// kind the prompt does forbid is code-shaped and still matches.
+func codeShaped(name string) bool {
+	for i, r := range name {
+		switch {
+		case r == '_' || r == '.':
+			return true
+		case r >= '0' && r <= '9':
+			return true
+		case i > 0 && r >= 'A' && r <= 'Z':
+			return true
+		}
+	}
+	return false
 }
 
 // ----------------------------------------------------------- PM validation
