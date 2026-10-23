@@ -587,6 +587,12 @@ func (o *orchestrator) generate(ctx context.Context, sp stageSpec, in *stageInpu
 		if overranCallTimeout(ctx, err) && shrinks < maxTimeoutShrinks {
 			if note, ok := in.halve(o.in.callTimeout()); ok {
 				shrinks++
+				// The card must state the evidence the next call can see, not
+				// the evidence the one that timed out could.
+				d := o.detail(sp.avatar)
+				o.liveMu.Lock()
+				d.contextNote = in.note
+				o.liveMu.Unlock()
 				if terr := o.thought(ctx, sp.avatar, sp.cycle, sp.status, note); terr != nil {
 					return nil, terr
 				}

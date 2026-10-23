@@ -15,6 +15,7 @@ import (
 
 	"github.com/danielckv/agentic-plan-forge/internal/avatars"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
+	"github.com/danielckv/agentic-plan-forge/internal/relay"
 	"github.com/danielckv/agentic-plan-forge/internal/synthesizer"
 	"github.com/danielckv/agentic-plan-forge/internal/synthesizer/synthtest"
 )
@@ -317,5 +318,28 @@ func TestATimedOutStageRetriesWithLessEvidence(t *testing.T) {
 	}
 	if len(p.Notes) == 0 {
 		t.Error("the smaller payload cut evidence without saying so")
+	}
+	// The card must state the evidence the retry can see, not the evidence
+	// the call that timed out could: the whole point of the note is to tell
+	// a cut apart from an absence.
+	var before, after string
+	for _, th := range h.sink.thoughts(relay.StageArchitect) {
+		if th.ContextNote == "" {
+			continue
+		}
+		if before == "" {
+			before = th.ContextNote
+			continue
+		}
+		if th.ContextNote != before {
+			after = th.ContextNote
+			break
+		}
+	}
+	if after == "" {
+		t.Fatalf("the evidence note never changed after the shrink; it stayed %q", before)
+	}
+	if !strings.Contains(after, "evidence cut") {
+		t.Errorf("the note after the shrink is %q and does not say evidence was cut", after)
 	}
 }
