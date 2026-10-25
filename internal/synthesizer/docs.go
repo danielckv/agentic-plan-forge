@@ -210,7 +210,24 @@ func DecodeSpecialist(raw []byte) (SpecialistDoc, error) {
 	if err := decodeStrict(raw, &d); err != nil {
 		return d, &ValidationError{Stage: "specialist", Problems: []string{err.Error()}}
 	}
+	NormalizeSpecialist(&d)
 	return d, nil
+}
+
+// NormalizeSpecialist fills in what the specialist envelope already decides.
+// A specialist drafts one workstream, so every task it writes belongs to that
+// workstream: a task that leaves workstream_id empty inherits the draft's.
+// A task that names a different workstream is left alone and Validate rejects
+// it, because that is a real disagreement rather than an omitted field.
+func NormalizeSpecialist(d *SpecialistDoc) {
+	if d.WorkstreamID == "" {
+		return
+	}
+	for i := range d.Tasks {
+		if d.Tasks[i].WorkstreamID == "" {
+			d.Tasks[i].WorkstreamID = d.WorkstreamID
+		}
+	}
 }
 
 // DecodeCritic strictly decodes Red-Team Critic output.
