@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/danielckv/agentic-plan-forge/internal/ast"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 	"github.com/danielckv/agentic-plan-forge/internal/sanitize"
@@ -45,6 +46,11 @@ type orchestrator struct {
 	store     *CheckpointStore
 	maxC      int
 	par       int
+	// sem bounds every concurrent provider call of a cycle to par. It is one
+	// semaphore rather than one per stage because the architect's diagrams and
+	// documentation batches now run beside the specialists: two stages holding
+	// a limit of par each would put 2*par calls in flight.
+	sem chan struct{}
 
 	emitMu sync.Mutex
 	// seen is the last status emitted per avatar, so a failed run can give the
@@ -795,6 +801,35 @@ func (o *orchestrator) graphForPrompt() contracts.RepoContextGraph {
 	g := o.in.Graph
 	g.RootPath = ""
 	return g
+}
+
+// SpecialistGraphBudgetBytes bounds the repository graph one specialist sees.
+//
+// The architect designs across the whole repository and gets the whole
+// snapshot (ast.SnapshotBudgetBytes, 200 KiB). A specialist plans one
+// workstream, and the architect already declared which module paths that
+// workstream owns, so the same 200 KiB spent on the whole repository is mostly
+// code it will not touch. Specialists run concurrently, so that waste is paid
+// min(MaxParallel, 4) times at once, in the input tokens and the latency of
+// every one of those calls.
+//
+// The budget ranks rather than filters: what falls outside the workstream is
+// still included while the budget allows, so the contracts it consumes
+// elsewhere stay visible.
+const SpecialistGraphBudgetBytes = 64 << 10
+
+// graphForWorkstream is the snapshot handed to one specialist: the module
+// paths its workstream owns first, then whatever else fits. A workstream that
+// declares no module paths falls back to ranking by the stories, which is what
+// every avatar got before.
+func (o *orchestrator) graphForWorkstream(w contracts.Workstream, stories []contracts.Story) contracts.RepoContextGraph {
+	g := o.graphForPrompt()
+	snap, _ := ast.Snapshot(&g, ast.SnapshotOptions{
+		Paths:    w.ModulePaths,
+		Keywords: storyKeywords(stories),
+		MaxBytes: SpecialistGraphBudgetBytes,
+	})
+	return snap
 }
 
 // evidenceNotes repeats what the caller cut when it bounded the evidence, so

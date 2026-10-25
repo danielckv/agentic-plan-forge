@@ -26,6 +26,10 @@ const (
 	// short, live statement of what the run is doing. It never produces a
 	// draft and never blocks a stage: a narrator failure is dropped.
 	RoleNarrator RoleID = "narrator"
+	// RoleResearch answers one open question from evidence a detached batch
+	// gathered. It runs outside a deliberation run, on its own budget, and its
+	// output is a claim with a quoted source rather than a draft.
+	RoleResearch RoleID = "research"
 )
 
 // Placement names the host and model that served, or will serve, one role.

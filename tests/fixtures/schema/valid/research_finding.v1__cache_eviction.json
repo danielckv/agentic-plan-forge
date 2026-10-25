@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "findings": [
+    {
+      "question_id": "q-7f3a1c",
+      "candidate_id": "c3",
+      "claim": "The cache evicts by insertion order, not by use, so a hot entry is dropped once the table is full.",
+      "confidence": "HIGH",
+      "answers": true
+    },
+    {
+      "question_id": "q-7f3a1c",
+      "candidate_id": "c11",
+      "claim": "The eviction path holds the write lock for the whole scan, which the caller comment says is bounded by table size.",
+      "confidence": "MEDIUM",
+      "answers": false
+    }
+  ]
+}

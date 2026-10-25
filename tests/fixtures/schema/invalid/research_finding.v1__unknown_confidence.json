@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "findings": [
+    {
+      "question_id": "q-7f3a1c",
+      "candidate_id": "c3",
+      "claim": "The cache evicts by insertion order.",
+      "confidence": "PROBABLY",
+      "answers": true
+    }
+  ]
+}

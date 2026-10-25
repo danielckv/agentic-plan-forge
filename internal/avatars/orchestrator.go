@@ -54,9 +54,10 @@ func newOrchestrator(in RunInput, gen contracts.Generator, emit func(contracts.P
 	if store == nil {
 		store = defaultCheckpoints
 	}
+	par := in.parallel()
 	return &orchestrator{
 		in: in, gen: gen, sink: emit, decisions: decisions, store: store,
-		maxC: in.maxCycles(), par: in.parallel(),
+		maxC: in.maxCycles(), par: par, sem: make(chan struct{}, par),
 		specs: map[string]synthesizer.SpecialistDoc{},
 	}
 }
@@ -221,13 +222,27 @@ func (o *orchestrator) cycle(ctx context.Context, c int) (bool, error) {
 		}
 	}
 	o.applyPlan(c)
+	// The architect's diagrams and documentation batches run beside the
+	// specialists: the specialists need the design part and nothing else. The
+	// rest is always joined, including when the specialists fail, so no
+	// provider call outlives the cycle that started it.
+	var rest *archRest
 	if !o.st.Arch.present() || o.st.Arch.Stale {
-		if err := o.runArchitect(ctx, c); err != nil {
+		var err error
+		if rest, err = o.startArchitect(ctx, c); err != nil {
 			return false, err
 		}
 	}
-	if err := o.runSpecialists(ctx, c); err != nil {
-		return false, err
+	specErr := o.runSpecialists(ctx, c)
+	if rest != nil {
+		// An architect failure outranks a specialist one: the specialists were
+		// planning against a design that turned out not to assemble.
+		if err := o.finishArchitect(ctx, c, rest); err != nil {
+			return false, err
+		}
+	}
+	if specErr != nil {
+		return false, specErr
 	}
 	if err := o.resolveConflicts(ctx, c); err != nil {
 		return false, err
@@ -538,7 +553,7 @@ func (o *orchestrator) runSpecialists(ctx context.Context, c int) error {
 	}
 	o.save()
 
-	sem := make(chan struct{}, o.par)
+	sem := o.sem
 	errs := make([]error, len(run))
 	var failed atomic.Bool
 	var remaining atomic.Int32
@@ -655,7 +670,7 @@ func (o *orchestrator) runSpecialist(ctx context.Context, c int, ws string, adop
 	payload, err := fitPayload(sp.avatar, &specialistPayload{
 		Cycle: c, WorkstreamID: ws, Workstream: w, Workstreams: arch.Workstreams, Summary: arch.Summary,
 		Constraints: nonNil(arch.Constraints), Contracts: relevant, Epics: pm.Epics, Stories: pm.Stories,
-		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
+		Graph: o.graphForWorkstream(w, pm.Stories), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
 		Decisions: decisions, Adopt: adopt, Revision: rev,
 	})
 	if err != nil {

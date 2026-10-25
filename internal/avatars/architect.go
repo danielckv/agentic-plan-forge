@@ -154,27 +154,67 @@ func (o *orchestrator) architectSpec(c int, status, summary string) stageSpec {
 	}
 }
 
-// runArchitect produces the architect draft of this cycle from its parts and
-// publishes the assembled, validated result.
-func (o *orchestrator) runArchitect(ctx context.Context, c int) error {
+// archRest is the architect's diagram and documentation parts running beside
+// the specialists. The specialists read the summary, the constraints, the
+// workstreams and the contracts, and the design part carries all four, so
+// these two parts no longer sit on the critical path.
+//
+// Measured against this repository on 2026-10-25: the architect spent 43m46s
+// over 15 calls, 13 of them documentation batches, out of 1h04m of provider
+// time for the whole run. Every one of those 13 calls blocked the specialists.
+type archRest struct {
+	design   synthesizer.ArchitectDoc
+	diagrams synthesizer.DiagramSet
+	docs     []contracts.TechnicalTask
+	err      error
+	done     chan struct{}
+}
+
+// startArchitect runs the design part, opens the specialists' way, and leaves
+// the other two parts running. The caller MUST call finishArchitect, including
+// on its own error path, or the goroutine outlives the cycle.
+func (o *orchestrator) startArchitect(ctx context.Context, c int) (*archRest, error) {
 	o.mu.Lock()
 	prev, oldArch := o.st.Arch, o.arch
 	o.mu.Unlock()
 
 	design, err := o.architectDesign(ctx, c, prev)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	// The design is published to the specialists but not yet to the room: the
+	// draft they see is the assembled one. Contracts are identical in the
+	// design and in the merge — the merge only adds diagrams and documentation
+	// tasks — and both parsers normalise them, so a stale specialist draft is
+	// invalidated against the same contract identity as before.
+	o.mu.Lock()
+	o.arch = design
+	if prev.present() {
+		o.invalidateByContractsLocked(oldArch, design)
+	}
+	o.mu.Unlock()
 
 	batches := o.planBatches()
-	diagrams, docs, err := o.architectRest(ctx, c, design, batches)
-	if err != nil {
-		return err
+	r := &archRest{design: design, done: make(chan struct{})}
+	go func() {
+		defer close(r.done)
+		r.diagrams, r.docs, r.err = o.architectRest(ctx, c, design, batches)
+	}()
+	return r, nil
+}
+
+// finishArchitect waits for the diagram and documentation parts, assembles the
+// draft, validates it as a whole and publishes it.
+func (o *orchestrator) finishArchitect(ctx context.Context, c int, r *archRest) error {
+	<-r.done
+	if r.err != nil {
+		return r.err
 	}
 
-	merged := design
-	merged.Diagrams = diagrams
-	merged.DocTasks = docs
+	merged := r.design
+	merged.Diagrams = r.diagrams
+	merged.DocTasks = r.docs
 	doc, raw, perr := o.parseArchitect(mustJSON(merged))
 	if perr != nil {
 		// Every part passed its own validation, so a problem here is a
@@ -193,9 +233,6 @@ func (o *orchestrator) runArchitect(ctx context.Context, c int) error {
 	o.mu.Lock()
 	o.arch = doc
 	o.st.Arch = draftRec{Raw: raw, Cycle: c, Rev: n}
-	if prev.present() {
-		o.invalidateByContractsLocked(oldArch, doc)
-	}
 	o.mu.Unlock()
 	o.save()
 	return o.publishDraft(ctx, relay.StageArchitect, synthesizer.SchemaArchitect, c, raw, n)
@@ -310,7 +347,7 @@ func (o *orchestrator) architectRest(ctx context.Context, c int, design synthesi
 	}
 	runDiagrams := !diagramsDone.present()
 
-	sem := make(chan struct{}, o.par)
+	sem := o.sem
 	errs := make([]error, len(batches)+1)
 	results := make([]json.RawMessage, len(batches))
 	var diagramRaw json.RawMessage

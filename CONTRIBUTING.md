@@ -78,6 +78,42 @@ lychee --no-progress --config lychee.toml "**/*.md"
 
 The `client` and `server` build tags are mutually exclusive: never pass both.
 
+## Live tests
+
+A few tests call a real model. They are skipped unless you opt in, because each one spends real money, and they are
+never run in CI. Everything above passes without them.
+
+Setup is whatever you already have: a signed-in host agent. No API key and no extra configuration.
+
+```sh
+# 1. One host, signed in. Check what Plan Forge can see:
+plan-forge doctor
+
+# 2. Pin the host and model explicitly. Both variables matter:
+#    LIVE_HOST pins every role, because roles otherwise rotate across hosts
+#    and a stale host fails a stage that has nothing to do with the test.
+export PLAN_FORGE_LIVE_HOST=claude
+export PLAN_FORGE_LIVE_MODEL=opus
+```
+
+| Test | Switch | What it costs | What it tells you |
+| :--- | :--- | :--- | :--- |
+| `TestLiveDeliberationEndToEnd` | `PLAN_FORGE_LIVE_DELIBERATION=1` | a whole run, 20–40 min | every avatar's calls, payload size, slowest call, host placement, and the run's wall clock against its total call time |
+| `TestLiveImpactEndToEnd` | `PLAN_FORGE_LIVE_IMPACT=1` | a few calls | that the impact map names only files that exist, and that a second pass costs nothing |
+| `TestLiveMeasureEvidenceBudget` | `PLAN_FORGE_LIVE_IMPACT=1` | one call | how long a given evidence size takes, which is how the input bounds are chosen |
+
+```sh
+# The whole gate, end to end, with the per-role cost table:
+PLAN_FORGE_LIVE_DELIBERATION=1 go test -tags client \
+    -run TestLiveDeliberation -timeout 60m -v ./internal/app/
+
+# One cycle runs by default; PLAN_FORGE_LIVE_CYCLES raises it.
+```
+
+Use the deliberation test before and after any change that claims to make a run faster or an input smaller. The
+numbers it prints are what the decision records cite; a claim about speed without one of these tables behind it does
+not belong in an ADR.
+
 To look at the window without a model, two harnesses drive the built bundle through a fake planning session
 (`web/scripts/lib/`, seeded with a sample brief and Go-shaped avatar frames):
 

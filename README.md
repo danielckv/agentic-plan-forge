@@ -79,6 +79,11 @@ route registrations; documentation is cross-referenced against that graph so sta
 documentation-sync tasks instead of silent assumptions. Parse coverage gaps are reported as gaps, and structural matches
 are never treated as proof that behaviour is complete.
 
+Every piece of that evidence is bounded, and each avatar gets the slice it is working on rather than all of it: a
+specialist reads the module paths its own workstream owns, and the documentation-drift list is cut to the 60 most
+useful items so a plan comes back with the documentation work that matters instead of one chore per stale file. What
+was cut is always stated in the payload, so the model treats a gap as unchecked rather than as nothing to do.
+
 Before the avatars start, Plan Forge gathers what the repository already says about the work: decision records, specs,
 notes and recent commit subjects, matched against your requirements and bounded to 12 excerpts. The Impact tab then asks
 the model which of those parts the requirements actually affect. It answers by picking from a numbered shortlist rather

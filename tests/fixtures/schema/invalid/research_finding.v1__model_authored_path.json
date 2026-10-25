@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "findings": [
+    {
+      "question_id": "q-7f3a1c",
+      "path": "internal/cache/lru.go",
+      "claim": "The cache evicts by insertion order.",
+      "confidence": "HIGH",
+      "answers": true
+    }
+  ]
+}

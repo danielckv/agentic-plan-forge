@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "research_finding.v1.json",
+  "title": "Findings produced by one research call",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "findings"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "findings": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question_id", "candidate_id", "claim", "confidence", "answers"],
+        "properties": {
+          "question_id": { "type": "string", "maxLength": 64 },
+          "candidate_id": { "type": "string", "pattern": "^c[0-9]{1,4}$" },
+          "claim": { "type": "string", "minLength": 1, "maxLength": 400 },
+          "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "answers": { "type": "boolean" }
+        }
+      }
+    },
+    "unanswered_reason": { "type": "string", "maxLength": 300 }
+  }
+}

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A plan no longer carries hundreds of documentation chores. The documentation-drift list was bounded in bytes (128 KiB) but never in items, and a byte budget does not bound the work the list causes: the Technical Architect writes one documentation task per confirmed item and answers 20 per call, so the item count decides how many model calls the stage makes. Measured on this repository, 249 items fitted comfortably inside the size limit and became 13 of the architect's 15 calls — most of a 43m46s stage — and the specification they produced would have listed 249 documentation tasks. Drift is now cut to the 60 most useful items as well as to 128 KiB, confirmed drift first; the payload says how many were left out, and the sentence the model reads names whichever limit actually cut. See [ADR 0011](docs/adrs/0011-the-documentation-batches-leave-the-critical-path.md).
+- A Domain Specialist is given its own workstream's code instead of the whole repository. Every technical stage received the same 200 KiB code graph, so the specialist planning one workstream read the same bytes as the specialist planning another, and specialists run at the same time — the waste was paid in the input tokens and the latency of each of those calls at once. The architect already declares which module paths each workstream owns; those files now come first, inside a 64 KiB budget. It ranks rather than filters, so the contracts a workstream consumes elsewhere stay visible, and a repository whose graph already fits arrives whole. See [ADR 0010](docs/adrs/0010-a-specialist-sees-its-own-workstream.md).
+
+### Fixed
+
+- The documentation batches no longer hold the Domain Specialists up. The stage has always been described as one the specialists leave as soon as the design is validated — 0.5.0 said so — but the code waited for the design, the diagrams and every documentation batch before a specialist started. On this repository that is 13 extra calls in front of them. The design part carries the summary, the constraints, the workstreams and the contracts, which is everything a specialist reads, so the specialists now start when it lands and the diagrams and documentation batches run beside them. One limit now covers the whole cycle, so the architect's remaining parts and the specialists together still never exceed `max_parallel`.
+
+### Added
+
+- `TestLiveDeliberationEndToEnd` drives a long brief through the whole gate against real hosts — interpretation, grounding, the four avatars, the synthesis lock — and prints what each role cost: calls, total and slowest duration, payload and output size, the host and model it was placed on, and the run's wall clock against the sum of its call durations. It is skipped unless `PLAN_FORGE_LIVE_DELIBERATION=1`, because a full run spends real money. See [Live tests](CONTRIBUTING.md#live-tests).
+
 ## [0.6.0] - 2026-10-23
 
 ### Added

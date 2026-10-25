@@ -138,11 +138,20 @@ was already validated is kept. The button reads **Retrying…** until the board 
 rather than cancelling the call the first one started.
 
 **How the architect runs.** The stage answers in three parts: the design (workstreams and interface contracts), the
-diagrams drawn from it, and the documentation tasks in batches of at most 20 stale documents. The diagrams and the
-batches run at the same time, up to the configured `max_parallel`. Each part is kept on its own, so a retry re-runs the
-part that failed and the specialists start as soon as the design is validated. A call that outruns the 180 second host
-limit is not repeated: it runs again with half its evidence, and says in the payload what it gave up. See
-[ADR 0007](adrs/0007-the-architect-answers-in-parts.md).
+diagrams drawn from it, and the documentation tasks in batches of at most 20 stale documents. Each part is kept on its
+own, so a retry re-runs only the part that failed.
+
+The specialists wait for the design part and for nothing else. The diagrams and the documentation batches run beside
+them, not before them, so a repository with a lot of stale documentation no longer holds the specialists up: measured on
+this repository, the architect spent 43m46s across 15 calls, 13 of them documentation batches, and every one of those 13
+used to block the stage. One limit covers the whole cycle, so the architect's remaining parts and the specialists
+together never exceed the configured `max_parallel`.
+
+A call that outruns its budget — `stage_timeout_seconds`, 600 seconds by default — is not repeated unchanged: it runs
+again with half its evidence, and says in the payload what it gave up. See
+[ADR 0007](adrs/0007-the-architect-answers-in-parts.md),
+[ADR 0009](adrs/0009-one-budget-per-stage-roles-across-hosts-and-a-live-room.md) and
+[ADR 0011](adrs/0011-the-documentation-batches-leave-the-critical-path.md).
 
 **When you come back.** An unfinished run is kept in `docs/plans/.plan/run.json`, so closing the window or losing the
 process does not throw away work a model was already paid for. The next run over the same requirements picks the drafts
@@ -151,11 +160,16 @@ Change the requirements, the code or the configured models and the saved drafts 
 the run starts over. Approving a plan deletes the file.
 
 **What the avatars are given.** Each technical stage receives a bounded view of the repository: the code graph (200 KiB),
-the project notes (64 KiB) and the documentation drift list (128 KiB, confirmed drift first, then what your stories are
-about). Each part of a stage receives only what it answers: the architect's design part gets no drift, its documentation
-part gets no code graph. When a stage input still does not fit its limit, or the call outruns the clock, evidence is
-given up in that order and the payload says what was cut, so the model treats the gap as unchecked rather than as
-nothing to do.
+the project notes (64 KiB) and the documentation drift list (128 KiB **and at most 60 items**, confirmed drift first,
+then what your stories are about). The item limit matters as much as the size one: the architect writes one
+documentation task per confirmed item, so an unbounded list is both a longer run and a specification carrying hundreds
+of documentation chores. A specialist is given its own workstream's code rather than the whole repository — the module
+paths the architect assigned it come first, inside a 64 KiB budget — because specialists run at the same time and a
+graph that is mostly irrelevant is paid for in every one of those calls at once.
+
+Each part of a stage receives only what it answers: the architect's design part gets no drift, its documentation part
+gets no code graph. When a stage input still does not fit its limit, or the call outruns the clock, evidence is given up
+in that order and the payload says what was cut, so the model treats the gap as unchecked rather than as nothing to do.
 
 ### 3. Synthesis: the specification
 

@@ -1265,6 +1265,18 @@ type SnapshotOptions struct {
 	// or symbol names contain a keyword are kept first, then the other files of
 	// their modules. KeywordsFromText derives them from the PM stories.
 	Keywords []string
+	// Paths are repository-relative directories or files the caller owns, and
+	// they outrank every keyword match. A specialist is given the module paths
+	// of its own workstream, so the budget is spent on the code it is planning
+	// rather than shared evenly across a repository it will not touch. A
+	// trailing "/**", "/*" or "/" is ignored, and a prefix matches only on a
+	// path boundary: "internal/api" covers "internal/api/x.go" and not
+	// "internal/apikeys/y.go".
+	//
+	// Paths rank, they do not filter. What falls outside them is still included
+	// while the budget allows, so a specialist keeps seeing the contracts it
+	// consumes elsewhere. Pass a smaller MaxBytes to actually cut.
+	Paths []string
 	// MaxBytes is the serialized size limit. Zero selects SnapshotBudgetBytes.
 	MaxBytes int
 }
@@ -1332,7 +1344,7 @@ func Snapshot(g *contracts.RepoContextGraph, opts SnapshotOptions) (contracts.Re
 		return full, info
 	}
 
-	rankUnits(units, opts.Keywords)
+	rankUnits(units, opts.Keywords, opts.Paths)
 	order := make([]int, len(units))
 	for i := range order {
 		order[i] = i
@@ -1458,15 +1470,17 @@ func unitCost(u snapUnit) int {
 	return n
 }
 
-// rankUnits scores every file against the keywords and assigns tiers: 0 for
-// files that match, 1 for other files in a module with a match, 2 for the rest.
-func rankUnits(units []snapUnit, keywords []string) {
+// rankUnits scores every file against the keywords and the owned paths, then
+// assigns tiers: 0 for a file under an owned path, 1 for a keyword match, 2 for
+// another file in a module with a match, 3 for the rest.
+func rankUnits(units []snapUnit, keywords, paths []string) {
 	kws := make([]string, 0, len(keywords))
 	for _, k := range keywords {
 		if k = strings.ToLower(strings.TrimSpace(k)); k != "" {
 			kws = append(kws, k)
 		}
 	}
+	owned := normalizePathPrefixes(paths)
 	hitDirs := map[string]bool{}
 	for i := range units {
 		u := &units[i]
@@ -1490,14 +1504,47 @@ func rankUnits(units []snapUnit, keywords []string) {
 	for i := range units {
 		u := &units[i]
 		switch {
-		case u.score > 0:
+		case underAny(u.path, owned):
 			u.tier = 0
-		case hitDirs[u.dir]:
+		case u.score > 0:
 			u.tier = 1
-		default:
+		case hitDirs[u.dir]:
 			u.tier = 2
+		default:
+			u.tier = 3
 		}
 	}
+}
+
+// normalizePathPrefixes cleans the owned paths: slashes forward, no trailing
+// glob or separator, empty entries dropped. "." and "/" are dropped too, since
+// a prefix that matches the whole repository ranks nothing.
+func normalizePathPrefixes(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = strings.TrimSpace(strings.ReplaceAll(p, "\\", "/"))
+		for _, suffix := range []string{"/**", "/*", "/"} {
+			p = strings.TrimSuffix(p, suffix)
+		}
+		p = strings.TrimPrefix(p, "./")
+		if p == "" || p == "." || p == "/" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// underAny reports whether p is one of the prefixes or sits beneath one. The
+// match is on a path boundary, so "internal/api" does not cover
+// "internal/apikeys/y.go".
+func underAny(p string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if p == prefix || strings.HasPrefix(p, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // fitPrefix keeps as many leading symbols of a file as fit in room bytes.
