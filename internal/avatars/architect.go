@@ -149,7 +149,7 @@ func (p *architectDocsPayload) trim() (string, bool) {
 func (o *orchestrator) architectSpec(c int, status, summary string) stageSpec {
 	return stageSpec{
 		avatar: relay.StageArchitect, role: contracts.RoleArchitect, slot: contracts.SlotMain,
-		model: o.in.Models.Main, schema: synthesizer.SchemaArchitect, cycle: c,
+		schema: synthesizer.SchemaArchitect, cycle: c,
 		status: status, summary: summary,
 	}
 }

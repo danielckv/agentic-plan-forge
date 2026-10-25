@@ -45,7 +45,7 @@ func readyRouter(t *testing.T, cfg config.Config) *Router {
 			},
 		},
 		ready:  make(map[Kind]resolvedAdapter),
-		byRole: make(map[contracts.RoleID]Placement),
+		byRole: make(map[RoleLane]Placement),
 		models: make(map[Kind]map[string]bool),
 	}
 }
@@ -64,7 +64,7 @@ func TestRolesSpreadAcrossEveryReadyHost(t *testing.T) {
 		if role == contracts.RoleCritic {
 			slot = contracts.SlotJudge
 		}
-		p, err := r.PlaceRole(context.Background(), role, slot)
+		p, err := r.PlaceRole(context.Background(), role, "", slot)
 		if err != nil {
 			t.Fatalf("%s: %v", role, err)
 		}
@@ -76,8 +76,8 @@ func TestRolesSpreadAcrossEveryReadyHost(t *testing.T) {
 		}
 	}
 	// The critic must not review on the host the architect drafted on.
-	arch, _ := r.PlaceRole(context.Background(), contracts.RoleArchitect, contracts.SlotMain)
-	critic, _ := r.PlaceRole(context.Background(), contracts.RoleCritic, contracts.SlotJudge)
+	arch, _ := r.PlaceRole(context.Background(), contracts.RoleArchitect, "", contracts.SlotMain)
+	critic, _ := r.PlaceRole(context.Background(), contracts.RoleCritic, "", contracts.SlotJudge)
 	if arch.Kind == critic.Kind {
 		t.Errorf("critic and architect both on %s; the judge must be a second opinion", arch.Kind)
 	}
@@ -87,18 +87,18 @@ func TestRolesSpreadAcrossEveryReadyHost(t *testing.T) {
 // one run, or the room shows it moving mid-cycle.
 func TestPlacementIsStablePerRole(t *testing.T) {
 	r := readyRouter(t, config.Config{})
-	first, err := r.PlaceRole(context.Background(), contracts.RoleArchitect, contracts.SlotMain)
+	first, err := r.PlaceRole(context.Background(), contracts.RoleArchitect, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := r.PlaceRole(context.Background(), contracts.RoleArchitect, contracts.SlotMain)
+	second, err := r.PlaceRole(context.Background(), contracts.RoleArchitect, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.Kind != second.Kind || first.Model != second.Model {
 		t.Fatalf("architect moved from %s/%s to %s/%s", first.Kind, first.Model, second.Kind, second.Model)
 	}
-	if got := r.Placements()[contracts.RoleArchitect]; got.Kind != first.Kind {
+	if got := r.Placements()[RoleLane{Role: contracts.RoleArchitect}]; got.Kind != first.Kind {
 		t.Fatalf("Placements reports %s, want %s", got.Kind, first.Kind)
 	}
 }
@@ -109,7 +109,7 @@ func TestRoleBindingPinsHostAndModel(t *testing.T) {
 		"architect": {Host: "omp", Model: "claude-opus-5-5"},
 		"narrator":  {Model: "gemini-3.8-flash-low"},
 	}})
-	arch, err := r.PlaceRole(context.Background(), contracts.RoleArchitect, contracts.SlotMain)
+	arch, err := r.PlaceRole(context.Background(), contracts.RoleArchitect, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestRoleBindingPinsHostAndModel(t *testing.T) {
 		t.Fatalf("architect = %s/%s, want omp/claude-opus-5-5", arch.Kind, arch.Model)
 	}
 	// A binding with a model but no host keeps the rotation's host.
-	narrator, err := r.PlaceRole(context.Background(), contracts.RoleNarrator, contracts.SlotMain)
+	narrator, err := r.PlaceRole(context.Background(), contracts.RoleNarrator, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestConfiguredMainHostStillForcesOneHost(t *testing.T) {
 	for _, role := range []contracts.RoleID{
 		contracts.RoleProductManager, contracts.RoleArchitect, contracts.RoleSpecialist,
 	} {
-		p, err := r.PlaceRole(context.Background(), role, contracts.SlotMain)
+		p, err := r.PlaceRole(context.Background(), role, "", contracts.SlotMain)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -149,14 +149,14 @@ func TestConfiguredMainHostStillForcesOneHost(t *testing.T) {
 // it; every other host is left to its own default.
 func TestSlotModelOnlyAppliesToAHostThatListsIt(t *testing.T) {
 	r := readyRouter(t, config.Config{DefaultMainModel: "opus"})
-	claude, err := r.PlaceRole(context.Background(), contracts.RoleProductManager, contracts.SlotMain)
+	claude, err := r.PlaceRole(context.Background(), contracts.RoleProductManager, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if claude.Kind != KindClaude || claude.Model != "opus" {
 		t.Fatalf("pm = %s/%s, want claude/opus", claude.Kind, claude.Model)
 	}
-	spec, err := r.PlaceRole(context.Background(), contracts.RoleSpecialist, contracts.SlotMain)
+	spec, err := r.PlaceRole(context.Background(), contracts.RoleSpecialist, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestOneReadyHostStillServesEveryRole(t *testing.T) {
 		cfg:      config.Config{},
 		adapters: map[Kind]Adapter{KindClaude: only},
 		ready:    make(map[Kind]resolvedAdapter),
-		byRole:   make(map[contracts.RoleID]Placement),
+		byRole:   make(map[RoleLane]Placement),
 		models:   make(map[Kind]map[string]bool),
 	}
 	for _, role := range []contracts.RoleID{
@@ -189,7 +189,7 @@ func TestOneReadyHostStillServesEveryRole(t *testing.T) {
 		if role == contracts.RoleCritic {
 			slot = contracts.SlotJudge
 		}
-		p, err := r.PlaceRole(context.Background(), role, slot)
+		p, err := r.PlaceRole(context.Background(), role, "", slot)
 		if err != nil {
 			t.Fatalf("%s: %v", role, err)
 		}
@@ -274,7 +274,7 @@ func TestADemotedHostIsNotOfferedToTheNextRole(t *testing.T) {
 		t.Fatalf("critic call: %v", err)
 	}
 	// The specialist rotation starts on OMP; it must not be placed there.
-	p, err := r.PlaceRole(context.Background(), contracts.RoleSpecialist, contracts.SlotMain)
+	p, err := r.PlaceRole(context.Background(), contracts.RoleSpecialist, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatalf("specialist placement: %v", err)
 	}

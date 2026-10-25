@@ -38,13 +38,19 @@ serving. Reasoning: [ADR 0012](adrs/0012-a-broken-host-costs-one-retry-not-the-r
 
 ## One run, every host you are signed in to
 
-With no `main_host` set, each avatar role is placed on its own host, so one host's rate limit slows one role instead
+With no `main_host` set, each avatar is placed on its own host, so one host's rate limit slows one avatar instead
 of the whole run and the critic reviews on a different host than the architect drafted on. `plan-forge config --show`
 prints the placement, and `/api/status` carries it with the reason any host was skipped.
 
+The Domain Specialists are placed one by one, not as a group. Four workstreams draft at the same time, so putting all
+four on one host is four concurrent calls against one rate limit. Each workstream reaches for a different adapter
+first, falling back the usual way when it is not ready. The host a workstream gets is derived from its name, so a
+retry, a resumed run and a second window all place it the same way. Reasoning:
+[ADR 0015](adrs/0015-an-avatar-is-placed-not-a-role.md).
+
 | Key | Default | Effect |
 | :--- | :--- | :--- |
-| `role_models` | unset | Pins a role to a host, a model, or both. Keys: `pm`, `architect`, `specialist`, `critic`, `synthesizer`, `narrator`. A role with no entry is spread across the ready hosts. |
+| `role_models` | unset | Pins a role to a host, a model, or both. Keys: `pm`, `architect`, `specialist`, `critic`, `synthesizer`, `narrator`. A role with no entry is spread across the ready hosts. Pinning `specialist` pins every workstream. |
 | `main_host` / `judge_host` | unset | Naming one forces every role on that slot onto it. This is how you turn the spread off. A host that cannot serve is skipped; `plan-forge doctor` says so rather than leaving it silent. |
 | `stage_timeout_seconds` | `600` | What one deliberation call may take, 60..1800. The old 180-second cap killed every architect run; see below. |
 | `disable_narrator` | `false` | Turns off the avatar that narrates the run. |
@@ -60,6 +66,11 @@ A binding takes a host, a model, or both:
   }
 }
 ```
+
+A model id reaches a host only if that host lists it. `default_main_model` and `default_judge_model` are slot-wide,
+so they are dropped for any host that does not advertise them and that host's own default is used instead — naming
+`claude-opus-5-5-high`, which is an Antigravity id, does not send it to Claude Code. A `role_models` model is taken as
+written: you named the role and the host together, so it is your choice to make.
 
 Pick the architect's model for reasoning, not for price. Measured on one design call with a 206 KiB payload: `opus`
 finished in 110s using 5,960 thinking tokens; `sonnet` took 282s using 34,287 for the same answer. The cheaper model

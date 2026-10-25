@@ -334,7 +334,7 @@ func pausedBlockers(list []contracts.Critique) []contracts.Critique {
 
 func (o *orchestrator) runPM(ctx context.Context, c int) error {
 	sp := stageSpec{
-		avatar: relay.StagePM, role: contracts.RoleProductManager, slot: contracts.SlotMain, model: o.in.Models.Main,
+		avatar: relay.StagePM, role: contracts.RoleProductManager, slot: contracts.SlotMain,
 		system: PMSystemPrompt(), schema: synthesizer.SchemaPM, cycle: c, status: statusThinking,
 		summary: "Drafting epics and user stories from the approved product requirements.",
 		step:    "epics and stories",
@@ -656,7 +656,7 @@ func (o *orchestrator) runSpecialist(ctx context.Context, c int, ws string, adop
 		}
 	}
 	sp := stageSpec{
-		avatar: relay.StageSpecialistPrefix + ws, role: contracts.RoleSpecialist, slot: contracts.SlotMain, model: o.in.Models.Main,
+		avatar: relay.StageSpecialistPrefix + ws, role: contracts.RoleSpecialist, lane: ws, slot: contracts.SlotMain,
 		system: SpecialistSystemPrompt(), schema: synthesizer.SchemaSpecialist, cycle: c, status: statusThinking,
 		summary: fmt.Sprintf("Drafting concrete files, signatures and steps for workstream %s.", ws),
 		step:    "workstream " + ws,
@@ -759,7 +759,7 @@ func (o *orchestrator) criticSpec(c int, barrier bool) stageSpec {
 		step = "early review"
 	}
 	return stageSpec{
-		avatar: relay.StageCritic, role: contracts.RoleCritic, slot: contracts.SlotJudge, model: o.in.Models.Judge,
+		avatar: relay.StageCritic, role: contracts.RoleCritic, slot: contracts.SlotJudge,
 		system: CriticSystemPrompt(), schema: synthesizer.SchemaCritic, cycle: c, status: statusCritiquing, summary: summary,
 		step: step,
 	}

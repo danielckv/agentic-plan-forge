@@ -30,15 +30,14 @@ const (
 	maxSummaryRunes = 400
 )
 
-// ModelSlots names the model each slot resolves to. Empty means the host's
-// default for that slot.
+// ModelSlots records the models a run was configured with. No stage call
+// carries them: the router decides the model per avatar, from role_models and
+// what the serving host lists. They identify the run instead — a checkpoint is
+// adopted only by a run configured the same way, because a draft written by
+// one model is not interchangeable with a draft written by another.
 type ModelSlots struct {
 	Main  string
 	Judge string
-	// Narrator is the model of the live status avatar. It is its own slot
-	// because the narrator wants the cheapest fast model, never the one the
-	// architect needs.
-	Narrator string
 }
 
 // RunInput is everything one deliberation run is allowed to see. It holds a

@@ -203,8 +203,13 @@ func resolveHosts(ctx context.Context, router *host.Router, requested string) (H
 	// buys two things: a host that cannot serve is reported before the window
 	// opens rather than mid-cycle, and the room can name the host under a
 	// face that has not spoken yet.
+	//
+	// The empty lane is the role itself. A Domain Specialist is placed again
+	// per workstream once the architect has declared them, which is the first
+	// moment those lanes exist; what this loop reports for the specialist is
+	// the host the first lane would reach.
 	for _, role := range roleSlots {
-		p, err := router.PlaceRole(ctx, role.id, role.slot)
+		p, err := router.PlaceRole(ctx, role.id, "", role.slot)
 		if err != nil {
 			return HostSummary{}, err
 		}

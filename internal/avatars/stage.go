@@ -284,10 +284,13 @@ func (o *orchestrator) save() {
 
 // stageSpec describes one provider invocation.
 type stageSpec struct {
-	avatar  string
-	role    contracts.RoleID
+	avatar string
+	role   contracts.RoleID
+	// lane names which avatar of the role this is, when the role runs more
+	// than one at a time. A Domain Specialist carries its workstream id, so
+	// the specialists of one cycle are placed on hosts independently.
+	lane    string
 	slot    contracts.ModelSlot
-	model   string
 	system  string
 	schema  string
 	cycle   int
@@ -312,8 +315,11 @@ func requestSchemaID(label string) string {
 }
 
 func (o *orchestrator) request(sp stageSpec, payload json.RawMessage) contracts.GenerateRequest {
+	// No Model: the router decides it from role_models and what the serving
+	// host actually lists. A model id named here would win over both, which is
+	// how a `default_main_model` meant for one host reached every other one.
 	return contracts.GenerateRequest{
-		Role: sp.role, ModelSlot: sp.slot, Model: sp.model, SystemPrompt: sp.system,
+		Role: sp.role, Lane: sp.lane, ModelSlot: sp.slot, SystemPrompt: sp.system,
 		UserPayload: payload, SchemaID: requestSchemaID(sp.schema), RunID: o.in.RunID,
 		Timeout: o.in.callTimeout(), MaxOutput: contracts.MaxStageOutputBytes,
 	}

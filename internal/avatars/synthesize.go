@@ -80,7 +80,7 @@ func Synthesize(ctx context.Context, in RunInput, si contracts.SynthesisInput, g
 	o.st = newRunState()
 	cycle := max(1, o.store.Cycle(in.RunID))
 	sp := stageSpec{
-		avatar: relay.StageSynthesizer, role: contracts.RoleSynthesizer, slot: contracts.SlotMain, model: in.Models.Main,
+		avatar: relay.StageSynthesizer, role: contracts.RoleSynthesizer, slot: contracts.SlotMain,
 		system: SynthesizerSystemPrompt(), schema: synthesizer.SchemaSynthesizer, cycle: cycle, status: statusThinking,
 		summary: "Locking the surviving design and drafting the executive narrative.",
 		step:    "master spec",
