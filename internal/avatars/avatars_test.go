@@ -198,12 +198,27 @@ func TestRunHappyPathStageOrderAndModels(t *testing.T) {
 
 	for _, c := range calls {
 		r := c.Req
-		wantSlot, wantModel := contracts.SlotMain, "main-model"
+		wantSlot := contracts.SlotMain
 		if c.Key == "critic" {
-			wantSlot, wantModel = contracts.SlotJudge, "judge-model"
+			wantSlot = contracts.SlotJudge
 		}
-		if r.ModelSlot != wantSlot || r.Model != wantModel {
-			t.Errorf("%s uses %s/%s, want %s/%s", c.Key, r.ModelSlot, r.Model, wantSlot, wantModel)
+		if r.ModelSlot != wantSlot {
+			t.Errorf("%s uses slot %s, want %s", c.Key, r.ModelSlot, wantSlot)
+		}
+		// No stage names a model. The router reads role_models and what the
+		// serving host actually lists; a model named here would win over both,
+		// which is how one host's model id reached every other host.
+		if r.Model != "" {
+			t.Errorf("%s named model %q; the router decides it", c.Key, r.Model)
+		}
+		// A Domain Specialist carries its workstream as its lane, so the
+		// specialists of one cycle are placed on hosts independently.
+		wantLane := ""
+		if after, found := strings.CutPrefix(c.Key, relay.StageSpecialistPrefix); found {
+			wantLane = after
+		}
+		if r.Lane != wantLane {
+			t.Errorf("%s has lane %q, want %q", c.Key, r.Lane, wantLane)
 		}
 		if r.RunID != h.in.RunID || r.Timeout != avatars.DefaultStageTimeout || r.MaxOutput != contracts.MaxStageOutputBytes {
 			t.Errorf("%s request bounds = %q %v %d", c.Key, r.RunID, r.Timeout, r.MaxOutput)

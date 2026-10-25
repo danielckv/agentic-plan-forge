@@ -91,12 +91,20 @@ type Router struct {
 	ready    map[Kind]resolvedAdapter
 	main     *resolvedAdapter
 	judge    *resolvedAdapter
-	byRole   map[contracts.RoleID]Placement
+	byRole   map[RoleLane]Placement
 	models   map[Kind]map[string]bool
 	reasons  []SkipReason
 }
 
-// Placement is the host, version and model one role's calls go to.
+// RoleLane identifies one avatar: its role, and which lane of that role it is.
+// A role that runs a single avatar uses the empty lane. The Domain Specialists
+// use their workstream id, so each is placed on a host of its own.
+type RoleLane struct {
+	Role contracts.RoleID
+	Lane string
+}
+
+// Placement is the host, version and model one avatar's calls go to.
 type Placement struct {
 	adapter Adapter
 	Kind    Kind
@@ -115,7 +123,7 @@ func NewRouter(cfg config.Config, invokedHost Kind) *Router {
 		adapters:    registeredMap(cfg.HostEnvAllow),
 		unusable:    make(map[Kind]bool),
 		ready:       make(map[Kind]resolvedAdapter),
-		byRole:      make(map[contracts.RoleID]Placement),
+		byRole:      make(map[RoleLane]Placement),
 		models:      make(map[Kind]map[string]bool),
 	}
 }
@@ -160,7 +168,7 @@ func (r *Router) GenerateStream(ctx context.Context, req contracts.GenerateReque
 	// there, which is how the critic and the Product Manager both died on OMP.
 	wanted := req.Model
 	for attempt := 0; ; attempt++ {
-		place, err := r.PlaceRole(ctx, req.Role, slot)
+		place, err := r.PlaceRole(ctx, req.Role, req.Lane, slot)
 		if err != nil {
 			return contracts.GenerationResult{}, err
 		}
@@ -170,7 +178,7 @@ func (r *Router) GenerateStream(ctx context.Context, req contracts.GenerateReque
 		}
 		if emit != nil {
 			err := emit(contracts.GenerationEvent{Kind: contracts.EventPlacement, Placement: &contracts.Placement{
-				Role: req.Role, Host: string(place.Kind), Version: place.Version, Model: req.Model,
+				Role: req.Role, Lane: req.Lane, Host: string(place.Kind), Version: place.Version, Model: req.Model,
 			}})
 			if err != nil {
 				return contracts.GenerationResult{}, err
@@ -203,9 +211,9 @@ func (r *Router) demote(kind Kind, cause *contracts.ErrCapability) bool {
 	r.unusable[kind] = true
 	r.recordSkip(kind, "generate", cause.Reason)
 	delete(r.ready, kind)
-	for role, placed := range r.byRole {
+	for key, placed := range r.byRole {
 		if placed.Kind == kind {
-			delete(r.byRole, role)
+			delete(r.byRole, key)
 		}
 	}
 	if r.main != nil && r.main.adapter.Kind() == kind {
@@ -222,22 +230,26 @@ func (r *Router) demote(kind Kind, cause *contracts.ErrCapability) bool {
 	return false
 }
 
-// PlaceRole resolves the host and model one role's calls use. The answer is
-// cached per role, so every call of a role in a session lands on the same host
-// and the room never shows an avatar changing hosts mid-cycle.
-func (r *Router) PlaceRole(ctx context.Context, role contracts.RoleID, slot contracts.ModelSlot) (Placement, error) {
+// PlaceRole resolves the host and model one avatar's calls use. The answer is
+// cached per role and lane, so every call of that avatar in a session lands on
+// the same host and the room never shows an avatar changing hosts mid-cycle.
+// Two lanes of one role are resolved independently: four Domain Specialists
+// that run at once are spread across the ready hosts instead of queueing
+// behind one.
+func (r *Router) PlaceRole(ctx context.Context, role contracts.RoleID, lane string, slot contracts.ModelSlot) (Placement, error) {
 	if slot == "" {
 		slot = contracts.SlotMain
 	}
 	if slot != contracts.SlotMain && slot != contracts.SlotJudge {
 		return Placement{}, fmt.Errorf("unknown model slot %q", slot)
 	}
+	key := RoleLane{Role: role, Lane: lane}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if p, ok := r.byRole[role]; ok {
+	if p, ok := r.byRole[key]; ok {
 		return p, nil
 	}
-	resolved, err := r.selectCandidatesLocked(ctx, slot, r.roleCandidates(role, slot))
+	resolved, err := r.selectCandidatesLocked(ctx, slot, r.roleCandidates(role, lane, slot))
 	if err != nil {
 		return Placement{}, err
 	}
@@ -247,18 +259,18 @@ func (r *Router) PlaceRole(ctx context.Context, role contracts.RoleID, slot cont
 		Version: resolved.version,
 	}
 	p.Model = r.modelForRoleLocked(ctx, role, slot, p.Kind)
-	r.byRole[role] = p
+	r.byRole[key] = p
 	return p, nil
 }
 
-// Placements reports the host and model resolved for every role so far,
-// keyed by role. It never resolves a new one.
-func (r *Router) Placements() map[contracts.RoleID]Placement {
+// Placements reports the host and model resolved for every avatar so far,
+// keyed by role and lane. It never resolves a new one.
+func (r *Router) Placements() map[RoleLane]Placement {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make(map[contracts.RoleID]Placement, len(r.byRole))
-	for role, p := range r.byRole {
-		out[role] = p
+	out := make(map[RoleLane]Placement, len(r.byRole))
+	for key, p := range r.byRole {
+		out[key] = p
 	}
 	return out
 }
@@ -391,12 +403,17 @@ func (r *Router) mainCandidates() []Kind {
 	return []Kind{Kind(r.cfg.MainHost), r.invokedHost, KindClaude, KindOMP, KindAGY}
 }
 
-// roleCandidates orders the adapters one role tries. A role_models host comes
+// roleCandidates orders the adapters one avatar tries. A role_models host comes
 // first, then an explicitly configured slot host, then the role's own
 // rotation, then everything else. An owner who pins main_host still gets one
 // host for every MAIN role; an owner who pins nothing gets the rotation, which
 // is what spreads a run across the hosts it is signed in to.
-func (r *Router) roleCandidates(role contracts.RoleID, slot contracts.ModelSlot) []Kind {
+//
+// The lane rotates the role's own order, so two avatars of one role prefer
+// different hosts: four Domain Specialists drafting at once reach for four
+// different adapters before they fall back to a shared one. An explicit host
+// is never rotated — a pin means the owner chose, for every lane.
+func (r *Router) roleCandidates(role contracts.RoleID, lane string, slot contracts.ModelSlot) []Kind {
 	var out []Kind
 	if b, ok := r.cfg.RoleBindingFor(string(role)); ok {
 		out = append(out, Kind(b.Host))
@@ -406,8 +423,39 @@ func (r *Router) roleCandidates(role contracts.RoleID, slot contracts.ModelSlot)
 	} else {
 		out = append(out, Kind(r.cfg.MainHost))
 	}
-	out = append(out, roleHostOrder[role]...)
+	out = append(out, rotate(roleHostOrder[role], laneOffset(lane))...)
 	return append(out, r.invokedHost, KindClaude, KindOMP, KindAGY)
+}
+
+// laneOffset turns a lane name into a stable rotation. It is FNV-1a rather
+// than a counter so the same workstream lands on the same host across a retry,
+// a resumed run and a second window: a counter would renumber the lanes
+// whenever one of them finished first.
+func laneOffset(lane string) int {
+	if lane == "" {
+		return 0
+	}
+	const (
+		offset64 = 14695981039346656037
+		prime64  = 1099511628211
+	)
+	var h uint64 = offset64
+	for i := 0; i < len(lane); i++ {
+		h ^= uint64(lane[i])
+		h *= prime64
+	}
+	return int(h % 1e9)
+}
+
+// rotate returns order starting at by, wrapping around. The order itself is
+// never reordered, so a lane keeps the role's preference, only entered at a
+// different point.
+func rotate(order []Kind, by int) []Kind {
+	if len(order) == 0 {
+		return nil
+	}
+	at := by % len(order)
+	return append(append([]Kind(nil), order[at:]...), order[:at]...)
 }
 
 // modelForRoleLocked picks the model id for a role on the host that will serve

@@ -143,8 +143,16 @@ func (s *stub) GenerateStream(ctx context.Context, req contracts.GenerateRequest
 		s.mu.Unlock()
 	}()
 
+	// The real router fills the model in when the request leaves it empty,
+	// which every stage now does: only the router knows which ids the serving
+	// host lists. The stub stands in for that, so the room still has a model
+	// to show under each face.
+	model := req.Model
+	if model == "" {
+		model = s.hostFor(req.Role) + "-default"
+	}
 	if err := emit(contracts.GenerationEvent{Kind: contracts.EventPlacement, Placement: &contracts.Placement{
-		Role: req.Role, Host: s.hostFor(req.Role), Version: "1.0.0", Model: req.Model,
+		Role: req.Role, Lane: req.Lane, Host: s.hostFor(req.Role), Version: "1.0.0", Model: model,
 	}}); err != nil {
 		return contracts.GenerationResult{}, err
 	}

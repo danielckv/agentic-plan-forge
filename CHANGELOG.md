@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Each Domain Specialist is placed on its own host. The router cached one placement per *role*, so the four specialists of a cycle — which run at the same time, by design — all queued behind whichever host the `specialist` rotation picked, and being signed in to three hosts bought nothing for the one stage that runs four calls at once. A placement is now keyed by role *and lane*, where a specialist's lane is its workstream id, and each lane enters the role's host order at a different point. The order itself is unchanged, so a lane still falls back exactly as before, and `role_models` still pins every lane of a role when you set it. The host a workstream gets is derived from its name rather than from a counter, so a retry or a resumed run places it the same way. See [ADR 0015](docs/adrs/0015-an-avatar-is-placed-not-a-role.md).
+
+### Fixed
+
+- A model named in `role_models` now actually reaches the call. Every stage passed the slot-wide `default_main_model` (or `default_judge_model`) with its request, and a model named on the request wins over the router's choice — so `role_models["architect"].model` was silently dead for all four drafting avatars, and the "does this host list this id?" guard that `default_main_model` is supposed to go through was skipped with it. On an installation whose `default_main_model` was an Antigravity id, every avatar asked every host for that id, including the hosts that have never heard of it. No stage names a model now; the router decides it per avatar, from `role_models` first and the host's own list second. See [ADR 0015](docs/adrs/0015-an-avatar-is-placed-not-a-role.md).
+
 ## [0.7.0] - 2026-10-25
 
 ### Changed

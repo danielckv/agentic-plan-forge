@@ -881,11 +881,7 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 	in := avatars.RunInput{
 		RunID: runID, PRD: norm, Graph: snap, GraphHash: hashJSON(snap), DocDrift: drift,
 		EvidenceNotes: notes, Context: pc, ContextHash: hashJSON(pc),
-		Models: avatars.ModelSlots{
-			Main:     cfg.DefaultMainModel,
-			Judge:    cfg.DefaultJudgeModel,
-			Narrator: cfg.RoleModels["narrator"].Model,
-		},
+		Models:    avatars.ModelSlots{Main: cfg.DefaultMainModel, Judge: cfg.DefaultJudgeModel},
 		MaxCycles: cfg.MaxCycles, MaxParallel: cfg.MaxParallel, StartCycle: startCycle,
 		// The stages get their own budget, not contracts.DefaultGenerateTimeout:
 		// the architect design part alone was measured at 110 seconds on opus

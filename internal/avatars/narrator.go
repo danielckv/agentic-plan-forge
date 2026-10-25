@@ -164,7 +164,7 @@ func (n *narrator) narrate(ctx context.Context) {
 	callCtx, cancel := context.WithTimeout(ctx, narrateTimeout)
 	defer cancel()
 	res, err := n.o.gen.GenerateStream(callCtx, contracts.GenerateRequest{
-		Role: contracts.RoleNarrator, ModelSlot: contracts.SlotMain, Model: n.o.in.Models.Narrator,
+		Role: contracts.RoleNarrator, ModelSlot: contracts.SlotMain,
 		SystemPrompt: NarratorSystemPrompt(), UserPayload: payload, RunID: n.o.in.RunID,
 		Timeout: narrateTimeout, MaxOutput: narrateMaxOutput,
 	}, func(ev contracts.GenerationEvent) error {

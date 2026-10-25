@@ -33,8 +33,11 @@ const (
 )
 
 // Placement names the host and model that served, or will serve, one role.
+// Lane distinguishes two avatars of the same role, such as the Domain
+// Specialists of two workstreams, which are placed independently.
 type Placement struct {
 	Role    RoleID `json:"role"`
+	Lane    string `json:"lane,omitempty"`
 	Host    string `json:"host"`
 	Version string `json:"version,omitempty"`
 	Model   string `json:"model,omitempty"`
@@ -77,7 +80,13 @@ const MaxStagePayloadBytes = 2 << 20
 
 // GenerateRequest is one tool-free provider invocation.
 type GenerateRequest struct {
-	Role         RoleID          `json:"role"`
+	Role RoleID `json:"role"`
+	// Lane names which avatar of the role is calling, when a role runs more
+	// than one at a time: the workstream id for a Domain Specialist, empty for
+	// a role that has a single avatar. Lanes are placed on hosts
+	// independently, so one role's avatars are not all stuck behind one host's
+	// rate limit.
+	Lane         string          `json:"lane,omitempty"`
 	ModelSlot    ModelSlot       `json:"model_slot"`
 	Model        string          `json:"model,omitempty"`
 	SystemPrompt string          `json:"system_prompt"`
