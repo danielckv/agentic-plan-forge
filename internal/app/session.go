@@ -68,6 +68,9 @@ type Options struct {
 	Stdout, Stderr    io.Writer
 	InteractiveInvite bool
 	Logger            *slog.Logger
+	// Version is the build identifier the binary reports. The window shows it
+	// beside the capabilities so a bug report names the build it came from.
+	Version string
 
 	// Seams for tests; production leaves them nil.
 	Generator    contracts.Generator

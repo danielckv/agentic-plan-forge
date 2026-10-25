@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Page 1 says what the deliberation is going to ask for. A **Brief** tab lists the five topics the avatars work from — who it is for, what done looks like, why now, what is out of scope, what already exists — ticks each one the document mentions, and inserts the heading for one it does not. Until now the composer was a single textarea with a placeholder, and a writer had no way to know what was wanted until the plan came back shaped by whatever they had happened to write. It is an outline rather than a gate: Confirm is never blocked by it, the detection is a local word search with no model call, and the panel says so — a tick means the topic is mentioned, not that it is answered.
+- A **Setup** panel in the top bar shows what the installation can actually do: every generation host with whether it can serve a call, the tools each feature needs and what each one is for, the skills installed into each agent, and the managed hooks. All of it already existed in `plan-forge doctor`, on a terminal nobody writing a brief is looking at — which is where "Antigravity is signed in but cannot serve" sat while every avatar quietly went somewhere else. A `main_host` or `judge_host` being ignored for that reason is now named on screen.
+
 ## [0.7.0] - 2026-10-25
 
 ### Changed

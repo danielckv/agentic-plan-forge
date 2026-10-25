@@ -44,6 +44,7 @@ func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/approval", s.handleApproval)
 	s.bridge.Handle("GET /api/relay", s.handleRelay)
 	s.bridge.Handle("POST /api/recovery", s.handleRecovery)
+	s.bridge.Handle("GET /api/capabilities", s.handleCapabilities)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

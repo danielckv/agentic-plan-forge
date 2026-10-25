@@ -242,6 +242,7 @@ export function Page1Ingestion(): React.ReactElement {
             scanning={!scanDone}
             ctx={ctx}
             impact={impact}
+            text={sync.docText}
             onInsert={(text) => editorApi.current?.insertText(text)}
           />
         </div>

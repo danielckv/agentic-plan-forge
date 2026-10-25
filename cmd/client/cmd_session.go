@@ -90,6 +90,7 @@ func runRun(ctx context.Context, args []string) int {
 		Brief:             brief,
 		BriefPath:         briefPath,
 		Config:            cfg,
+		Version:           version,
 		Stdout:            os.Stdout,
 		Stderr:            os.Stderr,
 		InteractiveInvite: !detach && isTTY(os.Stdin) && isTTY(os.Stderr),
@@ -159,6 +160,7 @@ func runSessionChild(ctx context.Context, args []string) int {
 		Mode:      mode,
 		Brief:     brief,
 		Config:    cfg,
+		Version:   version,
 		Detached:  true,
 		Logger:    logger,
 	})

@@ -68,6 +68,12 @@ connection, a System/Light/Dark switch and the shortcut sheet (`?`). The sidebar
 
 ### 1. Ingestion: the composer
 
+The **Brief** tab on the right lists the five topics the deliberation will ask about — who it is for,
+what done looks like, why now, what is out of scope, and what already exists — and ticks each one your
+document mentions. **Add** inserts the section heading for one it does not. It is an outline, not a
+gate: Confirm stays live whatever it says, and the check is a word search over your own text, so a tick
+means the topic is mentioned, not that it is answered.
+
 Write what you want to build in the editor. It is one shared Markdown document; collaborators in a remote session see
 each other's edits live.
 
@@ -176,6 +182,17 @@ in that order and the payload says what was cut, so the model treats the gap as 
 A Confluence-style specification with diagrams, Jira-style epics and subtasks, documentation-sync tasks and the two
 effort schedules. The table of contents follows your scroll. The task matrix can be filtered by ID, title or target
 file. Diagrams expand to full screen.
+
+## Setup: what this installation can do
+
+The sliders button in the top bar opens **Setup**: every generation host with whether it can actually
+serve a call, the external tools each feature needs, the skills installed into each agent, and the
+managed hooks.
+
+The distinction worth knowing is **signed in** versus **serving**. A host can be installed,
+authenticated and still unable to take a call — Antigravity is exactly this case. Setup shows the
+host's own refusal text, and says so explicitly when a configured `main_host` or `judge_host` is being
+ignored because of it. The same facts are on the terminal in `plan-forge doctor`.
 
 ## Project context
 
