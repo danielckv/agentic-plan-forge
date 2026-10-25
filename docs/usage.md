@@ -157,6 +157,10 @@ that never ran are marked cancelled rather than left waiting. Retrying re-runs o
 was already validated is kept. The button reads **Retrying…** until the board moves, and a second click is refused
 rather than cancelling the call the first one started.
 
+A draft is failed for what it got wrong, never for what the payload already decided. A Domain Specialist plans one
+workstream, so a task of its draft that leaves `workstream_id` empty inherits the draft's; a task that names a
+*different* workstream is still rejected, because that is a disagreement rather than an omitted field.
+
 **How the architect runs.** The stage answers in three parts: the design (workstreams and interface contracts), the
 diagrams drawn from it, and the documentation tasks in batches of at most 20 stale documents. Each part is kept on its
 own, so a retry re-runs only the part that failed.

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A Domain Specialist stage no longer fails over a field the payload already decided. A specialist plans exactly one workstream and the payload names it, but the reply shape asked every task to repeat that name, and a draft that left it off was rejected once per task: `specialist output invalid: task T-ws-docs-1 belongs to workstream "", not "ws-docs"` — after the call had already run, for six tasks at once. A task with an empty `workstream_id` now inherits the draft's. A task that names a *different* workstream is still rejected, because that is a disagreement rather than an omission, and the specialist prompt now says which of the two it is.
+
 ## [0.7.0] - 2026-10-25
 
 ### Changed
