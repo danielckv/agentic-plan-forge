@@ -7,11 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Page 1 says what the deliberation is going to ask for. A **Brief** tab lists the five topics the avatars work from — who it is for, what done looks like, why now, what is out of scope, what already exists — ticks each one the document mentions, and inserts the heading for one it does not. Until now the composer was a single textarea with a placeholder, and a writer had no way to know what was wanted until the plan came back shaped by whatever they had happened to write. It is an outline rather than a gate: Confirm is never blocked by it, the detection is a local word search with no model call, and the panel says so — a tick means the topic is mentioned, not that it is answered.
-- A **Setup** panel in the top bar shows what the installation can actually do: every generation host with whether it can serve a call, the tools each feature needs and what each one is for, the skills installed into each agent, and the managed hooks. All of it already existed in `plan-forge doctor`, on a terminal nobody writing a brief is looking at — which is where "Antigravity is signed in but cannot serve" sat while every avatar quietly went somewhere else. A `main_host` or `judge_host` being ignored for that reason is now named on screen.
-
 ## [0.7.0] - 2026-10-25
 
 ### Changed
@@ -31,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI compiles and tests the Windows client. The release matrix has shipped a `windows/amd64` build for several versions, but no CI run ever built one, so the `_windows.go` process, path and file helpers were first exercised at tag time, where a break costs a re-cut release. A `windows-2022` job now vets, tests, builds and smoke-tests the client on every pull request. It is a native runner because the client needs CGO for tree-sitter, which a `GOOS=windows` cross-build cannot link at all.
 - `TestLiveEveryRoleReachesAHost` sends one trivial call per avatar role through the real router and the installed hosts, and fails if any role reaches nothing. Both faults it covers are invisible to a unit test: one lives in a `Preflight` that the test doubles pass, the other in a byte of a stream that no double emits. Skipped unless `PLAN_FORGE_LIVE_ROLES=1`.
 - `TestLiveDeliberationEndToEnd` drives a long brief through the whole gate against real hosts — interpretation, grounding, the four avatars, the synthesis lock — and prints what each role cost: calls, total and slowest duration, payload and output size, the host and model it was placed on, and the run's wall clock against the sum of its call durations. It is skipped unless `PLAN_FORGE_LIVE_DELIBERATION=1`, because a full run spends real money. See [Live tests](CONTRIBUTING.md#live-tests).
+- Page 1 says what the deliberation is going to ask for. A **Brief** tab lists the five topics the avatars work from — who it is for, what done looks like, why now, what is out of scope, what already exists — ticks each one the document mentions, and inserts the heading for one it does not. Until now the composer was a single textarea with a placeholder, and a writer had no way to know what was wanted until the plan came back shaped by whatever they had happened to write. It is an outline rather than a gate: Confirm is never blocked by it, the detection is a local word search with no model call, and the panel says so — a tick means the topic is mentioned, not that it is answered.
+- A **Setup** panel in the top bar shows what the installation can actually do: every generation host with whether it can serve a call, the tools each feature needs and what each one is for, the skills installed into each agent, and the managed hooks. All of it already existed in `plan-forge doctor`, on a terminal nobody writing a brief is looking at — which is where "Antigravity is signed in but cannot serve" sat while every avatar quietly went somewhere else. A `main_host` or `judge_host` being ignored for that reason is now named on screen.
 
 ## [0.6.0] - 2026-10-23
 
