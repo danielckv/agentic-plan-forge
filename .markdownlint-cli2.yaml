@@ -18,3 +18,9 @@ ignores:
   - "node_modules/**"
   - "web/node_modules/**"
   - "docs/plans/**"
+  # Test fixtures stand in for documents a user wrote elsewhere, so they are
+  # shaped like real input rather than like this repository's own Markdown.
+  # internal/app/testdata/long-brief.md opens each epic with a top-level
+  # heading, which is how a product brief is usually written and which MD025
+  # forbids.
+  - "internal/**/testdata/**"
