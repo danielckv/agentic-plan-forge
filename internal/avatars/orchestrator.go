@@ -655,7 +655,7 @@ func (o *orchestrator) runSpecialist(ctx context.Context, c int, ws string, adop
 	payload, err := fitPayload(sp.avatar, &specialistPayload{
 		Cycle: c, WorkstreamID: ws, Workstream: w, Workstreams: arch.Workstreams, Summary: arch.Summary,
 		Constraints: nonNil(arch.Constraints), Contracts: relevant, Epics: pm.Epics, Stories: pm.Stories,
-		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
+		Graph: o.graphForWorkstream(w, pm.Stories), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
 		Decisions: decisions, Adopt: adopt, Revision: rev,
 	})
 	if err != nil {
