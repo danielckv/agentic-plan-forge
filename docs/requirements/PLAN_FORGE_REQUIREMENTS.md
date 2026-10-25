@@ -495,6 +495,32 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Status: partly met
 - Last reviewed: 2026-10-22
 
+### REQ-UI-017 — Brief outline
+
+- ID: REQ-UI-017
+- Level: F
+- Statement: Page 1 shall list the five topics the deliberation works from (audience, outcome, motivation, non-goals, prior art), report for each whether the document mentions it, offer to insert the missing section, and shall never disable Confirm on the result.
+- Category: Functional
+- Owner: @danielckv
+- Source: ADR 0014.
+- Acceptance criteria: `web/src/ui/brief.test.ts` — the five sections match the order the `plan-forge` skill interviews in; an inserted heading is recognised by the cue list that offered it; the summary never contains "ready", "complete", "good", "sufficient" or "score"; a prose brief with no headings reads as covered; a brief naming an unknown job title is recorded as a known miss. Detection makes no model call.
+- Traces to: `web/src/ui/brief.ts`, `web/src/pages/composer/BriefTab.tsx`, `web/src/pages/composer/PlanRail.tsx`
+- Status: met
+- Last reviewed: 2026-10-25
+
+### REQ-UI-018 — Setup panel
+
+- ID: REQ-UI-018
+- Level: F
+- Statement: The window shall report, per generation host, whether it can serve a call as distinct from whether it is signed in; shall name any configured `main_host` or `judge_host` that is being ignored because it cannot serve; and shall list the external tools each feature needs with what each is for, the installed skills and the managed hooks.
+- Category: Functional
+- Owner: @danielckv
+- Source: ADR 0012, ADR 0014.
+- Acceptance criteria: `internal/app/capabilities_test.go` — no list is ever null, every tool carries a purpose and a remedy when absent, a pin on a host that cannot serve is reported, and `Serves` is never true for a host that is not ready. `web/src/ui/capabilities.test.ts` covers the four host tones and the counted summary.
+- Traces to: `internal/app/capabilities.go`, `web/src/ui/capabilities.ts`, `web/src/pages/CapabilitiesDialog.tsx`
+- Status: met
+- Last reviewed: 2026-10-25
+
 ## HANDOFF — plan-mode handoff and validation
 
 ### REQ-HANDOFF-001 — Automatic handoff
@@ -587,6 +613,88 @@ The context gatherer is the `internal/gather` package. It collects what the repo
 - Traces to: C6, C7; `cmd/client/cmd_hook.go`, `integrations/skill-plan-forge.md`, `integrations/omp-hook-plan-forge.ts`
 - Status: met
 - Last reviewed: 2026-10-19
+
+## BUILD — post-approval delivery
+
+### REQ-BUILD-001 — Implement, preview and deploy an approved plan
+
+- ID: REQ-BUILD-001
+- Level: S
+- Statement: After a plan is approved, the owner shall be able to have the host agent implement it, review what was written, run it, and deploy it, without leaving the window.
+- Category: User
+- Owner: @danielckv
+- Source: ADR 0013.
+- Acceptance criteria: `internal/delivery/delivery_test.go` covers the worktree, the change reader and the stage machine; the Code and Preview tabs and the deploy control are rendered by `web/src/pages/Page4Build.tsx`. The container and deploy paths are not covered by a live run (see FOLLOW_UPS.md).
+- Traces to: `internal/delivery/`, `internal/app/buildapi.go`, `web/src/pages/Page4Build.tsx`
+- Status: partly met
+- Last reviewed: 2026-10-25
+
+### REQ-BUILD-002 — Coding is confined to a worktree
+
+- ID: REQ-BUILD-002
+- Level: F
+- Statement: Every file the coding agent writes shall land in a git worktree under the Plan Forge cache on a `plan-forge/<approval-id>` branch; the client shall never write to the owner's working tree, never commit to their branch, and never push or alter a remote.
+- Category: Constraint
+- Owner: @danielckv
+- Source: ADR 0013.
+- Acceptance criteria: `internal/delivery/delivery_test.go` — the worktree is outside the repository and on its own prefixed branch; an unsafe approval id is refused rather than escaped; a path or symlink resolving outside the worktree is refused.
+- Traces to: `internal/delivery/worktree.go`, `internal/delivery/changes.go`, `internal/delivery/coder.go`
+- Status: met
+- Last reviewed: 2026-10-25
+
+### REQ-BUILD-003 — One build path
+
+- ID: REQ-BUILD-003
+- Level: F
+- Statement: The image a preview runs shall be the image a deploy publishes, so a preview cannot disagree with what ships. A worktree with no root `Dockerfile` shall be reported as such rather than inferred from a Dockerfile elsewhere in the tree.
+- Category: Functional
+- Owner: @danielckv
+- Source: ADR 0013.
+- Acceptance criteria: `BuildBox` is the only image builder, and `Deploy` for the docker target runs the image it produced; `DockerfilePath` considers the repository root only and returns `ErrNoDockerfile` otherwise.
+- Traces to: `internal/delivery/box.go`, `internal/delivery/deploy.go`
+- Status: met
+- Last reviewed: 2026-10-25
+
+### REQ-BUILD-004 — The preview frame is sandboxed and loopback-only
+
+- ID: REQ-BUILD-004
+- Level: F
+- Statement: A preview container shall publish on loopback only, and the frame that renders it shall be sandboxed without `allow-same-origin`, so code written minutes earlier runs on an opaque origin and cannot read the window that framed it. `BridgeCSP` shall admit loopback frame sources and nothing wider.
+- Category: Non-functional (security)
+- Owner: @danielckv
+- Source: ADR 0013.
+- Acceptance criteria: `StartBox` publishes to `127.0.0.1` only; `BridgeCSP` carries `frame-src http://127.0.0.1:* http://localhost:*` and is pinned by `TestBridgeCSPMatchesE2EHarness` against `web/e2e/bridge-csp.txt`.
+- Traces to: `internal/delivery/box.go`, `internal/relay/local_ws.go`, `web/src/pages/Page4Build.tsx`
+- Status: met
+- Last reviewed: 2026-10-25
+
+### REQ-BUILD-005 — The deploy target is asked once
+
+- ID: REQ-BUILD-005
+- Level: F
+- Statement: The window shall ask for a deploy target the first time one is needed, persist the answer as `deploy_target`, and offer it as a toggle afterwards. `none` shall preserve the pre-0.7 behaviour, where the window closes shortly after an approval and nothing is built. A target whose CLI is absent shall be reported before the owner commits to it.
+- Category: Functional
+- Owner: @danielckv
+- Source: ADR 0013.
+- Acceptance criteria: `config.Validate` refuses a target outside `agent-box`, `docker`, `none`; `ValidateAgentBoxURL` applies the relay URL rules; `TargetAvailable` reports a missing CLI; `internal/delivery/delivery_test.go` covers both.
+- Traces to: `internal/config/config.go`, `internal/delivery/deploy.go`, `internal/app/buildapi.go`
+- Status: met
+- Last reviewed: 2026-10-25
+
+## HOST — generation host routing
+
+### REQ-HOST-001 — A broken host costs one retry, not the run
+
+- ID: REQ-HOST-001
+- Level: F
+- Statement: When a generation host passes detection, authentication and preflight and then breaks the tool-free contract on an open call, the router shall bar that host for the session, release every role placed on it, and re-place the role on the next candidate. The retry shall be bounded by the number of registered adapters, and the final error shall be the host's own.
+- Category: Functional
+- Owner: @danielckv
+- Source: ADR 0012.
+- Acceptance criteria: `internal/host/rolerouting_test.go` — a call fails over and costs the broken host exactly one invocation; a demoted host is not offered to a later role and is recorded as a `generate` skip; every host broken reports the capability error rather than a placement error. `TestLiveEveryRoleReachesAHost` covers it against the installed hosts under `PLAN_FORGE_LIVE_ROLES=1`.
+- Traces to: `internal/host/router.go`, `cmd/client/cmd_doctor.go`
+- Status: met
+- Last reviewed: 2026-10-25
 
 ## INSTALL — installation
 
@@ -1084,20 +1192,22 @@ REQ-INSTALL-011, REQ-INSTALL-012 and REQ-INSTALL-013 state how an install from 0
 
 ## Category coverage
 
-Counts are taken from the `Category:` fields and sum to 77 requirements.
+Counts are taken from the `Category:` fields and sum to 87 requirements. The 2026-10-25 review recounted them
+mechanically from the fields; the previous stated total of 77 was two short of its own source before that review added
+eight.
 
 | Category | Count | Note |
 | :--- | :--- | :--- |
-| Functional | 39 | Concentrated in GATE, UI, CONTEXT, INSTALL and RELEASE; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
-| Non-functional (security) | 8 | SEC area: REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-005, REQ-SEC-006, REQ-SEC-007; plus REQ-CONTEXT-006 and REQ-CONTEXT-007. |
+| Functional | 46 | Concentrated in GATE, UI, CONTEXT, INSTALL, RELEASE and BUILD; the SEC, PERF and COMPAT areas carry no functional requirements, so coverage is not uniform across areas. |
+| Non-functional (security) | 9 | SEC area: REQ-SEC-001, REQ-SEC-002, REQ-SEC-004, REQ-SEC-005, REQ-SEC-006, REQ-SEC-007; plus REQ-CONTEXT-006, REQ-CONTEXT-007 and REQ-BUILD-004. |
 | Non-functional (performance) | 4 | REQ-PERF-001, REQ-PERF-002, REQ-PERF-003, REQ-PERF-006. |
 | Non-functional (usability/accessibility) | 3 | REQ-UI-005, REQ-UI-006, REQ-UI-007. Genuinely thin: the GUI polish was delivered as one slice; further usability requirements await measurable targets from the owner (open question 8). |
 | Business | 2 | REQ-GATE-001, REQ-UI-009. |
-| User | 4 | The S-level capability statements: REQ-UI-001, REQ-HANDOFF-001, REQ-INSTALL-001, REQ-CONTEXT-001. |
+| User | 5 | The S-level capability statements: REQ-UI-001, REQ-HANDOFF-001, REQ-INSTALL-001, REQ-CONTEXT-001, REQ-BUILD-001. |
 | Interface | 7 | REQ-HANDOFF-002, REQ-HANDOFF-003, REQ-SEC-003, REQ-INSTALL-002, REQ-INSTALL-008, REQ-INSTALL-009, REQ-CONTEXT-002. The relay wire protocol is specified in the system plan as a design contract and is not restated here; the bridge authentication contract is restated as REQ-SEC-003. |
 | Data | 2 | REQ-GATE-005, REQ-GATE-012. Genuinely thin: other persisted shapes (session state, artifacts) are covered inside functional requirements on approval and storage. |
 | Regulatory | 0 | Genuinely empty: the product is an open-source local tool with no identified regulatory obligation; security posture lives under Non-functional (security). |
-| Constraint | 8 | Ingestion bounds, Product Manager isolation, SHA pinning, platform and toolchain pins, and the 64 KiB context bound: REQ-GATE-003, REQ-GATE-004, REQ-RELEASE-005, REQ-COMPAT-001 to REQ-COMPAT-004, REQ-CONTEXT-005. |
+| Constraint | 9 | Ingestion bounds, Product Manager isolation, SHA pinning, platform and toolchain pins, the 64 KiB context bound and the worktree confinement: REQ-GATE-003, REQ-GATE-004, REQ-RELEASE-005, REQ-COMPAT-001 to REQ-COMPAT-004, REQ-CONTEXT-005, REQ-BUILD-002. |
 | Reliability | 0 | Dismissed as a separate category: journaled commit and crash recovery are stated under REQ-GATE-009; no standalone reliability target has been set. |
 | Scalability | 0 | Genuinely empty: Plan-Forge is a single-user local tool; the only scale bounds are the ingestion bounds (REQ-GATE-003) and the 64 KiB context bound (REQ-CONTEXT-005). |
 | Maintainability | 0 | Genuinely empty: upheld through repository gates (lint, typecheck, CI under REQ-RELEASE-001) rather than stated as product requirements. |
@@ -1156,6 +1266,9 @@ Counts are taken from the `Category:` fields and sum to 77 requirements.
 
 ## Review log
 
+- 2026-10-25 · REQ-UI-017, REQ-UI-018, REQ-BUILD-001..005, REQ-HOST-001 · new: the Page 1 brief outline; the Setup panel's serves-versus-signed-in report; post-approval delivery in a worktree with one build path, a sandboxed loopback preview and a deploy target asked once; and host failover when a call breaks the tool-free contract after preflight passed. Category counts recomputed mechanically from the `Category:` fields — the stated total of 77 was two short of its own source before these eight were added, and is now 87 · evidence: ADR 0012, ADR 0013, ADR 0014; `internal/delivery/`, `internal/app/capabilities.go`, `internal/host/router.go`, `web/src/ui/brief.ts`.
+- 2026-10-25 · REQ-BUILD-001 · `partly met`: the worktree, the change reader and the stage machine are tested, and the container build, run and both deploy paths are not — no Docker or AgentBox CLI was present on the machine they were written on · evidence: FOLLOW_UPS.md, ADR 0013 "What is not verified".
+
 - 2026-10-22 · REQ-CONTEXT-001..009, REQ-GATE-012, REQ-GATE-013, REQ-UI-010..013, REQ-SEC-007 · met: the context gatherer, interpretation epics, the composer, the component browser, epic files and the unscanned freeze landed with the tests named in each entry; REQ-CONTEXT-004 now records branch, HEAD and up to 20 distinct commit subjects and no dirty count, because `git status` can run repository-configured code · evidence: `internal/gather/`, `internal/app/planfiles.go`, `internal/app/projectcontext.go`, `internal/app/freeze_test.go`, `web/src/collab/docClient.ts`.
 - 2026-10-22 · REQ-UI-014 · partly met: the epic modal is checked by `web/scripts/preview.mjs` only, which CI does not run (open question 14).
 - 2026-10-22 · REQ-BOARD-001..007, REQ-COORD-001..007, REQ-GRAPH-001..005, REQ-LIVE-001..006, REQ-UI-008, REQ-PERF-004, REQ-PERF-005, REQ-PERF-007 · retired: the plan board, the coordinator, the Graph view, discoveries, the command center and swarm reporting were removed; session start no longer starts a daemon or opens a tab; the IDs are listed under Retired requirements and are never reused · evidence: `docs/adrs/0001-remove-live-task-views.md`; `internal/board/`, `internal/center/`, `internal/livestore/`, `internal/planstate/taskboard.go`, `web/src/board/` and `web/src/center/` are deleted from the tree.
@@ -1207,6 +1320,14 @@ Counts are taken from the `Category:` fields and sum to 77 requirements.
 | REQ | Contract | Implementing files | Tests |
 | :--- | :--- | :--- | :--- |
 | REQ-HANDOFF-008 | C19 | `cmd/client/cmd_hook_guard.go`, `internal/host/hooks.go` | `cmd/client/cmd_hook_guard_test.go`, `internal/host/hooks_test.go` |
+| REQ-UI-017 | — | `web/src/ui/brief.ts`, `web/src/pages/composer/BriefTab.tsx` | `web/src/ui/brief.test.ts` |
+| REQ-UI-018 | — | `internal/app/capabilities.go`, `web/src/pages/CapabilitiesDialog.tsx` | `internal/app/capabilities_test.go`, `web/src/ui/capabilities.test.ts` |
+| REQ-BUILD-001 | — | `internal/delivery/build.go`, `internal/app/buildapi.go`, `web/src/pages/Page4Build.tsx` | `internal/delivery/delivery_test.go`, `web/src/ui/build.test.ts` |
+| REQ-BUILD-002 | — | `internal/delivery/worktree.go`, `internal/delivery/changes.go`, `internal/delivery/coder.go` | `internal/delivery/delivery_test.go` |
+| REQ-BUILD-003 | — | `internal/delivery/box.go`, `internal/delivery/deploy.go` | `internal/delivery/delivery_test.go` |
+| REQ-BUILD-004 | — | `internal/delivery/box.go`, `internal/relay/local_ws.go` | `internal/relay/local_ws_test.go` |
+| REQ-BUILD-005 | — | `internal/config/config.go`, `internal/delivery/deploy.go` | `internal/delivery/delivery_test.go`, `internal/config/config_test.go` |
+| REQ-HOST-001 | — | `internal/host/router.go`, `cmd/client/cmd_doctor.go` | `internal/host/rolerouting_test.go`, `internal/host/rolelive_test.go` |
 | REQ-INSTALL-010 | C21 | `internal/host/hookcheck.go`, `cmd/client/cmd_doctor.go` | `internal/host/hookcheck_test.go` |
 | REQ-INSTALL-011 | — | `internal/host/hooks.go`, `internal/host/installer.go` | `internal/host/hooks_test.go` |
 | REQ-INSTALL-012 | — | `internal/host/installer.go` | `internal/host/installer_test.go` |

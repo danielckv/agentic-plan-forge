@@ -34,8 +34,14 @@ flowchart TD
 
     MAP["Impact map<br/>what the requirements touch,<br/>in plain language"]:::input
     RELAY["Optional relay<br/>live shared PRD, roles, decisions"]:::infra
-    REVIEW["Review and approve<br/>in the three-page UI"]:::human
+    REVIEW["Review and approve<br/>in the UI"]:::human
     OUT[".plan/synthesized_spec.md<br/>.plan/plan_manifest.json"]:::output
+
+    subgraph AFTER["After approval: optional, and the only tooled model call"]
+        CODE["Coding run<br/>host agent, in a worktree<br/>outside your repository"]:::infra
+        PREVIEW["Preview<br/>Dockerfile built and run on loopback"]:::infra
+        DEPLOY["Deploy<br/>Agent Box or local Docker"]:::output
+    end
 
     REQ --> PRD
     PRD --> MAP
@@ -59,7 +65,15 @@ flowchart TD
     RELAY -. "remote mode" .- REVIEW
     REVIEW -- "approve" --> OUT
     REVIEW -- "edit baseline" --> PRD
+    OUT -- "your agent's Plan Mode" --> PLANMODE["Implementation"]:::output
+    OUT -. "or build it here" .-> CODE
+    CODE --> PREVIEW
+    PREVIEW --> DEPLOY
 ```
+
+The avatars are tool-free by contract: no repository access, no skills, no MCP servers. The coding run after an
+approval is the single exception, and it is confined to a git worktree under the Plan Forge cache — never your working
+tree, and never a remote.
 
 ## The pages
 
