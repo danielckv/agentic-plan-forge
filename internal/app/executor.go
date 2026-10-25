@@ -172,6 +172,11 @@ type executorConfig struct {
 	WaitForSync bool
 	// Finish reports the terminal outcome exactly once.
 	Finish func(phase SessionPhase, message string, artifacts []string)
+	// Approved hands the committed plan to the build controller, so the Build
+	// page knows which approval it implements and what the spec says. It runs
+	// after the artifacts are on disk, so a build can never start from a spec
+	// that failed to commit.
+	Approved func(approvalID string, spec []byte)
 	// Scan overrides ast.Scan (tests).
 	Scan func(ctx context.Context, opts ast.ScanOptions) (*contracts.RepoContextGraph, error)
 	// Gather overrides gather.Collect (tests).
@@ -1024,6 +1029,9 @@ func (e *executor) commitApproval(p relay.ApprovalPreparedPayload) {
 	}
 	if err := planstate.RecordApproval(e.cfg.Repo, res.ManifestSHA256, p.ApprovalID); err != nil {
 		e.log.Warn("could not record the approval in the local ledger", "err", err)
+	}
+	if e.cfg.Approved != nil {
+		e.cfg.Approved(p.ApprovalID, plan.SpecMarkdown)
 	}
 	// The plan is approved: the drafts it was built from are no longer work in
 	// progress, so the unfinished run is removed from the plan directory.

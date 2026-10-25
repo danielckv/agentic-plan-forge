@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/host"
 	"github.com/danielckv/agentic-plan-forge/internal/window"
 )
@@ -47,6 +48,12 @@ type doctorHost struct {
 	Version string     `json:"version,omitempty"`
 	Auth    doctorAuth `json:"auth"`
 	Models  []string   `json:"models,omitempty"`
+	// Usable is false when the host is signed in but cannot serve a call:
+	// AGY without a verified isolated settings mechanism is the live case.
+	// Reporting auth alone hid it, and a main_host pinned to such a host was
+	// dropped without a word while every avatar went somewhere else.
+	Usable bool   `json:"usable"`
+	Blocks string `json:"blocks,omitempty"`
 }
 
 type doctorAuth struct {
@@ -111,6 +118,11 @@ func runDoctor(ctx context.Context, args []string) int {
 			sort.Strings(ids)
 			entry.Models = ids
 		}
+		if perr := adapter.Preflight(ctx); perr != nil {
+			entry.Blocks = perr.Error()
+		} else {
+			entry.Usable = entry.Auth.Ready
+		}
 		report.Hosts = append(report.Hosts, entry)
 	}
 
@@ -172,10 +184,14 @@ func runDoctor(ctx context.Context, args []string) int {
 		} else {
 			fmt.Println("  auth:   unknown")
 		}
+		if entry.Blocks != "" {
+			fmt.Printf("  serves: NO — %s\n", entry.Blocks)
+		}
 		if len(entry.Models) > 0 {
 			fmt.Printf("  models: %s\n", strings.Join(entry.Models, ", "))
 		}
 	}
+	printPinnedHosts(os.Stdout, cfg, report.Hosts)
 	fmt.Println()
 	printHookStatuses(os.Stdout, report.Hooks)
 	printSkillRoots(os.Stdout, report.SkillRoots)
@@ -183,6 +199,36 @@ func runDoctor(ctx context.Context, args []string) int {
 	fmt.Printf("ocr (optional, scanned PDFs only): pdftoppm %s; tesseract %s\n",
 		report.OCR["pdftoppm"], report.OCR["tesseract"])
 	return exitOK
+}
+
+// printPinnedHosts warns when main_host or judge_host names a host that cannot
+// serve a call. The router silently walks past such a pin and spreads the roles
+// over whatever is left, so without this line the owner reads "auth ready" and
+// never learns their choice was dropped.
+func printPinnedHosts(w io.Writer, cfg config.Config, hosts []doctorHost) {
+	serves := map[string]doctorHost{}
+	for _, entry := range hosts {
+		serves[entry.Host] = entry
+	}
+	for _, pin := range []struct{ key, value string }{
+		{"main_host", cfg.MainHost},
+		{"judge_host", cfg.JudgeHost},
+	} {
+		if pin.value == "" {
+			continue
+		}
+		entry, known := serves[pin.value]
+		switch {
+		case !known || !entry.Found:
+			fmt.Fprintf(w, "\n%s = %s IGNORED: that host is not installed\n", pin.key, pin.value)
+		case !entry.Usable:
+			reason := entry.Blocks
+			if reason == "" {
+				reason = "that host is not signed in"
+			}
+			fmt.Fprintf(w, "\n%s = %s IGNORED: %s\n", pin.key, pin.value, reason)
+		}
+	}
 }
 
 // printHookStatuses reports whether each host's managed hooks are installed

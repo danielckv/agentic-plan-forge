@@ -4,6 +4,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/danielckv/agentic-plan-forge/internal/config"
@@ -224,5 +225,88 @@ func TestGenerateStreamAnnouncesThePlacementFirst(t *testing.T) {
 	}
 	if place.Version != "18.0.0" {
 		t.Fatalf("placement version = %q, want the detected host version", place.Version)
+	}
+}
+
+// ompTripwire is the error OMP returns once a call is open: Detect, Auth and
+// Preflight all pass, and the tools list only arrives with the first streamed
+// event. Observed live on 2026-10-25 for the specialist and critic roles.
+func ompTripwire() error {
+	return &contracts.ErrCapability{
+		Host:   string(KindOMP),
+		Reason: "host advertised a non-empty or invalid tools list",
+		Remedy: "update OMP",
+	}
+}
+
+// A host that passes every probe and then breaks the tool-free contract on the
+// open call must cost one retry, not the stage. Before the failover the critic
+// stayed pinned to the broken host and every retry died the same way.
+func TestACallFailsOverWhenAHostBreaksTheToolFreeContract(t *testing.T) {
+	r := readyRouter(t, config.Config{JudgeHost: string(KindOMP)})
+	broken := r.adapters[KindOMP].(*modelAdapter)
+	broken.generateErr = ompTripwire()
+
+	res, err := r.GenerateStream(context.Background(), contracts.GenerateRequest{
+		Role: contracts.RoleCritic, ModelSlot: contracts.SlotJudge,
+	}, nil)
+	if err != nil {
+		t.Fatalf("critic call: %v", err)
+	}
+	if res.Receipt.Host == string(KindOMP) {
+		t.Fatalf("critic answered from the broken host %s", res.Receipt.Host)
+	}
+	if broken.generateCalls != 1 {
+		t.Fatalf("broken host called %d times, want 1", broken.generateCalls)
+	}
+}
+
+// The demoted host must stay out of the rotation: a later role that would
+// start there walks on instead of paying the same failure again.
+func TestADemotedHostIsNotOfferedToTheNextRole(t *testing.T) {
+	r := readyRouter(t, config.Config{JudgeHost: string(KindOMP)})
+	broken := r.adapters[KindOMP].(*modelAdapter)
+	broken.generateErr = ompTripwire()
+
+	if _, err := r.GenerateStream(context.Background(), contracts.GenerateRequest{
+		Role: contracts.RoleCritic, ModelSlot: contracts.SlotJudge,
+	}, nil); err != nil {
+		t.Fatalf("critic call: %v", err)
+	}
+	// The specialist rotation starts on OMP; it must not be placed there.
+	p, err := r.PlaceRole(context.Background(), contracts.RoleSpecialist, contracts.SlotMain)
+	if err != nil {
+		t.Fatalf("specialist placement: %v", err)
+	}
+	if p.Kind == KindOMP {
+		t.Fatalf("specialist placed on the demoted host %s", p.Kind)
+	}
+	if broken.generateCalls != 1 {
+		t.Fatalf("broken host called %d times, want 1", broken.generateCalls)
+	}
+	var found bool
+	for _, reason := range r.SkipReasons() {
+		if reason.Kind == KindOMP && reason.Probe == "generate" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("no generate skip reason recorded for the demoted host")
+	}
+}
+
+// Every host broken means the caller sees the real capability error, not a
+// placement error and not an endless retry.
+func TestEveryHostBrokenReportsTheCapabilityError(t *testing.T) {
+	r := readyRouter(t, config.Config{})
+	for _, kind := range []Kind{KindClaude, KindOMP, KindAGY} {
+		r.adapters[kind].(*modelAdapter).generateErr = ompTripwire()
+	}
+	_, err := r.GenerateStream(context.Background(), contracts.GenerateRequest{
+		Role: contracts.RoleCritic, ModelSlot: contracts.SlotJudge,
+	}, nil)
+	var capability *contracts.ErrCapability
+	if !errors.As(err, &capability) {
+		t.Fatalf("error is %v, want a capability error", err)
 	}
 }
