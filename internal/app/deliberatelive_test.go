@@ -68,6 +68,16 @@ func TestLiveDeliberationEndToEnd(t *testing.T) {
 		cfg.DefaultMainModel = m
 		cfg.DefaultJudgeModel = m
 	}
+	// PLAN_FORGE_LIVE_HOST names the invoked host, which is only one candidate
+	// in the per-role rotation (ADR 0009): roleHostOrder sends specialists to
+	// OMP first whatever the caller asked for. Pin every role to the named host
+	// instead, or a run on a machine whose other hosts are stale fails at a
+	// stage that has nothing to do with what is being measured. Measured here
+	// on 2026-10-25: four specialist calls spent 17m42s and all four died with
+	// "host advertised a non-empty or invalid tools list (update OMP)".
+	if h := os.Getenv("PLAN_FORGE_LIVE_HOST"); h != "" {
+		cfg.MainHost, cfg.JudgeHost = h, h
+	}
 	cycles := 1
 	if v := os.Getenv("PLAN_FORGE_LIVE_CYCLES"); v != "" {
 		if n, cerr := strconv.Atoi(v); cerr == nil && n > 0 {
