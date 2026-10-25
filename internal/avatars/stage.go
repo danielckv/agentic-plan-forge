@@ -163,6 +163,25 @@ func (o *orchestrator) emitEvent(ctx context.Context, t relay.WSEventType, paylo
 }
 
 func (o *orchestrator) thought(ctx context.Context, avatar string, cycle int, status, summary string) error {
+	return o.thoughtOfStep(ctx, avatar, cycle, status, summary, "")
+}
+
+// thoughtOfStep emits one AVATAR_THOUGHT. step, when given, is the part of the
+// stage this particular call is on, and it wins over the avatar's live record.
+//
+// It has to. The live record is one struct per avatar name, and since ADR 0011
+// the architect's diagram call and its documentation batches run at the same
+// time under that one name. Reading the step off the shared record meant
+// whichever concurrent call wrote it last named the step for every event: a
+// documentation batch would announce itself as "diagrams 2/3", and the batch's
+// own step never reached the room at all. The step travels with the call that
+// owns it instead.
+//
+// The shared record still carries one step for the periodic card refresh, which
+// cannot represent three calls in flight under one avatar. That is a display
+// limit of one card per avatar, not a lost event: every call's own step is on
+// the wire here.
+func (o *orchestrator) thoughtOfStep(ctx context.Context, avatar string, cycle int, status, summary, step string) error {
 	o.mu.Lock()
 	if o.seen == nil {
 		o.seen = map[string]string{}
@@ -170,16 +189,19 @@ func (o *orchestrator) thought(ctx context.Context, avatar string, cycle int, st
 	o.seen[avatar] = status
 	o.mu.Unlock()
 	d := o.snapshotDetail(avatar)
+	if step == "" {
+		step = d.step
+	}
 	payload := relay.AvatarThoughtPayload{
 		RunID: o.in.RunID, AvatarID: avatar, Cycle: cycle, Status: status, PublicSummary: cleanSummary(summary),
-		Host: d.host, Model: d.model, Step: d.step, ContextNote: d.contextNote,
+		Host: d.host, Model: d.model, Step: step, ContextNote: d.contextNote,
 		OutputBytes: d.outputBytes,
 	}
 	if !d.started.IsZero() && !terminalStatus(status) {
 		payload.ElapsedMS = time.Since(d.started).Milliseconds()
 	}
 	o.tell.record(stepRecord{
-		Avatar: avatar, Cycle: cycle, Status: status, Step: d.step,
+		Avatar: avatar, Cycle: cycle, Status: status, Step: step,
 		Host: d.host, Model: d.model, Context: d.contextNote,
 		Summary: payload.PublicSummary, Seconds: int(payload.ElapsedMS / 1000),
 	})
@@ -697,7 +719,7 @@ func runStage[T any](o *orchestrator, ctx context.Context, sp stageSpec, in *sta
 	o.liveMu.Lock()
 	d.step, d.contextNote = sp.step, in.note
 	o.liveMu.Unlock()
-	if err := o.thought(ctx, sp.avatar, sp.cycle, sp.status, sp.summary); err != nil {
+	if err := o.thoughtOfStep(ctx, sp.avatar, sp.cycle, sp.status, sp.summary, sp.step); err != nil {
 		return zero, nil, err
 	}
 	raw, err := o.generate(ctx, sp, in)
@@ -708,8 +730,8 @@ func runStage[T any](o *orchestrator, ctx context.Context, sp stageSpec, in *sta
 	if perr == nil {
 		return doc, norm, nil
 	}
-	if err := o.thought(ctx, sp.avatar, sp.cycle, statusRevising,
-		fmt.Sprintf("The draft failed validation with %d problem(s); requesting one repair.", len(problemsOf(perr)))); err != nil {
+	if err := o.thoughtOfStep(ctx, sp.avatar, sp.cycle, statusRevising,
+		fmt.Sprintf("The draft failed validation with %d problem(s); requesting one repair.", len(problemsOf(perr))), sp.step); err != nil {
 		return zero, nil, err
 	}
 	raw, err = o.generate(ctx, sp, fixedInput(repairPayload(in.raw, raw, perr)))
