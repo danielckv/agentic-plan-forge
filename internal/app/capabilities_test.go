@@ -3,7 +3,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 
@@ -31,6 +33,36 @@ func TestCapabilitiesNeverReportsANullList(t *testing.T) {
 	view := plainCapabilities(t)
 	if view.Hosts == nil || view.Tools == nil || view.Skills == nil || view.Hooks == nil || view.Pinned == nil {
 		t.Fatalf("a list is nil: %+v", view)
+	}
+}
+
+// The same rule on a machine with no host installed, which is the case that
+// actually broke. `InspectSkillRoots` and `InspectHooks` return a nil slice
+// when they have nothing to report, and assigning that over the empty one put
+// `null` on the wire. It passed on a developer machine with three hosts signed
+// in and failed on the first CI runner, which has none — so PATH is emptied
+// here rather than trusting whatever the machine happens to have.
+func TestCapabilitiesNeverReportsANullListWithNoHostsInstalled(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	view := Capabilities(context.Background(), config.Config{}, t.TempDir(), "test")
+	if view.Hosts == nil || view.Tools == nil || view.Skills == nil || view.Hooks == nil || view.Pinned == nil {
+		t.Fatalf("a list is nil with no hosts installed: %+v", view)
+	}
+	for _, h := range view.Hosts {
+		if h.Found {
+			t.Errorf("host %q reported found with an empty PATH", h.Host)
+		}
+	}
+	// Every list must survive a JSON round trip as an array, never as null:
+	// that is the shape the window actually consumes.
+	raw, err := json.Marshal(view)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, key := range []string{"hosts", "tools", "skills", "hooks", "pinned"} {
+		if bytes.Contains(raw, []byte(`"`+key+`":null`)) {
+			t.Errorf("%q marshalled to null", key)
+		}
 	}
 }
 
