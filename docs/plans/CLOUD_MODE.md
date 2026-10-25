@@ -15,7 +15,7 @@ The desktop product is unchanged. This is a second way to reach the same engine.
 | Question | Answer |
 | :--- | :--- |
 | Where it runs | A hosted service we operate: a new binary, not the relay |
-| How avatars reach a model | A provider API key, through a new adapter |
+| How avatars reach a model | Superseded: see `RESEARCH_ON_VERTEX.md`. Application Default Credentials on Vertex, not a stored API key |
 | Where the intent comes from | A pull request carrying an RFC |
 | Relation to research batching | Separate modes; batching stays a local detached job |
 
@@ -100,11 +100,12 @@ the least noisy; a commit is the most useful to the next agent that picks the wo
 
 ## Three honest problems
 
-**It breaks a documented promise.** The README states Plan Forge "never asks for or stores provider API
-keys: it uses the credentials your host agent already has." A hosted service cannot keep that. The
-sentence has to be rewritten to scope it to the desktop product, in the same change that adds the
-adapter, with an ADR recording why. Leaving the old sentence standing while the service holds keys
-would be the worst outcome.
+**It bends a documented promise, less than first thought.** The README states Plan Forge "never asks for
+or stores provider API keys: it uses the credentials your host agent already has." The decision above
+has been superseded: Vertex under Application Default Credentials stores no secret either — it reads the
+credential `gcloud auth application-default login` left behind, or the service account the job runs as.
+The sentence needs rewording to name that second ambient credential, not retracting. See
+`RESEARCH_ON_VERTEX.md`.
 
 **It reads untrusted repositories.** The mitigation is already structural and is worth stating plainly:
 Plan Forge parses repository code, it never executes it. `internal/ast` is tree-sitter over bytes, git

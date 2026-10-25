@@ -46,6 +46,11 @@ type orchestrator struct {
 	store     *CheckpointStore
 	maxC      int
 	par       int
+	// sem bounds every concurrent provider call of a cycle to par. It is one
+	// semaphore rather than one per stage because the architect's diagrams and
+	// documentation batches now run beside the specialists: two stages holding
+	// a limit of par each would put 2*par calls in flight.
+	sem chan struct{}
 
 	emitMu sync.Mutex
 	// seen is the last status emitted per avatar, so a failed run can give the
