@@ -113,15 +113,41 @@ func Capabilities(ctx context.Context, cfg config.Config, repo, version string) 
 	}
 
 	view.Tools = probeTools()
-	if views, err := host.InspectSkillRoots(detected, repo); err == nil {
+	// Both inspectors return a nil slice when there is nothing to report, and
+	// assigning that over the empty one puts `null` on the wire for the
+	// window's `.map` to throw on. A machine with no host installed is the
+	// case: CI has none, this developer machine has three, which is why it
+	// only failed once it left the machine it was written on.
+	if views, err := host.InspectSkillRoots(detected, repo); err == nil && views != nil {
 		view.Skills = views
 	}
 	if in, err := host.NewInstaller(version); err == nil {
-		if statuses, herr := in.InspectHooks(host.HookHosts(detected), repo); herr == nil {
+		if statuses, herr := in.InspectHooks(host.HookHosts(detected), repo); herr == nil && statuses != nil {
 			view.Hooks = statuses
 		}
 	}
-	return view
+	return view.withoutNilLists()
+}
+
+// withoutNilLists is the last word on the no-null rule, so a future assignment
+// cannot reintroduce the fault the guards above fix one call site at a time.
+func (v CapabilitiesView) withoutNilLists() CapabilitiesView {
+	if v.Hosts == nil {
+		v.Hosts = []CapabilityHost{}
+	}
+	if v.Tools == nil {
+		v.Tools = []CapabilityTool{}
+	}
+	if v.Skills == nil {
+		v.Skills = []host.SkillRootView{}
+	}
+	if v.Hooks == nil {
+		v.Hooks = []host.HookStatus{}
+	}
+	if v.Pinned == nil {
+		v.Pinned = []string{}
+	}
+	return v
 }
 
 // probeTools reports the optional programs, each with what it is for. A tool
