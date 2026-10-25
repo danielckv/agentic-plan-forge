@@ -2,6 +2,12 @@
 
 Status: design, not built. Decisions below were taken on 2026-10-25; everything else is open.
 
+**Scope.** Everything here is a second way to reach the engine, reached only when the user chooses it.
+The desktop product is untouched: a normal run still spawns the local host agent CLI, still keeps the
+repository on the machine, and never needs a GCP project. Vertex and ADC belong to Research mode first —
+see [`RESEARCH_ON_VERTEX.md`](RESEARCH_ON_VERTEX.md), whose scope table governs. Cloud mode reuses that
+adapter; it does not get its own credential path.
+
 ## What it is
 
 A hosted service Plan Forge operates. Somebody opens a pull request containing an RFC. The service

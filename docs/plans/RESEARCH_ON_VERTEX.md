@@ -3,6 +3,27 @@
 Status: design, not built. Researched 2026-10-25. Every external fact below carries its source and its
 confidence, because two of them change what is buildable.
 
+## Scope: Research mode only
+
+This applies **only when the user is in Research mode**. It is opt-in, and it changes nothing about a
+normal run.
+
+| | Default run | Research mode |
+| :--- | :--- | :--- |
+| Where it runs | your machine | may run remotely |
+| Model | the host agent CLI you are signed in to | Vertex, under ADC |
+| Network | nothing leaves the machine | reaches GCP, and the web only behind a further flag |
+| Tool-free tripwire | on | on for avatars; a research call is a separate kind of call |
+
+No Vertex adapter, no GCP credential and no remote call may appear on the path of a normal
+deliberation. A machine with no `gcloud`, no project and no network keeps working exactly as it does
+today, and the four avatars keep running through the local CLI. If Research mode is off, none of this
+code is reached.
+
+That boundary is a test, not a convention: the default run's generator is resolved by
+`internal/host.Router` over the three CLI adapters, and a Vertex generator must be constructible only by
+the research batch.
+
 ## What was asked for
 
 Research batching that runs on GCP with Vertex AI, authenticated the common way (`gcloud auth`, not
