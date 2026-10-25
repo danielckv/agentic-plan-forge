@@ -32,6 +32,7 @@ const EXPORTS = {
   "normalized_prd.v1": "normalizedPrdV1",
   "impact_map.v1": "impactMapV1",
   "synthesis.v1": "synthesisV1",
+  "research_finding.v1": "researchFindingV1",
 };
 
 /**

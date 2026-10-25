@@ -9,18 +9,30 @@
  * schema compilation a load-time `EvalError`.
  */
 
-import { envelopeV1, impactMapV1, normalizedPrdV1, synthesisV1 } from "./validators.generated.js";
+import {
+  envelopeV1,
+  impactMapV1,
+  normalizedPrdV1,
+  researchFindingV1,
+  synthesisV1,
+} from "./validators.generated.js";
 import type { StandaloneValidate } from "./validators.generated.js";
 
 import mermaidDenylistSchema from "@schema/mermaid-denylist.json";
 
-export type SchemaId = "envelope.v1" | "normalized_prd.v1" | "impact_map.v1" | "synthesis.v1";
+export type SchemaId =
+  | "envelope.v1"
+  | "normalized_prd.v1"
+  | "impact_map.v1"
+  | "synthesis.v1"
+  | "research_finding.v1";
 
 const validators: Record<SchemaId, StandaloneValidate> = {
   "envelope.v1": envelopeV1,
   "normalized_prd.v1": normalizedPrdV1,
   "impact_map.v1": impactMapV1,
   "synthesis.v1": synthesisV1,
+  "research_finding.v1": researchFindingV1,
 };
 
 export interface SchemaResult {
