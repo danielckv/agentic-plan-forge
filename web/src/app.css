@@ -4333,6 +4333,203 @@ figure > .pf-diagram-source { border-top: none; }
   .pf-build-body { grid-template-columns: 1fr; }
 }
 
+/* ---------- Page 1 rail: the brief outline ---------- */
+
+/*
+ * An outline, not a gate. A section the document does not mention is shown
+ * muted with the reason the deliberation wants it, never as an error: the
+ * check is a word search and is wrong often enough that red would be a lie.
+ */
+
+.pf-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.pf-brief-summary { margin: 0; }
+
+.pf-brief-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-brief-item {
+  padding: 8px 10px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+}
+
+.pf-brief-item[data-mentioned="true"] {
+  border-color: var(--pf-ok-border);
+  background: var(--pf-ok-soft);
+}
+
+.pf-brief-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pf-brief-mark {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1px solid var(--pf-border-strong);
+  border-radius: 4px;
+  color: var(--pf-bright-ink);
+}
+
+.pf-brief-item[data-mentioned="true"] .pf-brief-mark {
+  border-color: var(--pf-ok-bright);
+  background: var(--pf-ok-bright);
+}
+
+.pf-brief-label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.pf-brief-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--pf-border-strong);
+  border-radius: var(--pf-radius-ctl);
+  background: none;
+  color: var(--pf-ink-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pf-brief-add:hover {
+  border-color: var(--pf-accent-border);
+  background: var(--pf-accent-soft);
+  color: var(--pf-accent);
+}
+
+.pf-brief-need,
+.pf-brief-evidence {
+  margin: 4px 0 0 24px;
+}
+
+/* Evidence is a quotation from the writer's own document, so it reads as one. */
+.pf-brief-evidence {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.pf-brief-foot {
+  margin: 2px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--pf-border);
+}
+
+/* ---------- Setup dialog: hosts, tools, skills, hooks ---------- */
+
+/*
+ * A four-column grid per row: mark, name, state, detail. One grid for every
+ * section so a host, a tool and a hook line up down the dialog instead of each
+ * section inventing its own alignment.
+ */
+
+.pf-cap {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pf-cap-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-cap-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--pf-muted);
+}
+
+.pf-cap-title > .pf-btn { margin-left: auto; text-transform: none; letter-spacing: 0; }
+
+.pf-cap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-cap-row {
+  display: grid;
+  grid-template-columns: 20px minmax(90px, max-content) minmax(96px, max-content) 1fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--pf-radius-card);
+}
+
+.pf-cap-row[data-tone="serves"] { border-color: var(--pf-ok-border); background: var(--pf-ok-soft); }
+.pf-cap-row[data-tone="blocked"] { border-color: var(--pf-warn-border); background: var(--pf-warn-soft); }
+.pf-cap-row[data-tone="signed-out"],
+.pf-cap-row[data-tone="absent"],
+.pf-cap-row[data-tone="optional"] { border-color: var(--pf-border); }
+
+.pf-cap-mark { align-self: center; }
+.pf-cap-row[data-tone="serves"] .pf-cap-mark { color: var(--pf-ok); }
+.pf-cap-row[data-tone="blocked"] .pf-cap-mark { color: var(--pf-warn); }
+.pf-cap-row[data-tone="signed-out"] .pf-cap-mark,
+.pf-cap-row[data-tone="absent"] .pf-cap-mark { color: var(--pf-faint); }
+
+.pf-cap-name { font-weight: 600; }
+
+.pf-cap-state {
+  font-size: 12px;
+  color: var(--pf-ink-2);
+}
+
+/*
+ * The detail column carries a host's own refusal text, which can be a long
+ * sentence with a path in it. It wraps rather than truncating: the reason a
+ * host will not serve is the whole value of the row.
+ */
+.pf-cap-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .pf-cap-row {
+    grid-template-columns: 20px 1fr;
+  }
+
+  .pf-cap-state,
+  .pf-cap-detail { grid-column: 2; }
+}
+
 /*
  * Last and !important on purpose: every animation and transition above, and
  * every Tailwind `animate-*` utility, stops for users who ask the OS for less

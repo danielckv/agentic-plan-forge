@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { BookOpen, Boxes, Layers, LoaderCircle, Waypoints } from "lucide-react";
+import { BookOpen, Boxes, ClipboardList, Layers, LoaderCircle, Waypoints } from "lucide-react";
 
 import { EpicCard } from "../../components/epics/EpicCard";
 import { EpicModal } from "../../components/epics/EpicModal";
 import type { ComponentRef, ComponentsView, ImpactMap, PlanFile, ProjectContext } from "../../protocol/api";
 import { componentTerm } from "../../ui/editor/markdownEdits";
+import { BriefTab } from "./BriefTab";
 import { ComponentBrowser } from "./ComponentBrowser";
 import { ImpactPanel, VERDICT_TONE } from "./ImpactPanel";
 import { NotesList } from "./NotesList";
 
-type RailTab = "impact" | "epics" | "code" | "notes";
+type RailTab = "brief" | "impact" | "epics" | "code" | "notes";
 
 /**
  * The right side of Page 1: the plan as it forms. Impact says which parts of
@@ -27,10 +28,14 @@ export function PlanRail(props: {
   scanning: boolean;
   ctx: ProjectContext | null;
   impact: ImpactMap | null;
+  /** The composer document, for the Brief outline. */
+  text: string;
   onInsert: (text: string) => void;
 }): React.ReactElement {
-  const { files, interpreting, hasText, blocks, scanning, ctx, impact, onInsert } = props;
-  const [tab, setTab] = useState<RailTab>("epics");
+  const { files, interpreting, hasText, blocks, scanning, ctx, impact, text, onInsert } = props;
+  // Brief opens first: it is the only tab that helps before anything is
+  // written, and the rest are empty until the requirements say something.
+  const [tab, setTab] = useState<RailTab>("brief");
   const [open, setOpen] = useState<number | null>(null);
   const noteCount = ctx?.hits.length ?? 0;
   const touchCount = (impact?.whole.length ?? 0) + (impact?.conflicts.length ?? 0);
@@ -38,12 +43,14 @@ export function PlanRail(props: {
   return (
     <aside className="pf-rail" aria-label="Plan">
       <div className="pf-rail-tabs" role="tablist" aria-label="Plan views">
+        <RailTabButton id="brief" current={tab} onSelect={setTab} icon={ClipboardList} label="Brief" />
         <RailTabButton id="impact" current={tab} onSelect={setTab} icon={Waypoints} label="Impact" count={touchCount} />
         <RailTabButton id="epics" current={tab} onSelect={setTab} icon={Layers} label="Epics" count={files.length} />
         <RailTabButton id="code" current={tab} onSelect={setTab} icon={Boxes} label="Codebase" />
         <RailTabButton id="notes" current={tab} onSelect={setTab} icon={BookOpen} label="Notes" count={noteCount} />
       </div>
       <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
+        {tab === "brief" && <BriefTab text={text} onInsert={onInsert} />}
         {tab === "impact" && <ImpactPanel map={impact} />}
         {tab === "epics" && (
           <EpicsTab files={files} interpreting={interpreting} hasText={hasText} onOpen={setOpen} />

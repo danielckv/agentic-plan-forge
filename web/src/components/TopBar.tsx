@@ -1,4 +1,4 @@
-import { FolderGit2, GitBranch, Keyboard } from "lucide-react";
+import { FolderGit2, GitBranch, Keyboard, SlidersHorizontal } from "lucide-react";
 
 import type { SyncState } from "../store/syncStore";
 import { CONN_META } from "../ui/conn";
@@ -10,7 +10,15 @@ import { ThemeSelect } from "../ui/ThemeSelect";
  * phase stepper, then who is here, the connection, the theme and the
  * shortcut sheet. Every control is 32 px tall and centered on the same line.
  */
-export function TopBar({ sync, onOpenHelp }: { sync: SyncState; onOpenHelp: () => void }): React.ReactElement {
+export function TopBar({
+  sync,
+  onOpenHelp,
+  onOpenSetup,
+}: {
+  sync: SyncState;
+  onOpenHelp: () => void;
+  onOpenSetup: () => void;
+}): React.ReactElement {
   const conn = CONN_META[sync.conn];
   const repo = sync.status.repo === "" ? "Plan Forge" : sync.status.repo;
   const branch = sync.status.branch ?? "";
@@ -47,6 +55,15 @@ export function TopBar({ sync, onOpenHelp }: { sync: SyncState; onOpenHelp: () =
         </span>
         <span className="pf-topbar-divider" aria-hidden="true" />
         <ThemeSelect variant="compact" />
+        <button
+          type="button"
+          className="pf-icon-btn"
+          aria-label="Setup: hosts, tools, skills and hooks"
+          title="Setup — hosts, tools, skills and hooks"
+          onClick={onOpenSetup}
+        >
+          <SlidersHorizontal size={16} />
+        </button>
         <button
           type="button"
           className="pf-icon-btn"

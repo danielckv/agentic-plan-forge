@@ -8,6 +8,7 @@ import { Page1Ingestion } from "./pages/Page1Ingestion";
 import { Page2AvatarCanvas } from "./pages/Page2AvatarCanvas";
 import { Page3SynthesisConfluence } from "./pages/Page3SynthesisConfluence";
 import { Page4Build } from "./pages/Page4Build";
+import { CapabilitiesDialog } from "./pages/CapabilitiesDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { prefs, usePrefs } from "./ui/prefs";
@@ -29,6 +30,7 @@ export function App(): React.ReactElement {
   const sync = useSync();
   const { sidebarCollapsed } = usePrefs();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   useEffect(() => {
     connect();
@@ -95,7 +97,7 @@ export function App(): React.ReactElement {
 
       {/* Content column */}
       <div className="pf-content">
-        <TopBar sync={sync} onOpenHelp={() => setHelpOpen(true)} />
+        <TopBar sync={sync} onOpenHelp={() => setHelpOpen(true)} onOpenSetup={() => setSetupOpen(true)} />
 
         {sync.banner !== null && (
           <div className="pf-banner pf-banner--warn" role="status">
@@ -120,6 +122,7 @@ export function App(): React.ReactElement {
 
       <Toaster />
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <CapabilitiesDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
     </div>
   );
 }
