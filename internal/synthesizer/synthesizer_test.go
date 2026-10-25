@@ -676,3 +676,45 @@ func TestWriteCorpusDiagrams(t *testing.T) {
 		}
 	}
 }
+
+// A Domain Specialist drafts exactly one workstream, and the payload names it.
+// Models drop the per-task repetition of that name; the stage used to fail the
+// whole draft for it. The task inherits the draft's workstream instead.
+func TestSpecialistTasksInheritTheDraftWorkstream(t *testing.T) {
+	f := synthtest.Sample()
+	for i := range f.Specialists {
+		for j := range f.Specialists[i].Tasks {
+			f.Specialists[i].Tasks[j].WorkstreamID = ""
+		}
+	}
+	raw, err := json.Marshal(f.Specialists[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	d, err := synthesizer.DecodeSpecialist(raw)
+	if err != nil {
+		t.Fatalf("DecodeSpecialist: %v", err)
+	}
+	for _, task := range d.Tasks {
+		if task.WorkstreamID != d.WorkstreamID {
+			t.Fatalf("task %s workstream is %q, want %q", task.ID, task.WorkstreamID, d.WorkstreamID)
+		}
+	}
+	ctx := synthesizer.ContextOf(f.PM, f.Graph, f.DocDrift)
+	if err := d.Validate(f.Architect, ctx); err != nil {
+		t.Fatalf("Validate after inheriting the workstream: %v", err)
+	}
+	if _, err := synthesizer.Compile(f.Input(), contracts.ApprovalMeta{}); err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+}
+
+// A task that names a different workstream is a disagreement, not an omission.
+func TestSpecialistTaskOfAnotherWorkstreamIsStillRejected(t *testing.T) {
+	f := synthtest.Sample()
+	f.Specialists[0].Tasks[0].WorkstreamID = "web-ui"
+	_, err := synthesizer.Compile(f.Input(), contracts.ApprovalMeta{})
+	if err == nil || !strings.Contains(err.Error(), "belongs to workstream") {
+		t.Fatalf("Compile error %v, want one naming the wrong workstream", err)
+	}
+}
