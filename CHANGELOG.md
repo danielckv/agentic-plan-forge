@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-25
+
 ### Changed
 
 - A plan no longer carries hundreds of documentation chores. The documentation-drift list was bounded in bytes (128 KiB) but never in items, and a byte budget does not bound the work the list causes: the Technical Architect writes one documentation task per confirmed item and answers 20 per call, so the item count decides how many model calls the stage makes. Measured on this repository, 249 items fitted comfortably inside the size limit and became 13 of the architect's 15 calls — most of a 43m46s stage — and the specification they produced would have listed 249 documentation tasks. Drift is now cut to the 60 most useful items as well as to 128 KiB, confirmed drift first; the payload says how many were left out, and the sentence the model reads names whichever limit actually cut. See [ADR 0011](docs/adrs/0011-the-documentation-batches-leave-the-critical-path.md).
@@ -233,7 +235,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.3.0...v0.4.0
