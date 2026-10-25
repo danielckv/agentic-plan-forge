@@ -152,6 +152,10 @@ type routingAdapter struct {
 	detectErr      error
 	detectCalls    int
 	preflightCalls int
+	// generateErr is returned by Generate, so a test can model a host that
+	// passes every probe and only breaks once a call is open.
+	generateErr   error
+	generateCalls int
 }
 
 func (a *routingAdapter) Kind() Kind { return a.kind }
@@ -168,5 +172,7 @@ func (a *routingAdapter) Preflight(context.Context) error {
 	return nil
 }
 func (a *routingAdapter) Generate(context.Context, contracts.GenerateRequest, func(contracts.GenerationEvent) error) (contracts.GenerationResult, error) {
-	return contracts.GenerationResult{Receipt: contracts.ToolFreeReceipt{Host: string(a.kind), Version: a.version}}, nil
+	a.generateCalls++
+	result := contracts.GenerationResult{Receipt: contracts.ToolFreeReceipt{Host: string(a.kind), Version: a.version}}
+	return result, a.generateErr
 }

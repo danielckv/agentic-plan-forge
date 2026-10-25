@@ -34,6 +34,40 @@ const (
 	MaxStageTimeoutSeconds = 1800
 )
 
+// Deploy targets for a built plan. The set is closed: a target names code that
+// has to exist in this binary, so an unknown value is a typo, never a plugin.
+const (
+	// DeployTargetNone means a built plan is previewed and never deployed.
+	DeployTargetNone = "none"
+	// DeployTargetDocker runs the built image on the local Docker daemon.
+	DeployTargetDocker = "docker"
+	// DeployTargetAgentBox pushes the built image to the Agent Box service.
+	DeployTargetAgentBox = "agent-box"
+)
+
+// DefaultAgentBoxURL is the Agent Box endpoint used when none is configured.
+const DefaultAgentBoxURL = "https://agent-box.sh/"
+
+var validDeployTargets = map[string]bool{
+	"": true, DeployTargetNone: true, DeployTargetDocker: true, DeployTargetAgentBox: true,
+}
+
+// DeployTargetNames lists the choices the window offers, in menu order.
+func DeployTargetNames() []string {
+	return []string{DeployTargetAgentBox, DeployTargetDocker, DeployTargetNone}
+}
+
+// IsValidDeployTarget reports whether t names a supported deploy target.
+func IsValidDeployTarget(t string) bool { return validDeployTargets[t] }
+
+// AgentBoxEndpoint is the configured Agent Box URL, or the default.
+func (c Config) AgentBoxEndpoint() string {
+	if strings.TrimSpace(c.AgentBoxURL) == "" {
+		return DefaultAgentBoxURL
+	}
+	return c.AgentBoxURL
+}
+
 // Avatar roles that can be pinned to a host and a model. The set is closed and
 // matches contracts.RoleID; config stays free of other packages, so the names
 // are repeated here rather than imported.
@@ -80,6 +114,12 @@ type Config struct {
 	BrowserPath  string                 `json:"browser_path,omitempty"`
 	OCRLanguage  string                 `json:"ocr_language,omitempty"`
 	HostEnvAllow []string               `json:"host_env_allow,omitempty"`
+	// DeployTarget is where an approved, built plan is deployed. Empty means
+	// the owner has not chosen yet, which is what makes the window ask once.
+	// A deliberate "never deploy" is DeployTargetNone, not empty.
+	DeployTarget string `json:"deploy_target,omitempty"`
+	// AgentBoxURL is the Agent Box endpoint. Empty selects DefaultAgentBoxURL.
+	AgentBoxURL string `json:"agent_box_url,omitempty"`
 
 	// unknown preserves keys written by another build.
 	unknown map[string]json.RawMessage
@@ -167,6 +207,7 @@ var knownKeys = map[string]bool{
 	"human_workday_hours": true, "max_cycles": true, "max_parallel": true,
 	"browser_path": true, "ocr_language": true, "host_env_allow": true,
 	"stage_timeout_seconds": true, "role_models": true, "disable_narrator": true,
+	"deploy_target": true, "agent_box_url": true,
 }
 
 // Save writes the configuration atomically: same-directory temporary file,
@@ -278,7 +319,47 @@ func Validate(cfg Config) error {
 			return fmt.Errorf("host_env_allow entry %q is not a bare environment variable name", name)
 		}
 	}
+	if !IsValidDeployTarget(cfg.DeployTarget) {
+		return fmt.Errorf("deploy_target %q is not one of %s",
+			cfg.DeployTarget, strings.Join(DeployTargetNames(), ", "))
+	}
+	if cfg.AgentBoxURL != "" {
+		if err := ValidateAgentBoxURL(cfg.AgentBoxURL); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// ValidateAgentBoxURL rejects endpoints that would leak the built image or its
+// credentials. The rules match ValidateRelayURL: a query string or fragment
+// can carry a secret into a log, userinfo is never needed, and plaintext is
+// allowed only on loopback, where there is no network to read it off.
+func ValidateAgentBoxURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("agent_box_url is not a URL: %w", err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("agent_box_url %q has no host", raw)
+	}
+	if u.User != nil {
+		return fmt.Errorf("agent_box_url must not carry userinfo")
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("agent_box_url must not carry a query string or fragment")
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopback(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("agent_box_url may use http only on loopback, got %q", raw)
+	default:
+		return fmt.Errorf("agent_box_url scheme %q is not http or https", u.Scheme)
+	}
 }
 
 // ValidateRelayURL rejects relay endpoints that would leak or mislead. Query

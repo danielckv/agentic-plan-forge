@@ -61,9 +61,9 @@ flowchart TD
     REVIEW -- "edit baseline" --> PRD
 ```
 
-## The three pages
+## The pages
 
-The window has three pages in order. The top bar shows the project, its branch, the phase, who is here, the
+The window has three pages in order, and a fourth once a plan is approved. The top bar shows the project, its branch, the phase, who is here, the
 connection, a System/Light/Dark switch and the shortcut sheet (`?`). The sidebar collapses with `[`.
 
 ### 1. Ingestion: the composer
@@ -195,6 +195,26 @@ plan-forge context --query "invoice exports" --json   # for scripts
 ```
 
 [ADR 0002](adrs/0002-read-agents-recall-index.md) records the design.
+
+### 4. Build: code, preview, deploy
+
+Once a plan is approved, the window offers to build it. **Write the code** opens an isolated worktree under the Plan
+Forge cache, on a `plan-forge/<approval-id>` branch, and hands the approved spec to your host agent inside it. Nothing
+is written to the repository you are working in, and nothing is pushed: you merge the branch yourself.
+
+Two tabs answer the same question from two sides:
+
+- **Code** lists the changed files with their line counts, shows the full diff, opens any single file, and logs what
+  the agent did step by step.
+- **Preview** builds the worktree's root `Dockerfile` and runs it on `127.0.0.1`, framed in the page. The frame is
+  sandboxed, so code the agent wrote minutes ago cannot reach the window around it.
+
+**Deploy** publishes that same image, to an Agent Box sandbox or to your local Docker daemon. The first time, the
+window asks which; after that it is a toggle on the page and a `deploy_target` key in the config. Choosing
+**Don't deploy** keeps the original behaviour, where the tab closes shortly after an approval.
+
+**Discard worktree** removes the worktree, its branch and the preview container. **Finish** ends the session and
+leaves everything in place.
 
 ## Plan Mode handoff and validation
 

@@ -4024,6 +4024,315 @@ figure > .pf-diagram-source { border-top: none; }
 
 /* ---------- reduced motion ---------- */
 
+/* ---------- Page 4: build, preview and deploy ---------- */
+
+/*
+ * The build page is a three-part layout: a header with the stage and its
+ * actions, a tabbed body (Code or Preview), and a deploy bar pinned under it.
+ * The body is a two-column grid so a long diff scrolls on its own without
+ * taking the file list or the step log off the screen with it.
+ */
+
+.pf-build {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 20px var(--pf-gutter);
+  animation: pf-route-in var(--pf-dur-slow) var(--pf-ease) backwards;
+}
+
+.pf-build-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pf-build-badge {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--pf-ok-bright);
+  color: var(--pf-bright-ink);
+}
+
+.pf-build-badge[data-stage="FAILED"] { background: var(--pf-danger-bright); }
+.pf-build-badge[data-stage="CODING"],
+.pf-build-badge[data-stage="BUILDING"],
+.pf-build-badge[data-stage="DEPLOYING"] { background: var(--pf-accent); }
+
+.pf-build-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pf-build-worktree {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pf-build-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--pf-border);
+}
+
+.pf-build-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--pf-ctl-h);
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--pf-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pf-build-tab[aria-selected="true"] {
+  border-bottom-color: var(--pf-accent);
+  color: var(--pf-ink);
+  font-weight: 600;
+}
+
+.pf-build-tab-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pf-accent-soft);
+  color: var(--pf-accent);
+  font-size: 11px;
+}
+
+.pf-build-body {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 16px;
+  min-height: 0;
+}
+
+.pf-build-side,
+.pf-build-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pf-build-sub {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--pf-muted);
+}
+
+.pf-build-trunc { color: var(--pf-warn); }
+
+.pf-file-list {
+  margin: 0;
+  padding: 0;
+  max-height: 32vh;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+}
+
+.pf-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pf-file-row:hover { background: var(--pf-accent-soft); }
+
+.pf-file-status {
+  flex: none;
+  width: 16px;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--pf-muted);
+}
+
+.pf-file-status[data-status="A"] { color: var(--pf-ok); }
+.pf-file-status[data-status="D"] { color: var(--pf-danger); }
+.pf-file-status[data-status="M"] { color: var(--pf-accent); }
+
+.pf-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.pf-step-log {
+  margin: 0;
+  padding: 0;
+  max-height: 28vh;
+  overflow: auto;
+  list-style: none;
+  font-size: 12px;
+}
+
+.pf-step-row {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--pf-border);
+  color: var(--pf-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.pf-diff,
+.pf-build-log,
+.pf-file-view {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-surface-2, var(--pf-accent-soft));
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.pf-diff { max-height: 56vh; }
+.pf-build-log { max-height: 56vh; white-space: pre-wrap; }
+.pf-file-view { max-height: 60vh; }
+
+/* A diff line is coloured by its first character, never by position. */
+.pf-diff-line[data-kind="add"] { color: var(--pf-ok); }
+.pf-diff-line[data-kind="del"] { color: var(--pf-danger); }
+.pf-diff-line[data-kind="meta"] { color: var(--pf-muted); font-weight: 600; }
+
+.pf-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pf-input--port { width: 84px; }
+
+/*
+ * The preview frame is sandboxed: it renders code a model wrote minutes ago.
+ * allow-scripts without allow-same-origin keeps it off this window's origin,
+ * so it cannot read the bridge token out of the page that framed it.
+ */
+.pf-preview-frame {
+  width: 100%;
+  min-height: 52vh;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: #fff;
+}
+
+.pf-deploy-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--pf-border);
+}
+
+.pf-deploy-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-accent-soft);
+}
+
+.pf-deploy-opt {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--pf-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pf-deploy-opt[aria-checked="true"] {
+  background: var(--pf-bg, #fff);
+  color: var(--pf-ink);
+  font-weight: 600;
+  box-shadow: var(--pf-shadow-sm);
+}
+
+.pf-deploy-opt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pf-deploy-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--pf-warn);
+}
+
+.pf-deploy-bar > .pf-btn:last-child { margin-left: auto; }
+
+.pf-target-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-target-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pf-target-choice:hover:not(:disabled) {
+  border-color: var(--pf-accent-border);
+  background: var(--pf-accent-soft);
+}
+
+.pf-target-choice:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.pf-target-choice-name { font-weight: 600; }
+
+@media (max-width: 1100px) {
+  .pf-build-body { grid-template-columns: 1fr; }
+}
+
 /*
  * Last and !important on purpose: every animation and transition above, and
  * every Tailwind `animate-*` utility, stops for users who ask the OS for less

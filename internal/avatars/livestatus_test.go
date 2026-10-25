@@ -88,6 +88,52 @@ func TestEveryAvatarReportsTheStepItIsOn(t *testing.T) {
 	}
 }
 
+// Every architect thought must name the part of the stage that emitted it.
+//
+// Since ADR 0011 the diagram call and the documentation batches run at the same
+// time under one avatar name, and the step used to be read off a single live
+// record shared by all of them: whichever call wrote it last named the step for
+// every event. A documentation batch announced itself as "diagrams 2/3", and
+// its own step never reached the room. That is how
+// TestEveryAvatarReportsTheStepItIsOn failed intermittently on CI while passing
+// 60 times in a row locally — it needs the two calls to interleave between the
+// write and the emit.
+//
+// The summary is the control: it is passed down the call that emits it and was
+// never shared, so it names the real part whatever the step says. A thought
+// whose summary is "Part 3 of 3" and whose step is "diagrams 2/3" is the bug,
+// caught without having to win the race that produces it.
+func TestConcurrentArchitectPartsEachNameTheirOwnStep(t *testing.T) {
+	h := newHarness(t, synthtest.Sample())
+	if _, err := h.run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	parts := map[string]string{
+		"Part 1 of 3": "design 1/3",
+		"Part 2 of 3": "diagrams 2/3",
+		"Part 3 of 3": "docs 3/3 · batch ",
+	}
+	seen := map[string]bool{}
+	for _, p := range h.sink.thoughts(relay.StageArchitect) {
+		for marker, wantStep := range parts {
+			if !strings.Contains(p.PublicSummary, marker) {
+				continue
+			}
+			seen[marker] = true
+			if !strings.HasPrefix(p.Step, wantStep) {
+				t.Errorf("a thought summarised %q reported step %q, want one starting %q",
+					marker, p.Step, wantStep)
+			}
+		}
+	}
+	// All three parts must have run, or the check above proves nothing.
+	for marker := range parts {
+		if !seen[marker] {
+			t.Errorf("the architect never emitted a thought for %s", marker)
+		}
+	}
+}
+
 // A card must say what its call can see. Without it a reader cannot tell
 // evidence that was cut to fit from evidence that never existed.
 func TestEveryAvatarReportsTheEvidenceItCanSee(t *testing.T) {

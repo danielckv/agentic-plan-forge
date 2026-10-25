@@ -7,6 +7,7 @@ import type { StatusView } from "./store/syncStore";
 import { Page1Ingestion } from "./pages/Page1Ingestion";
 import { Page2AvatarCanvas } from "./pages/Page2AvatarCanvas";
 import { Page3SynthesisConfluence } from "./pages/Page3SynthesisConfluence";
+import { Page4Build } from "./pages/Page4Build";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { prefs, usePrefs } from "./ui/prefs";
@@ -82,6 +83,8 @@ export function App(): React.ReactElement {
       <Page1Ingestion />
     ) : sync.route === "/deliberate" ? (
       <Page2AvatarCanvas />
+    ) : sync.route === "/build" ? (
+      <Page4Build />
     ) : (
       <Page3SynthesisConfluence />
     );

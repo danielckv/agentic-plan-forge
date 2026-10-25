@@ -18,6 +18,7 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/ast"
 	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
+	"github.com/danielckv/agentic-plan-forge/internal/delivery"
 	"github.com/danielckv/agentic-plan-forge/internal/host"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 	"github.com/danielckv/agentic-plan-forge/internal/storage"
@@ -149,6 +150,22 @@ type appSession struct {
 	// meter counts what every provider call cost, per host, model and role. It
 	// wraps the generator, so one handle sees ingestion, impact and the avatars.
 	meter *host.Meter
+	// build owns the post-approval path: worktree, coding run, preview box and
+	// deploy. Nil for a follower, which never builds on someone else's machine.
+	build *delivery.Build
+	// buildCtx outlives one HTTP request. A coding run takes hours and must
+	// survive the window navigating away, so build actions take this, not the
+	// request context.
+	buildCtx    context.Context
+	buildCancel context.CancelFunc
+}
+
+// buildContext is the context every background build action runs under.
+func (s *appSession) buildContext() context.Context {
+	if s.buildCtx == nil {
+		return context.Background()
+	}
+	return s.buildCtx
 }
 
 func (s *appSession) finish(r Result) {
@@ -334,6 +351,11 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 		Finish: func(phase SessionPhase, message string, artifacts []string) {
 			s.finish(resultFor(phase, message, artifacts))
 		},
+		Approved: func(approvalID string, spec []byte) {
+			if s.build != nil {
+				s.build.Adopt(approvalID, string(spec))
+			}
+		},
 	}
 
 	var onMessage func([]byte)
@@ -374,6 +396,12 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 	s.bridge = bridge
 	defer bridge.Close()
 	s.routes()
+	// The build outlives one request but not the session: cancelling here
+	// stops a coding run and a container build when the window closes.
+	s.buildCtx, s.buildCancel = context.WithCancel(context.WithoutCancel(ctx))
+	defer s.buildCancel()
+	s.build = delivery.NewBuild(s.repo, opts.Config)
+	s.buildRoutes()
 	go func() { _ = bridge.Serve(ctx) }()
 
 	if err := s.exec.Start(ctx); err != nil {
@@ -439,10 +467,41 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 // after an approval the window is told it is safe to close and then the browser
 // the binary owns is terminated.
 func (s *appSession) conclude(ctx context.Context, r Result, win windowHandle) Result {
-	if r.Phase == PhaseApproved {
-		win.Terminate(window.PostApprovalClose)
+	if r.Phase != PhaseApproved {
+		return r
 	}
+	// An owner who builds needs the window: the Build page is where the code,
+	// the preview and the deploy live, and the five-second countdown would
+	// close it mid-run. "Don't deploy" keeps the original behaviour.
+	if s.build != nil && s.build.HoldsWindow() {
+		s.waitForBuild(ctx)
+	}
+	win.Terminate(window.PostApprovalClose)
 	return r
+}
+
+// buildPollInterval is how often the session checks whether the owner is done
+// with the Build page. A poll, not a channel, because Finish can also arrive
+// by the window simply being closed, which no handler reports.
+const buildPollInterval = time.Second
+
+// waitForBuild holds the session open until the owner finishes the build or the
+// context ends. It never has a timeout of its own: a coding run takes hours and
+// a deploy can take longer, and a session that closed under either would lose
+// the worktree the owner was about to review.
+func (s *appSession) waitForBuild(ctx context.Context) {
+	ticker := time.NewTicker(buildPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if s.build.Finished() {
+				return
+			}
+		}
+	}
 }
 
 // --- relay owner startup -----------------------------------------------------------------------

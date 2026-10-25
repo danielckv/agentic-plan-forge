@@ -4,6 +4,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -83,13 +84,16 @@ type Router struct {
 	invokedHost Kind
 	adapters    map[Kind]Adapter
 
-	mu      sync.Mutex
-	ready   map[Kind]resolvedAdapter
-	main    *resolvedAdapter
-	judge   *resolvedAdapter
-	byRole  map[contracts.RoleID]Placement
-	models  map[Kind]map[string]bool
-	reasons []SkipReason
+	mu sync.Mutex
+	// unusable bars a host that broke the tool-free contract on an open call.
+	// Detect, Auth and Preflight all passed; only the stream showed the fault.
+	unusable map[Kind]bool
+	ready    map[Kind]resolvedAdapter
+	main     *resolvedAdapter
+	judge    *resolvedAdapter
+	byRole   map[contracts.RoleID]Placement
+	models   map[Kind]map[string]bool
+	reasons  []SkipReason
 }
 
 // Placement is the host, version and model one role's calls go to.
@@ -109,6 +113,7 @@ func NewRouter(cfg config.Config, invokedHost Kind) *Router {
 		cfg:         cfg,
 		invokedHost: invokedHost,
 		adapters:    registeredMap(cfg.HostEnvAllow),
+		unusable:    make(map[Kind]bool),
 		ready:       make(map[Kind]resolvedAdapter),
 		byRole:      make(map[contracts.RoleID]Placement),
 		models:      make(map[Kind]map[string]bool),
@@ -147,22 +152,74 @@ func (r *Router) GenerateStream(ctx context.Context, req contracts.GenerateReque
 		slot = contracts.SlotMain
 		req.ModelSlot = slot
 	}
-	place, err := r.PlaceRole(ctx, req.Role, slot)
-	if err != nil {
-		return contracts.GenerationResult{}, err
-	}
-	if req.Model == "" {
-		req.Model = place.Model
-	}
-	if emit != nil {
-		err := emit(contracts.GenerationEvent{Kind: contracts.EventPlacement, Placement: &contracts.Placement{
-			Role: req.Role, Host: string(place.Kind), Version: place.Version, Model: req.Model,
-		}})
+	// A host can pass Detect, Auth and Preflight and still break the tool-free
+	// contract on the first streamed event: OMP advertises a tools list that
+	// only shows up once a call is open. Preflight cannot see that, so the
+	// placement is retried on the next candidate instead of failing the stage.
+	// Without this a single broken host kills every role whose rotation starts
+	// there, which is how the critic and the Product Manager both died on OMP.
+	wanted := req.Model
+	for attempt := 0; ; attempt++ {
+		place, err := r.PlaceRole(ctx, req.Role, slot)
 		if err != nil {
 			return contracts.GenerationResult{}, err
 		}
+		req.Model = wanted
+		if req.Model == "" {
+			req.Model = place.Model
+		}
+		if emit != nil {
+			err := emit(contracts.GenerationEvent{Kind: contracts.EventPlacement, Placement: &contracts.Placement{
+				Role: req.Role, Host: string(place.Kind), Version: place.Version, Model: req.Model,
+			}})
+			if err != nil {
+				return contracts.GenerationResult{}, err
+			}
+		}
+		result, err := place.adapter.Generate(ctx, req, emit)
+		if err == nil || attempt >= len(r.adapters) {
+			return result, err
+		}
+		var capability *contracts.ErrCapability
+		if !errors.As(err, &capability) || !r.demote(place.Kind, capability) {
+			return result, err
+		}
 	}
-	return place.adapter.Generate(ctx, req, emit)
+}
+
+// demote drops a host that broke the tool-free contract mid-call. Every role
+// placed on it is unplaced so the next call re-runs the rotation, and the host
+// is barred for the rest of the session: the same call would break the same
+// way. It reports whether another candidate is left to try.
+func (r *Router) demote(kind Kind, cause *contracts.ErrCapability) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.unusable[kind] {
+		return false
+	}
+	if r.unusable == nil {
+		r.unusable = make(map[Kind]bool, len(r.adapters))
+	}
+	r.unusable[kind] = true
+	r.recordSkip(kind, "generate", cause.Reason)
+	delete(r.ready, kind)
+	for role, placed := range r.byRole {
+		if placed.Kind == kind {
+			delete(r.byRole, role)
+		}
+	}
+	if r.main != nil && r.main.adapter.Kind() == kind {
+		r.main = nil
+	}
+	if r.judge != nil && r.judge.adapter.Kind() == kind {
+		r.judge = nil
+	}
+	for candidate := range r.adapters {
+		if !r.unusable[candidate] {
+			return true
+		}
+	}
+	return false
 }
 
 // PlaceRole resolves the host and model one role's calls use. The answer is
@@ -293,6 +350,9 @@ func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.Mode
 		adapter, ok := r.adapters[kind]
 		if !ok {
 			skip(kind, "detect", "adapter is not registered")
+			continue
+		}
+		if r.unusable[kind] {
 			continue
 		}
 		if ready, ok := r.ready[kind]; ok {

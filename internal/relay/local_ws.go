@@ -80,9 +80,17 @@ const (
 // BridgeCSP is the Content-Security-Policy sent with every response: scripts
 // and connections stay on the bridge's own origin, styles may be inline (the
 // UI toolkit injects them), nothing may frame the page or submit forms.
+//
+// frame-src is the one opening, and it is as narrow as the feature allows. The
+// Page 4 preview frames a container the owner just built, and StartBox
+// publishes that container on 127.0.0.1 only; naming loopback explicitly keeps
+// the default-src fallback from admitting the whole of 'self' or, worse, the
+// network. The frame itself is sandboxed without allow-same-origin, so the
+// code inside it runs on an opaque origin and cannot reach this one.
 const BridgeCSP = "default-src 'self'; img-src 'self' data:; connect-src 'self'; " +
 	"style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; " +
-	"form-action 'none'; frame-ancestors 'none'"
+	"form-action 'none'; frame-ancestors 'none'; " +
+	"frame-src http://127.0.0.1:* http://localhost:*"
 
 // Bridge errors.
 var (

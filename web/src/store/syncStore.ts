@@ -50,7 +50,7 @@ export const ROUTE_BY_PHASE: Record<Phase, string> = {
   SYNTHESIS: "/synthesis",
   APPROVING: "/synthesis",
   APPROVING_UNKNOWN: "/synthesis",
-  APPROVED: "/synthesis",
+  APPROVED: "/build",
   CANCELLED: "/ingest",
 };
 
@@ -59,6 +59,7 @@ export const ROUTE_ORDER: Record<string, number> = {
   "/ingest": 0,
   "/deliberate": 1,
   "/synthesis": 2,
+  "/build": 3,
 };
 
 export interface RecoveryItem {
