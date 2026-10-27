@@ -156,8 +156,16 @@ func TestRunRecipeStopsAfterAFailingBuild(t *testing.T) {
 	}
 	es.mu.Lock()
 	defer es.mu.Unlock()
-	if len(es.paths) != 1 {
-		t.Errorf("%d commands ran, want only the build", len(es.paths))
+	// The upload is a request too, so count the command endpoint rather than
+	// every path: one build ran and the test suite never started.
+	commands := 0
+	for _, path := range es.paths {
+		if strings.HasSuffix(path, "/commands") {
+			commands++
+		}
+	}
+	if commands != 1 {
+		t.Errorf("%d commands ran, want only the build: %v", commands, es.paths)
 	}
 }
 

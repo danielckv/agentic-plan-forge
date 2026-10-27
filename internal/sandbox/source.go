@@ -145,7 +145,7 @@ func PackageSource(opts SourceOptions) (SourceArchive, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if excludedDirs[d.Name()] && !include[rel] {
+			if excludedDirs[d.Name()] && !includeUnder(include, rel) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -259,15 +259,40 @@ func excluded(rel, name string) string {
 	return ""
 }
 
-// cleanRel keeps a caller-supplied path inside the repository.
+// cleanRel keeps a caller-supplied path inside the repository. Every component
+// is checked, not just the leading one: "a/../../b" normalises to a path inside
+// the repository while the caller asked for something outside it, and a silent
+// normalisation hides that.
 func cleanRel(rel string) (string, bool) {
 	rel = strings.TrimSpace(rel)
 	if rel == "" || strings.Contains(rel, "\\") || strings.HasPrefix(rel, "/") {
 		return "", false
 	}
-	clean := strings.Trim(strings.TrimPrefix(rel, "./"), "/")
-	if clean == "" || clean == ".." || strings.HasPrefix(clean, "../") {
+	var parts []string
+	for _, part := range strings.Split(rel, "/") {
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			return "", false
+		}
+		parts = append(parts, part)
+	}
+	if len(parts) == 0 {
 		return "", false
 	}
-	return clean, true
+	return strings.Join(parts, "/"), true
+}
+
+// includeUnder reports whether an include names anything inside dir. A skipped
+// directory must still be descended into when a caller asked for a file in it:
+// filepath.SkipDir would drop that file without ever looking at it.
+func includeUnder(include map[string]bool, dir string) bool {
+	prefix := dir + "/"
+	for rel := range include {
+		if strings.HasPrefix(rel, prefix) {
+			return true
+		}
+	}
+	return false
 }

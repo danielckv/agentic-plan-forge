@@ -92,6 +92,9 @@ func TestRunWithoutReceiptsRefusesReady(t *testing.T) {
 // A successful run with every receipt is the only path to ready.
 func TestRunWithEveryReceiptReachesReady(t *testing.T) {
 	m := configuredManager(t)
+	// Run packages the project before it drives the sandbox, so the test needs
+	// something to pack. An empty directory is refused on purpose.
+	writeTestFile(t, m.repo, "go.mod", "module example.com/demo\n")
 	m.lease = sandbox.Lifecycle{SandboxID: "sb-1", State: sandbox.StateTesting}
 	m.drive = stubDriver{receipts: []sandbox.Receipt{
 		{Kind: sandbox.ReceiptBuild, ExitCode: 0},
