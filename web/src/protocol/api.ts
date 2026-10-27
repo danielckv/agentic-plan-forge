@@ -242,3 +242,45 @@ export function fetchRepositoryWork(): Promise<RepositoryWorkView> {
 export function fetchRepositoryDocument(id: string): Promise<RepositoryWorkDocument> {
   return getJSON<RepositoryWorkDocument>(`/api/repository-work/document?id=${encodeURIComponent(id)}`);
 }
+
+/** One file a documents-only export would write (`app.bundleFileView`). */
+export interface BundleFile {
+  path: string;
+  kind: "plan" | "spec" | "adr";
+  title: string;
+}
+
+/** GET /api/documents (`app.BundleView`). A preview: nothing is written. */
+export interface BundleView {
+  available: boolean;
+  problem?: string;
+  files: BundleFile[];
+}
+
+/** POST /api/documents/export (`app.ExportReport`). */
+export interface ExportReport {
+  state: "exported" | "confirm" | "unavailable" | "collision" | "blocked" | "mismatch" | "failed";
+  committed?: string[];
+  manifest?: string;
+  problem?: string;
+}
+
+export function fetchDocuments(): Promise<BundleView> {
+  return getJSON<BundleView>("/api/documents");
+}
+
+/**
+ * Write the generated documents into the repository. The confirmation is part
+ * of the request because the export is the only path that puts generated files
+ * on disk, and it never runs as a side effect of opening the page.
+ */
+export async function exportDocuments(body: { confirmed: boolean; approvalId?: string }): Promise<ExportReport> {
+  const res = await apiFetch("/api/documents/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const report = (await res.json().catch(() => null)) as ExportReport | null;
+  if (report !== null) return report;
+  return { state: "failed", problem: `the export answered ${String(res.status)}` };
+}

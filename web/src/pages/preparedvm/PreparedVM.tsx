@@ -7,6 +7,7 @@ import {
   previewAvailable,
   sandboxHeadline,
   sandboxLive,
+  sourceSummary,
   useRecipe,
   useSandbox,
   type LaunchReport,
@@ -86,6 +87,8 @@ export function PreparedVM(props: { approvalId: string; enabled: boolean }): Rea
     if (problem !== null) setError(problem);
   }, [approvalId, appPort, recipe, sandbox]);
 
+  const sourceLine = sourceSummary(report);
+
   return (
     <section className="pf-vm" aria-labelledby="pf-vm-title">
       <header className="pf-vm-head">
@@ -101,6 +104,12 @@ export function PreparedVM(props: { approvalId: string; enabled: boolean }): Rea
         <p className="pf-notice pf-notice--warn" role="status">
           <TriangleAlert size={14} aria-hidden="true" />
           <span>{recipe.problem ?? "No build command is recorded for this project."}</span>
+        </p>
+      )}
+
+      {sourceLine !== null && (
+        <p className="pf-caption pf-vm-source" role="status">
+          {sourceLine}
         </p>
       )}
 

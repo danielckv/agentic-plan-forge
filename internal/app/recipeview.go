@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/recipe"
+	"github.com/danielckv/agentic-plan-forge/internal/storage"
 	"github.com/danielckv/agentic-plan-forge/internal/synthesizer"
 )
 
@@ -265,4 +267,167 @@ func (s *appSession) revision() string {
 		return ""
 	}
 	return s.exec.graph.GitCommitHash
+}
+
+// ExportRequest is the owner's explicit confirmation to write the documents.
+// The export is the only path that puts generated files into the repository, so
+// it never runs as a side effect of approving a plan or opening the page.
+type ExportRequest struct {
+	// Confirmed is explicit for the same reason a sandbox launch needs it.
+	Confirmed bool `json:"confirmed"`
+	// ApprovalID pins which approved plan the export belongs to.
+	ApprovalID string `json:"approvalId"`
+}
+
+// ExportReport is what the window renders after a write.
+type ExportReport struct {
+	State     string   `json:"state"`
+	Committed []string `json:"committed,omitempty"`
+	Manifest  string   `json:"manifest,omitempty"`
+	Problem   string   `json:"problem,omitempty"`
+}
+
+// ExportDocuments writes the plan, specification and decision records into the
+// repository's documentation directories.
+//
+// Three refusals are deliberate. Without a confirmation nothing is written.
+// Without an approved plan there is nothing to write. A destination that
+// already holds a document stops the whole set: a generated file never replaces
+// one a person wrote, and stopping before the first write leaves the repository
+// untouched rather than half-exported.
+func (s *appSession) ExportDocuments(ctx context.Context, req ExportRequest) ExportReport {
+	if !req.Confirmed {
+		return ExportReport{State: "confirm", Problem: "Writing files into your repository needs an explicit confirmation."}
+	}
+	if s.exec == nil {
+		return ExportReport{State: "unavailable", Problem: "This session has no deliberation to export."}
+	}
+	input, meta, ok := s.exec.approvedInput()
+	if !ok {
+		return ExportReport{State: "unavailable",
+			Problem: "Nothing to export yet: the plan has to be approved first."}
+	}
+	if req.ApprovalID != "" && req.ApprovalID != meta.ApprovalID {
+		return ExportReport{State: "mismatch",
+			Problem: "The window asked to export a different approval than the one this session holds."}
+	}
+	if s.repo == "" {
+		return ExportReport{State: "unavailable", Problem: "This session has no repository to write into."}
+	}
+
+	opts := s.bundleOptions()
+	bundle, berr := synthesizer.BuildBundle(input, meta, opts)
+	if berr != nil {
+		var collision *synthesizer.BundleCollision
+		if errors.As(berr, &collision) {
+			return ExportReport{State: "collision",
+				Problem: collision.Path + " already exists. A generated document never replaces one you wrote."}
+		}
+		return ExportReport{State: "blocked", Problem: berr.Error()}
+	}
+
+	store, serr := storage.NewArtifactStore(s.repo)
+	if serr != nil {
+		return ExportReport{State: "unavailable",
+			Problem: "This repository cannot hold generated documents: " + serr.Error()}
+	}
+	commit, cerr := store.CommitBundle(ctx, meta, bundle.Entries)
+	if cerr != nil {
+		return ExportReport{State: "failed", Problem: cerr.Error()}
+	}
+	return ExportReport{State: "exported", Committed: commit.Committed, Manifest: commit.ManifestPath}
+}
+
+// bundleOptions tells the builder what this project already has: the
+// directories it uses per kind, every file that already occupies a candidate
+// path, and the next free decision-record number. Supplying it means a
+// collision is found before the first write instead of after it.
+func (s *appSession) bundleOptions() synthesizer.BundleOptions {
+	opts := synthesizer.BundleOptions{
+		ExistingDirs:  map[synthesizer.DocumentKind][]string{},
+		ExistingFiles: map[string]string{},
+		NextADRNumber: s.nextADRNumber(),
+	}
+	for _, kind := range synthesizer.DocumentKindOrder {
+		opts.ExistingDirs[kind] = append(opts.ExistingDirs[kind], s.existingDirsFor(kind)...)
+	}
+	for _, dir := range candidateDirs(opts.ExistingDirs) {
+		names, err := os.ReadDir(filepath.Join(s.repo, filepath.FromSlash(dir)))
+		if err != nil {
+			continue
+		}
+		for _, entry := range names {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			opts.ExistingFiles[dir+"/"+entry.Name()] = ""
+		}
+	}
+	return opts
+}
+
+// existingDirsFor names the directories this project already uses for a kind,
+// most preferred first. A convention already in the repository wins over the
+// documented default, so generated documents land where a reader expects them.
+func (s *appSession) existingDirsFor(kind synthesizer.DocumentKind) []string {
+	var dirs []string
+	switch kind {
+	case synthesizer.KindPlan:
+		dirs = []string{"docs/plans", "docs/specs", "docs/design"}
+	case synthesizer.KindSpec:
+		dirs = []string{"docs/specs", "docs/specifications", "docs/design"}
+	case synthesizer.KindADR:
+		dirs = []string{"docs/adrs", "docs/decisions", "docs/adr"}
+	}
+	present := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		if info, err := os.Stat(filepath.Join(s.repo, filepath.FromSlash(dir))); err == nil && info.IsDir() {
+			present = append(present, dir)
+		}
+	}
+	return present
+}
+
+// candidateDirs is every directory an entry could land in, so a file already
+// sitting in a fallback location is still seen. The documented defaults are
+// always included.
+func candidateDirs(configured map[synthesizer.DocumentKind][]string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(dir string) {
+		if dir == "" || seen[dir] {
+			return
+		}
+		seen[dir] = true
+		out = append(out, dir)
+	}
+	for _, dirs := range configured {
+		for _, dir := range dirs {
+			add(dir)
+		}
+	}
+	for _, dir := range []string{"docs/plans", "docs/specs", "docs/adrs"} {
+		add(dir)
+	}
+	return out
+}
+
+// POST /api/documents/export writes the generated documents. It is separate
+// from GET /api/documents, which only lists what an export would write.
+func (s *appSession) handleDocumentsExport(w http.ResponseWriter, r *http.Request) {
+	if !s.owns() {
+		writeAPIError(w, http.StatusNotFound, "this session does not write documents")
+		return
+	}
+	var req ExportRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	report := s.ExportDocuments(r.Context(), req)
+	code := http.StatusOK
+	switch report.State {
+	case "failed", "blocked", "mismatch":
+		code = http.StatusConflict
+	}
+	writeJSON(w, code, report)
 }

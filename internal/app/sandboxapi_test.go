@@ -170,7 +170,7 @@ type stubDriver struct {
 	err      error
 }
 
-func (d stubDriver) RunRecipe(context.Context, string, recipe.Recipe, time.Time, time.Time) ([]sandbox.Receipt, error) {
+func (d stubDriver) RunRecipe(context.Context, string, sandbox.SourceArchive, recipe.Recipe, time.Time, time.Time) ([]sandbox.Receipt, error) {
 	return d.receipts, d.err
 }
 

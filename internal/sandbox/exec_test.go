@@ -147,7 +147,7 @@ func TestRunRecipeStopsAfterAFailingBuild(t *testing.T) {
 		Build:         recipe.Command{ID: "build", Argv: []string{"go", "build", "./..."}, TimeoutSeconds: 600},
 		Test:          recipe.Command{ID: "test", Argv: []string{"go", "test", "./..."}, TimeoutSeconds: 600},
 	}
-	receipts, err := e.RunRecipe(context.Background(), "sb-1", r, time.Now().Add(time.Hour), time.Now())
+	receipts, err := e.RunRecipe(context.Background(), "sb-1", testSource(), r, time.Now().Add(time.Hour), time.Now())
 	if err == nil {
 		t.Fatal("a failing build reported success")
 	}
@@ -171,7 +171,7 @@ func TestRunRecipeRequiresReadinessOnlyWithARunStep(t *testing.T) {
 		Build:         recipe.Command{ID: "build", Argv: []string{"go", "build", "./..."}, TimeoutSeconds: 60},
 		Test:          recipe.Command{ID: "test", Argv: []string{"go", "test", "./..."}, TimeoutSeconds: 60},
 	}
-	receipts, err := e.RunRecipe(context.Background(), "sb-1", base, time.Now().Add(time.Hour), time.Now())
+	receipts, err := e.RunRecipe(context.Background(), "sb-1", testSource(), base, time.Now().Add(time.Hour), time.Now())
 	if err != nil {
 		t.Fatalf("RunRecipe without a run step: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestRunRecipeRequiresReadinessOnlyWithARunStep(t *testing.T) {
 	withRun := base
 	withRun.Run = recipe.Command{ID: "run", Argv: []string{"npm", "run", "start"}, TimeoutSeconds: 60}
 	withRun.ReadinessProbe = []string{"curl", "-fsS", "http://127.0.0.1:8080"}
-	receipts, err = e.RunRecipe(context.Background(), "sb-1", withRun, time.Now().Add(time.Hour), time.Now())
+	receipts, err = e.RunRecipe(context.Background(), "sb-1", testSource(), withRun, time.Now().Add(time.Hour), time.Now())
 	if err != nil {
 		t.Fatalf("RunRecipe with a run step: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestRunRecipeRefusesAnExpiredLease(t *testing.T) {
 	e := newExecServer(t).executor()
 	now := time.Now()
 	r := recipe.Recipe{Build: recipe.Command{ID: "build", Argv: []string{"go", "build"}, TimeoutSeconds: 60}}
-	if _, err := e.RunRecipe(context.Background(), "sb-1", r, now.Add(10*time.Second), now); err == nil {
+	if _, err := e.RunRecipe(context.Background(), "sb-1", testSource(), r, now.Add(10*time.Second), now); err == nil {
 		t.Fatal("an expired lease ran a command")
 	}
 }

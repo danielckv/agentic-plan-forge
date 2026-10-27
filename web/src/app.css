@@ -4792,3 +4792,84 @@ figure > .pf-diagram-source { border-top: none; }
     width: 100%;
   }
 }
+
+/* Documents tab: the files a documents-only export would write, and the one
+   button that writes them. The list is a preview, so it is styled as a list of
+   paths rather than as something that already happened. */
+.pf-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel);
+}
+
+.pf-docs-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-docs-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--pf-muted);
+}
+
+.pf-docs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-docs-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--pf-panel-subtle);
+  font-size: 12px;
+}
+
+.pf-docs-file code {
+  color: var(--pf-ink-2);
+}
+
+.pf-docs-kind {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  color: var(--pf-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pf-docs-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pf-docs-result {
+  margin: 0;
+  font-size: 12px;
+  color: var(--pf-muted);
+}
+
+.pf-docs-ok {
+  color: var(--pf-ok);
+}
+
+.pf-docs-warn {
+  color: var(--pf-warn);
+}

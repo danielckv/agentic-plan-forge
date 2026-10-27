@@ -46,11 +46,17 @@ type sandboxManager struct {
 	// drive runs the recorded commands inside the lease. It is a field so a test
 	// can substitute a driver that never reaches a provider.
 	drive sandboxRun
+	// source is the packaged project from the last run, so the window can show
+	// what travelled to the VM.
+	source *SourceSummary
 }
 
-// sandboxRun runs one recipe in a created sandbox and returns its receipts.
+// sandboxRun runs one recipe in a created sandbox and returns its receipts. It
+// is one method so a test can substitute a driver that never reaches a
+// provider, and the upload cannot be skipped by a caller that runs the recipe
+// directly.
 type sandboxRun interface {
-	RunRecipe(ctx context.Context, sandboxID string, r recipe.Recipe, leaseExpiry, now time.Time) ([]sandbox.Receipt, error)
+	RunRecipe(ctx context.Context, sandboxID string, src sandbox.SourceArchive, r recipe.Recipe, leaseExpiry, now time.Time) ([]sandbox.Receipt, error)
 }
 
 // newSandboxManager resolves the provider settings once per session.
@@ -108,6 +114,17 @@ type LaunchReport struct {
 	Problem   string            `json:"problem,omitempty"`
 	Cleanup   string            `json:"cleanup,omitempty"`
 	Receipts  []sandbox.Receipt `json:"receipts,omitempty"`
+	// Source is what was packaged for the VM. It is in the report so the window
+	// can show exactly which files were built and which were left out, rather
+	// than asking the owner to trust that the right things travelled.
+	Source *SourceSummary `json:"source,omitempty"`
+}
+
+// SourceSummary is the packaged project, without the archive itself.
+type SourceSummary struct {
+	Files   int                  `json:"files"`
+	Bytes   int64                `json:"bytes"`
+	Skipped []sandbox.SourceSkip `json:"skipped,omitempty"`
 }
 
 // Launch creates one sandbox. It refuses without a confirmation, an approved
@@ -195,12 +212,18 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 // Run executes the recorded recipe in the created sandbox and records each
 // receipt on the lease. It is the only path that can move a lease to ready, and
 // it refuses to do so without a successful build, test and readiness receipt.
+//
+// The source is packaged and uploaded before the first command runs: a sandbox
+// with no project in it can only fail, and failing after the rent started is
+// the expensive order. A repository that cannot be packaged reports why and
+// spends nothing further.
 func (m *sandboxManager) Run(ctx context.Context, r recipe.Recipe) LaunchReport {
 	m.mu.Lock()
 	if m.lease.SandboxID == "" {
 		m.mu.Unlock()
 		return LaunchReport{State: "setup", Problem: "There is no sandbox to run in."}
 	}
+	repo := m.repo
 	driver := m.drive
 	sandboxID, expiry := m.lease.SandboxID, m.lease.ExpiresAt
 	m.lease.State = sandbox.StateTesting
@@ -212,7 +235,17 @@ func (m *sandboxManager) Run(ctx context.Context, r recipe.Recipe) LaunchReport 
 		m.lease = m.lease.MarkFailed("no execution driver is configured for this build")
 		return m.report()
 	}
-	receipts, err := driver.RunRecipe(ctx, sandboxID, r, expiry, time.Now())
+	src, perr := sandbox.PackageSource(sandbox.SourceOptions{Root: repo, Include: recipeFilePaths(r)})
+	if perr != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.lease = m.lease.MarkFailed("the project could not be packaged: " + perr.Error())
+		return m.report()
+	}
+	m.mu.Lock()
+	m.source = &SourceSummary{Files: src.Files, Bytes: src.Bytes, Skipped: src.Skipped}
+	m.mu.Unlock()
+	receipts, err := driver.RunRecipe(ctx, sandboxID, src, r, expiry, time.Now())
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -268,6 +301,7 @@ func (m *sandboxManager) report() LaunchReport {
 		ExpiresAt: m.lease.ExpiresAt,
 		Problem:   m.lease.LastError,
 		Receipts:  m.lease.Receipts,
+		Source:    m.source,
 	}
 	if m.lease.State == sandbox.StateReady && m.lease.SandboxID != "" {
 		r.Preview = "/preview/"
@@ -309,4 +343,37 @@ func previewOrigin(host string) func(*http.Request) bool {
 		}
 		return strings.EqualFold(u.Host, host)
 	}
+}
+
+// recipeFilePaths names the scripts the recipe executes, so the packager keeps
+// them even when they sit in a directory it would otherwise drop. A recipe that
+// runs a script the archive does not carry would fail on the VM for a reason
+// nobody can see from the window.
+func recipeFilePaths(r recipe.Recipe) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, cmd := range []recipe.Command{r.Build, r.Test, r.Run} {
+		for _, arg := range cmd.Argv {
+			clean := strings.TrimPrefix(strings.TrimSpace(arg), "./")
+			if clean == "" || strings.HasPrefix(clean, "-") || seen[clean] {
+				continue
+			}
+			if !strings.Contains(clean, "/") && !strings.HasSuffix(clean, ".sh") {
+				continue
+			}
+			if !strings.Contains(clean, ".") {
+				continue
+			}
+			seen[clean] = true
+			out = append(out, clean)
+		}
+	}
+	for _, probe := range r.ReadinessProbe {
+		clean := strings.TrimPrefix(strings.TrimSpace(probe), "./")
+		if clean != "" && !strings.HasPrefix(clean, "-") && !seen[clean] && strings.Contains(clean, "/") {
+			seen[clean] = true
+			out = append(out, clean)
+		}
+	}
+	return out
 }

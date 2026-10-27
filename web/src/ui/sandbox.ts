@@ -53,6 +53,19 @@ export interface SandboxReceipt {
   ExitCode: number;
 }
 
+/** One path the packager refused (`sandbox.SourceSkip`). */
+export interface SourceSkip {
+  path: string;
+  reason: string;
+}
+
+/** What was packaged for the VM (`app.SourceSummary`). */
+export interface SourceSummary {
+  files: number;
+  bytes: number;
+  skipped?: SourceSkip[];
+}
+
 /** GET/POST /api/sandbox (`app.LaunchReport`). */
 export interface LaunchReport {
   state: string;
@@ -62,6 +75,7 @@ export interface LaunchReport {
   problem?: string;
   cleanup?: string;
   receipts?: SandboxReceipt[];
+  source?: SourceSummary;
 }
 
 /** The states in which the sandbox is doing something or can be used. */
@@ -183,4 +197,19 @@ export function useSandbox(enabled: boolean): {
     launch: (body) => post("/api/sandbox/launch", body),
     stop: () => post("/api/sandbox/stop"),
   };
+}
+
+/**
+ * sourceSummary is the one line the window shows for what travelled to the VM.
+ * A run with no source is said plainly: a sandbox with no project in it can
+ * only fail, and the owner should learn that before paying for a retry.
+ */
+export function sourceSummary(report: LaunchReport | null): string | null {
+  const src = report?.source;
+  if (src === undefined) return null;
+  const size = src.bytes >= 1024 * 1024 ? `${(src.bytes / (1024 * 1024)).toFixed(1)} MB` : `${String(Math.max(1, Math.round(src.bytes / 1024)))} KB`;
+  const skipped = src.skipped?.length ?? 0;
+  const base = `Uploaded ${String(src.files)} file${src.files === 1 ? "" : "s"} (${size})`;
+  if (skipped === 0) return base;
+  return `${base}; ${String(skipped)} left out.`;
 }

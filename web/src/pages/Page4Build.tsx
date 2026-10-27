@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { DocumentsPanel } from "./DocumentsPanel";
 import {
   CircleCheck,
   FileCode,
+  FileText,
   LoaderCircle,
   Monitor,
   RefreshCw,
@@ -35,7 +37,7 @@ import { toastStore } from "../ui/toasts";
  */
 export function Page4Build(): React.ReactElement {
   const { view, refresh } = useBuild(true);
-  const [tab, setTab] = useState<"code" | "preview">("code");
+  const [tab, setTab] = useState<"code" | "preview" | "documents">("code");
   const [target, setTarget] = useState<DeployTargetView | null>(null);
   const [askOpen, setAskOpen] = useState(false);
 
@@ -126,9 +128,20 @@ export function Page4Build(): React.ReactElement {
         >
           <Monitor size={14} /> Preview
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "documents"}
+          className="pf-build-tab"
+          onClick={() => setTab("documents")}
+        >
+          <FileText size={14} /> Documents
+        </button>
       </nav>
 
-      {tab === "code" ? <CodeTab view={view} /> : <PreviewTab view={view} act={act} />}
+      {tab === "code" && <CodeTab view={view} />}
+      {tab === "preview" && <PreviewTab view={view} act={act} />}
+      {tab === "documents" && <DocumentsPanel />}
 
       <DeployBar view={view} target={target} onChange={chooseTarget} onAsk={() => setAskOpen(true)} act={act} />
 

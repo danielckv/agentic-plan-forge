@@ -189,13 +189,22 @@ func (e *Executor) Ready(ctx context.Context, sandboxID string, probe []string, 
 // RunRecipe runs build, then test, then readiness. It stops at the first
 // failure and returns every receipt it collected, so the window can show exactly
 // how far the run got.
-func (e *Executor) RunRecipe(ctx context.Context, sandboxID string, r recipe.Recipe, leaseExpiry, now time.Time) ([]Receipt, error) {
+func (e *Executor) RunRecipe(ctx context.Context, sandboxID string, src SourceArchive, r recipe.Recipe, leaseExpiry, now time.Time) ([]Receipt, error) {
 	if !validSandboxID(sandboxID) {
 		return nil, fmt.Errorf("sandbox exec: %q is not a sandbox id", sandboxID)
 	}
 	remaining := leaseExpiry.Sub(now) - leaseMargin
 	if remaining <= 0 {
 		return nil, errors.New("sandbox exec: the lease has no time left for a command")
+	}
+
+	// The project lands before the first command: a sandbox with no source in
+	// it can only fail, and the rent has already started.
+	if len(src.Data) == 0 {
+		return nil, errors.New("sandbox exec: there is no packaged source to upload")
+	}
+	if err := e.Upload(ctx, sandboxID, src.Data, "."); err != nil {
+		return nil, fmt.Errorf("sandbox exec: upload the project: %w", err)
 	}
 
 	var receipts []Receipt
