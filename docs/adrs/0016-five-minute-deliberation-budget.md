@@ -78,6 +78,14 @@ it snaps the field to the architect's schema. Genuine alternative schemas (such 
 against `"text/csv; header=present"`) do not contain the architect's schema and still open a human
 decision card.
 
+**Map OMP `modelRoles` to Plan Forge avatar roles and index `provider/id` selectors.** When an avatar
+lands on `omp` with no explicit `role_models` or matching slot model in `config.json`, `OMP.RoleModel`
+reads `modelRoles` from `~/.omp/agent/config.yml` and `.omp/config.yml` (skipping entries whose
+provider is in `disabledProviders`) instead of sending every call to `modelRoles.default`. `architect`
+uses `plan`, `critic` uses `judge`, `pm` uses `advisor`, `ingestion`/`impact`/`narrator` use `smol`,
+and concurrent `specialist` lanes rotate across `task`, `worker`, `slow` and `explore`. `parseModelRefs`
+filters `"kind": "chat"` and indexes both `id` and `selector` (`provider/id`).
+
 ## Consequences
 
 Resolving N ambiguity chips on Page 1 now makes 0 `ingestion` calls and 0 `impact` calls instead of N
@@ -94,5 +102,7 @@ Verified by `TestApplyResolutionsReusesBaseWithoutModelCalls`,
 `TestAmbiguityResolutionsReuseNormalizedBaseWithoutModelCalls`,
 `TestBackgroundInterpretPublishesLexicalImpactWhileReinterpretRunsModel`,
 `TestArchitectValidateDesignCapsWorkstreamsAtFour`,
-`TestCompareInterfacesAutoAlignsRestatedSchemaWithMatchingVersionHash`, and
-`TestSpecialistClaimPrependingSignatureAutoAlignsWithoutDecisionPrompt`.
+`TestCompareInterfacesAutoAlignsRestatedSchemaWithMatchingVersionHash`,
+`TestSpecialistClaimPrependingSignatureAutoAlignsWithoutDecisionPrompt`,
+`TestOMPParseModelRefsFiltersChatAndIndexesSelector`, and
+`TestOMPModelRolesMapsRolesAndRotatesSpecialists`.

@@ -258,7 +258,7 @@ func (r *Router) PlaceRole(ctx context.Context, role contracts.RoleID, lane stri
 		Kind:    resolved.adapter.Kind(),
 		Version: resolved.version,
 	}
-	p.Model = r.modelForRoleLocked(ctx, role, slot, p.Kind)
+	p.Model = r.modelForRoleLocked(ctx, role, lane, slot, p.Kind)
 	r.byRole[key] = p
 	return p, nil
 }
@@ -463,13 +463,20 @@ func rotate(order []Kind, by int) []Kind {
 // applies only to a host that actually lists it: "opus" means nothing to OMP,
 // and sending it there is the 404 ADR 0004 traced. A host that lists no match
 // is left to its own default.
-func (r *Router) modelForRoleLocked(ctx context.Context, role contracts.RoleID, slot contracts.ModelSlot, kind Kind) string {
+func (r *Router) modelForRoleLocked(ctx context.Context, role contracts.RoleID, lane string, slot contracts.ModelSlot, kind Kind) string {
 	if b, ok := r.cfg.RoleBindingFor(string(role)); ok && b.Model != "" {
 		return b.Model
 	}
 	want := r.modelForSlot(slot)
-	if want == "" || r.hostListsModelLocked(ctx, kind, want) {
+	if want != "" && r.hostListsModelLocked(ctx, kind, want) {
 		return want
+	}
+	if rm, ok := r.adapters[kind].(interface {
+		RoleModel(role contracts.RoleID, lane string) string
+	}); ok {
+		if m := rm.RoleModel(role, lane); m != "" {
+			return m
+		}
 	}
 	return ""
 }
@@ -498,7 +505,13 @@ func (r *Router) hostListsModelLocked(ctx context.Context, kind Kind, id string)
 	if known == nil {
 		return true
 	}
-	return known[id]
+	if known[id] {
+		return true
+	}
+	if base, _, ok := strings.Cut(id, ":"); ok && known[base] {
+		return true
+	}
+	return false
 }
 
 func (r *Router) judgeCandidates() []Kind {

@@ -176,3 +176,65 @@ func (a *routingAdapter) Generate(context.Context, contracts.GenerateRequest, fu
 	result := contracts.GenerationResult{Receipt: contracts.ToolFreeReceipt{Host: string(a.kind), Version: a.version}}
 	return result, a.generateErr
 }
+
+func TestOMPParseModelRefsFiltersChatAndIndexesSelector(t *testing.T) {
+	raw := []byte(`[
+		{"id":"glm-5.3","selector":"fireworks/glm-5.3","name":"GLM 5.3","kind":"chat"},
+		{"id":"flux-pro","selector":"fal/flux-pro","name":"Flux Pro","kind":"image"}
+	]`)
+	refs, err := parseModelRefs(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range refs {
+		got[r.ID] = true
+	}
+	if !got["glm-5.3"] || !got["fireworks/glm-5.3"] {
+		t.Fatalf("expected chat id and selector, got %v", refs)
+	}
+	if got["flux-pro"] || got["fal/flux-pro"] {
+		t.Fatalf("non-chat model should be filtered out, got %v", refs)
+	}
+}
+
+func TestOMPModelRolesMapsRolesAndRotatesSpecialists(t *testing.T) {
+	yaml := []byte(strings.Join([]string{
+		"disabledProviders: [cursor, google-antigravity]",
+		"modelRoles:",
+		"    default: anthropic/claude-opus-5-5:xhigh",
+		"    smol: together/zai-org/GLM-5.3-Flash:high",
+		"    slow: fireworks/glm-5.3:xhigh",
+		"    plan: openai-codex/gpt-6-astra:xhigh",
+		"    task: anthropic/claude-sonnet-5-5:high",
+		"    designer: google-antigravity/gemini-3.1-pro-high:high",
+		"    judge: fireworks/kimi-k3:high",
+		"    worker: fireworks/deepseek-v4.1-flash-1017:high",
+		"    advisor: openai-codex/gpt-5.6-sol:high",
+	}, "\n"))
+	roles, err := parseOMPYAMLModelRoles(yaml)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled := map[string]bool{"google-antigravity": true}
+	if got := ompRoleModelFromMap(roles, disabled, contracts.RoleArchitect, ""); got != "openai-codex/gpt-6-astra:xhigh" {
+		t.Fatalf("architect model = %q, want plan role model", got)
+	}
+	if got := ompRoleModelFromMap(roles, disabled, contracts.RoleCritic, ""); got != "fireworks/kimi-k3:high" {
+		t.Fatalf("critic model = %q, want judge role model", got)
+	}
+	if got := ompRoleModelFromMap(roles, disabled, contracts.RoleIngestion, ""); got != "together/zai-org/GLM-5.3-Flash:high" {
+		t.Fatalf("ingestion model = %q, want smol role model", got)
+	}
+	seen := map[string]bool{}
+	for _, lane := range []string{"ws-a", "ws-b", "ws-c", "ws-d"} {
+		m := ompRoleModelFromMap(roles, disabled, contracts.RoleSpecialist, lane)
+		if m == "" || strings.HasPrefix(m, "google-antigravity/") {
+			t.Fatalf("specialist lane %s picked invalid or disabled model %q", lane, m)
+		}
+		seen[m] = true
+	}
+	if len(seen) < 2 {
+		t.Fatalf("expected specialist lanes to spread across OMP role models, got %v", seen)
+	}
+}

@@ -83,6 +83,16 @@ func (a *OMP) Models(ctx context.Context) ([]ModelRef, error) {
 	return parseModelRefs(stdout)
 }
 
+// RoleModel returns the OMP model selector configured for role in the user's
+// OMP modelRoles map when Plan Forge has no explicit model override.
+func (a *OMP) RoleModel(role contracts.RoleID, lane string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return effectiveOMPRoleModel(cwd, role, lane)
+}
+
 func (a *OMP) Preflight(ctx context.Context) error {
 	if _, err := a.Detect(ctx); err != nil {
 		return err
@@ -262,13 +272,17 @@ func parseModelRefs(raw []byte) ([]ModelRef, error) {
 				walk(child)
 			}
 		case map[string]any:
+			kind := firstString(typed, "kind")
 			id := firstString(typed, "id", "model_id", "modelId", "value")
-			if id != "" {
+			if id != "" && (kind == "" || kind == "chat") {
 				label := firstString(typed, "label", "name", "display_name", "displayName")
 				if label == "" {
 					label = id
 				}
 				models[id] = ModelRef{ID: id, Label: label}
+				if selector := firstString(typed, "selector"); selector != "" && selector != id {
+					models[selector] = ModelRef{ID: selector, Label: label}
+				}
 			}
 			for _, child := range typed {
 				walk(child)

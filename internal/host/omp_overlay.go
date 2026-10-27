@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 )
 
 var mandatoryOMPDisabledProviders = []string{
@@ -274,4 +276,188 @@ func parseYAMLScalar(value string) (string, error) {
 		return "", fmt.Errorf("unsupported character in disabledProviders entry %q", value)
 	}
 	return value, nil
+}
+
+func effectiveOMPRoleModel(cwd string, role contracts.RoleID, lane string) string {
+	roles, err := effectiveOMPModelRoles(cwd)
+	if err != nil || len(roles) == 0 {
+		return ""
+	}
+	disabled := make(map[string]bool, len(mandatoryOMPDisabledProviders))
+	for _, p := range mandatoryOMPDisabledProviders {
+		disabled[strings.TrimSpace(p)] = true
+	}
+	if userDisabled, err := effectiveOMPDisabledProviders(cwd); err == nil {
+		for _, p := range userDisabled {
+			disabled[strings.TrimSpace(p)] = true
+		}
+	}
+	return ompRoleModelFromMap(roles, disabled, role, lane)
+}
+
+func ompRoleModelFromMap(roles map[string]string, disabled map[string]bool, role contracts.RoleID, lane string) string {
+	enabled := func(selector string) bool {
+		selector = strings.TrimSpace(selector)
+		if selector == "" {
+			return false
+		}
+		if provider, _, ok := strings.Cut(selector, "/"); ok && disabled[provider] {
+			return false
+		}
+		return true
+	}
+	firstEnabled := func(keys ...string) string {
+		for _, k := range keys {
+			if m := strings.TrimSpace(roles[k]); enabled(m) {
+				return m
+			}
+		}
+		return ""
+	}
+	switch role {
+	case contracts.RoleArchitect:
+		return firstEnabled("plan", "slow", "default")
+	case contracts.RoleSpecialist:
+		seen := make(map[string]bool)
+		var candidates []string
+		for _, k := range []string{"task", "worker", "slow", "explore", "plan", "default"} {
+			m := strings.TrimSpace(roles[k])
+			if enabled(m) && !seen[m] {
+				seen[m] = true
+				candidates = append(candidates, m)
+			}
+		}
+		if len(candidates) == 0 {
+			return ""
+		}
+		return candidates[laneOffset(lane)%len(candidates)]
+	case contracts.RoleCritic:
+		return firstEnabled("judge", "review", "audit", "slow", "default")
+	case contracts.RoleProductManager:
+		return firstEnabled("advisor", "plan", "task", "default")
+	case contracts.RoleSynthesizer:
+		return firstEnabled("task", "advisor", "plan", "default")
+	case contracts.RoleIngestion, contracts.RoleImpact, contracts.RoleNarrator:
+		return firstEnabled("smol", "assistant", "worker", "task", "default")
+	default:
+		return firstEnabled("default")
+	}
+}
+
+func effectiveOMPModelRoles(cwd string) (map[string]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string)
+	for _, path := range []string{
+		filepath.Join(home, ".omp", "agent", "config.yml"),
+		filepath.Join(home, ".omp", "agent", "config.yaml"),
+		filepath.Join(home, ".omp", "agent", "settings.json"),
+	} {
+		roles, exists, err := readOMPModelRoles(path)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			for k, v := range roles {
+				out[k] = v
+			}
+			break
+		}
+	}
+	projectDir := filepath.Join(cwd, ".omp")
+	for _, name := range []string{"settings.json", "config.yml", "config.yaml"} {
+		roles, exists, err := readOMPModelRoles(filepath.Join(projectDir, name))
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			for k, v := range roles {
+				out[k] = v
+			}
+		}
+	}
+	return out, nil
+}
+
+func readOMPModelRoles(path string) (map[string]string, bool, error) {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > 1<<20 {
+		return nil, true, nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, true, err
+	}
+	if strings.HasSuffix(strings.ToLower(path), ".json") {
+		roles, err := parseOMPJSONModelRoles(raw)
+		return roles, true, err
+	}
+	roles, err := parseOMPYAMLModelRoles(raw)
+	return roles, true, err
+}
+
+func parseOMPJSONModelRoles(raw []byte) (map[string]string, error) {
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return nil, err
+	}
+	section, ok := root["modelRoles"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	out := make(map[string]string, len(section))
+	for k, v := range section {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			out[strings.TrimSpace(k)] = strings.TrimSpace(s)
+		}
+	}
+	return out, nil
+}
+
+func parseOMPYAMLModelRoles(raw []byte) (map[string]string, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	scanner.Buffer(make([]byte, 64<<10), 1<<20)
+	inSection := false
+	sectionIndent := 0
+	out := make(map[string]string)
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), " \t\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if !inSection {
+			if indent == 0 && strings.HasPrefix(trimmed, "modelRoles:") {
+				inSection = true
+				sectionIndent = indent
+			}
+			continue
+		}
+		if indent <= sectionIndent {
+			break
+		}
+		withoutComment := strings.TrimSpace(strings.SplitN(trimmed, " #", 2)[0])
+		key, val, ok := strings.Cut(withoutComment, ":")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.Trim(strings.TrimSpace(val), `"'`)
+		if key != "" && val != "" && val != "null" {
+			out[key] = val
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
