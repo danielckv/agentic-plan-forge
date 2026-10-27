@@ -64,9 +64,15 @@ type pump struct {
 	q      []relay.WSEnvelope
 	wake   chan struct{}
 	closed bool
-	// resync is set when an essential event could not be kept. The room reads
-	// it to publish a snapshot instead of pretending the stream was complete.
+	// resync is set when an essential event could not be kept, or when so many
+	// disposable events were dropped in a row that the consumer is evidently
+	// not draining. The room reads it to publish a snapshot instead of
+	// pretending the stream was complete.
 	resync bool
+	// dropped counts consecutive disposals since the consumer last took an
+	// event. A few are normal coalescing; an unbroken run means the reader is
+	// stuck, and the window has to resynchronise.
+	dropped int
 }
 
 // maxPumped bounds the queue. It is generous next to the window's own 256-deep
@@ -87,10 +93,17 @@ func (p *pump) push(env relay.WSEnvelope) bool {
 		p.mu.Unlock()
 		return false
 	}
-	if len(p.q) >= maxPumpEvents && !p.dropOldestDisposableLocked() {
-		p.resync = true
-		p.mu.Unlock()
-		return false
+	if len(p.q) >= maxPumpEvents {
+		switch {
+		case !p.dropOldestDisposableLocked():
+			p.resync = true
+			p.mu.Unlock()
+			return false
+		case p.dropped >= maxDroppedInARow:
+			p.resync = true
+			p.mu.Unlock()
+			return false
+		}
 	}
 	p.q = append(p.q, env)
 	p.mu.Unlock()
@@ -131,6 +144,7 @@ func (p *pump) dropOldestDisposableLocked() bool {
 			copy(p.q[i:], p.q[i+1:])
 			p.q[len(p.q)-1] = relay.WSEnvelope{}
 			p.q = p.q[:len(p.q)-1]
+			p.dropped++
 			return true
 		}
 	}
@@ -146,6 +160,8 @@ func (p *pump) next(ctx context.Context) (relay.WSEnvelope, bool) {
 			env := p.q[0]
 			p.q[0] = relay.WSEnvelope{}
 			p.q = p.q[1:]
+			// The consumer is draining again, so the run of drops ends here.
+			p.dropped = 0
 			p.mu.Unlock()
 			return env, true
 		}

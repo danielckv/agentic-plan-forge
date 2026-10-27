@@ -27,6 +27,7 @@ func writeRepo(t *testing.T, files map[string]string) string {
 
 func mustScan(t *testing.T, root string, opts Options) Inventory {
 	t.Helper()
+	opts.Root = root
 	inv, err := Scan(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)

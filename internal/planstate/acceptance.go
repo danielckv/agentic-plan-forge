@@ -166,16 +166,20 @@ func ImplementationAcceptance(repo, approvalID, headSHA string) (entry Acceptanc
 	if err != nil {
 		return AcceptanceEntry{}, false, false, err
 	}
+	// Scan every record for this approval: two revisions of one approval are
+	// both genuine decisions, so a different revision seen first must not shadow
+	// the one that was asked for. Stale is reported only after the scan.
+	staleFound := false
 	for _, record := range ledger.Accepted {
 		if record.Repository != repoPath || record.ApprovalID != approvalID {
 			continue
 		}
-		if headSHA != "" && record.HeadSHA != headSHA {
-			return AcceptanceEntry{}, false, true, nil
+		if headSHA == "" || record.HeadSHA == headSHA {
+			return record, true, false, nil
 		}
-		return record, true, false, nil
+		staleFound = true
 	}
-	return AcceptanceEntry{}, false, false, nil
+	return AcceptanceEntry{}, false, staleFound, nil
 }
 
 // RecordProductSignoff records that the product owner signed off one revision of

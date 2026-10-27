@@ -17,11 +17,12 @@ import (
 // that is not GitHub is reported instead of silently producing a wrong name.
 
 // remoteSlugPatterns accepts the remote forms git actually stores: an ssh URL,
-// a scp-like shorthand and an https URL.
+// a scp-like shorthand and an https URL. The host must be github.com: a GitLab
+// or self-hosted remote has an owner/name pair that looks identical, and using
+// it would read a different server's pull request.
 var remoteSlugPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`^(?:ssh://)?git@[^/:]+[:/]([^/]+/[^/]+?)(?:\.git)?/?$`),
-	regexp.MustCompile(`^https?://[^/]+/([^/]+/[^/]+?)(?:\.git)?/?$`),
-	regexp.MustCompile(`^git://[^/]+/([^/]+/[^/]+?)(?:\.git)?/?$`),
+	regexp.MustCompile(`^(?:ssh://)?git@github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$`),
+	regexp.MustCompile(`^(?:ssh://git@|https?://|git://)(?:[^@/]+@)?(?:www\.)?github\.com/([^/]+/[^/]+?)(?:\.git)?/?$`),
 }
 
 // githubSlugTimeout bounds one read of the repository's remote configuration.

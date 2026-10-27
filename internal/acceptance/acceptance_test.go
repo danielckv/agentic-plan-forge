@@ -257,20 +257,21 @@ func TestEvaluateUnknownNeverAccepted(t *testing.T) {
 }
 
 func TestEvidenceHashStability(t *testing.T) {
-	base := okEvidence()
-	a, err := base.Hash()
-	if err != nil {
-		t.Fatalf("Hash: %v", err)
+	// Review order must not change the hash. Both sets hold the same two
+	// reviews, listed the other way round.
+	first := okEvidence()
+	first.Reviews = []Review{
+		{Reviewer: "dev-bob", State: ReviewStateApproved, CommitSHA: head, AuthorPermission: "write"},
+		{Reviewer: "dev-carol", State: ReviewStateCommented, CommitSHA: head, AuthorPermission: "write"},
 	}
-	// Field order of reviews must not change the hash.
 	reordered := okEvidence()
 	reordered.Reviews = []Review{
 		{Reviewer: "dev-carol", State: ReviewStateCommented, CommitSHA: head, AuthorPermission: "write"},
 		{Reviewer: "dev-bob", State: ReviewStateApproved, CommitSHA: head, AuthorPermission: "write"},
 	}
-	base.Reviews = []Review{
-		{Reviewer: "dev-bob", State: ReviewStateApproved, CommitSHA: head, AuthorPermission: "write"},
-		{Reviewer: "dev-carol", State: ReviewStateCommented, CommitSHA: head, AuthorPermission: "write"},
+	a, err := first.Hash()
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
 	}
 	b, err := reordered.Hash()
 	if err != nil {
@@ -280,8 +281,7 @@ func TestEvidenceHashStability(t *testing.T) {
 		t.Fatal("hash changed when review order changed")
 	}
 	// Re-evaluating identical evidence is stable.
-	c, err := base.Hash()
-	if err != nil || c != a {
+	if c, err := first.Hash(); err != nil || c != a {
 		t.Fatal("hash is not stable for identical evidence")
 	}
 }

@@ -66,12 +66,20 @@ func rootFileMatch(name string) bool {
 	return false
 }
 
-// docID derives the opaque document ID: the first 16 lowercase hex characters
-// of the SHA-256 of the slash-separated repository-relative path. Equal
-// paths collide identically and no two distinct paths share an ID.
-func docID(rel string) string {
+// docID derives the opaque document ID from its path *and* its content: the
+// first 8 hex characters of the path digest, then the first 8 of the content
+// digest. Binding the bytes into the identity is what lets Open report a
+// document that changed after the inventory was taken — with the path alone the
+// ID would still match and the stale content would be served as current.
+func docID(rel, contentSHA string) string {
+	pathSum := sha256.Sum256([]byte(rel))
+	return hex.EncodeToString(pathSum[:])[:idHexLen/2] + contentSHA[:idHexLen/2]
+}
+
+// pathPrefix is the part of an ID that identifies the document's path.
+func pathPrefix(rel string) string {
 	sum := sha256.Sum256([]byte(rel))
-	return hex.EncodeToString(sum[:])[:idHexLen]
+	return hex.EncodeToString(sum[:])[:idHexLen/2]
 }
 
 // buildDocument parses one document's raw bytes into its index entry. The
@@ -81,7 +89,7 @@ func docID(rel string) string {
 // takes part.
 func buildDocument(rel string, raw []byte) (Document, []Item) {
 	doc := Document{
-		ID:       docID(rel),
+		ID:       docID(rel, hashBytes(raw)),
 		Path:     rel,
 		Kind:     classify(rel),
 		SHA256:   hashBytes(raw),

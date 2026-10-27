@@ -52,6 +52,7 @@ func TestDeriveGoOnly(t *testing.T) {
 	if !f.GoMod {
 		t.Fatal("Detect missed go.mod")
 	}
+	f.Revision = "abc123"
 	r, err := Derive(f)
 	if !errors.Is(err, ErrNoRunCommand) {
 		t.Fatalf("Derive err = %v, want ErrNoRunCommand (no run asset in a bare Go tree)", err)
@@ -92,6 +93,7 @@ func TestDeriveNodeReusesPackageScripts(t *testing.T) {
 	if !f.PackageJSON || f.PackageScripts["build"] != "vite build" {
 		t.Fatalf("Detect lost scripts: %+v", f.PackageScripts)
 	}
+	f.Revision = "abc123"
 	r, err := Derive(f)
 	if err != nil {
 		t.Fatalf("Derive: %v", err)
@@ -120,9 +122,10 @@ func TestDeriveMakefileTargetsWin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect: %v", err)
 	}
+	f.Revision = "abc123"
 	r, err := Derive(f)
-	if err != nil {
-		t.Fatalf("Derive: %v", err)
+	if !errors.Is(err, ErrNoRunCommand) {
+		t.Fatalf("Derive err = %v, want ErrNoRunCommand (no run asset)", err)
 	}
 	if got := strings.Join(r.Build.Argv, " "); got != "make build" {
 		t.Errorf("build = %q, want make build", got)
@@ -145,6 +148,7 @@ func TestDeriveMissingTestCommandIsErrorNotFakePass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect: %v", err)
 	}
+	f.Revision = "abc123"
 	r, err := Derive(f)
 	if !errors.Is(err, ErrNoTestCommand) {
 		t.Fatalf("Derive err = %v, want ErrNoTestCommand", err)
@@ -163,6 +167,7 @@ func TestDeriveMissingRunCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect: %v", err)
 	}
+	f.Revision = "abc123"
 	r, err := Derive(f)
 	if !errors.Is(err, ErrNoRunCommand) {
 		t.Fatalf("Derive err = %v, want ErrNoRunCommand", err)
@@ -184,6 +189,7 @@ func TestDeriveComposeRunWhenNoStartScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect: %v", err)
 	}
+	f.Revision = "abc123"
 	r, err := Derive(f)
 	if err != nil {
 		t.Fatalf("Derive: %v", err)
@@ -196,6 +202,7 @@ func TestDeriveComposeRunWhenNoStartScript(t *testing.T) {
 func TestHashStableAcrossMapOrdering(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "go.mod", "module example.com/app\n\ngo 1.27\n")
+	writeFile(t, root, "go.sum", "")
 	writeFile(t, root, "package.json", `{"scripts":{"build":"x","test":"y","start":"z","lint":"w"}}`)
 
 	a := goOnlyFacts(root)
@@ -204,10 +211,12 @@ func TestHashStableAcrossMapOrdering(t *testing.T) {
 	b := goOnlyFacts(root)
 	b.PackageJSON = true
 	b.PackageScripts = map[string]string{"lint": "w", "start": "z", "test": "y", "build": "x"}
+	a.Revision = "abc123"
 	ra, err := Derive(a)
 	if err != nil {
 		t.Fatalf("Derive a: %v", err)
 	}
+	b.Revision = "abc123"
 	rb, err := Derive(b)
 	if err != nil {
 		t.Fatalf("Derive b: %v", err)
@@ -250,7 +259,10 @@ func TestValidateRejects(t *testing.T) {
 		{"empty argv", func(r *Recipe) { r.Build.Argv = nil }, "empty argv"},
 		{"timeout 0", func(r *Recipe) { r.Test.TimeoutSeconds = 0 }, "outside 1..3600"},
 		{"timeout 3601", func(r *Recipe) { r.Test.TimeoutSeconds = 3601 }, "outside 1..3600"},
-		{"bad port", func(r *Recipe) { r.RuntimePort = 0 }, "port"},
+		{"run without a port", func(r *Recipe) {
+			r.Run = Command{ID: "run", Argv: []string{"./app"}, TimeoutSeconds: 60}
+			r.ReadinessProbe = []string{"tcp", "8080"}
+		}, "port"},
 		{"port 70000", func(r *Recipe) { r.RuntimePort = 70000 }, "port"},
 		{"duplicate IDs", func(r *Recipe) { r.Run = r.Build }, "duplicate command ID"},
 		{"env value", func(r *Recipe) { r.EnvNames = []string{"GITHUB_TOKEN=ghp_x"} }, "value"},
@@ -305,6 +317,7 @@ func TestCheckFresh(t *testing.T) {
 	f := goOnlyFacts(root)
 	f.PackageJSON = true
 	f.PackageScripts = map[string]string{"start": "node server.js"}
+	f.Revision = "abc123"
 	r, err := Derive(f)
 	if err != nil {
 		t.Fatalf("Derive: %v", err)
@@ -395,17 +408,15 @@ func TestDeriveWebPackageScripts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect: %v", err)
 	}
+	f.Revision = "abc123"
 	r, err := Derive(f)
-	if err != nil {
-		t.Fatalf("Derive: %v", err)
+	if !errors.Is(err, ErrNoRunCommand) {
+		t.Fatalf("Derive err = %v, want ErrNoRunCommand (no start script)", err)
 	}
-	if got := strings.Join(r.Build.Argv, " "); got != "npm --prefix web run build" {
-		t.Errorf("build = %q, want npm --prefix web run build", got)
+	if got := strings.Join(r.Build.Argv, " "); got != "npm run build" {
+		t.Errorf("build = %q, want npm run build", got)
 	}
 	if r.Build.Dir != "web" {
 		t.Errorf("build dir = %q, want web", r.Build.Dir)
-	}
-	if err := r.Validate(); err != nil {
-		t.Errorf("Validate: %v", err)
 	}
 }

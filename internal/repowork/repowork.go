@@ -397,8 +397,14 @@ func (s *scanner) file(rel string) {
 
 // Open resolves an ID produced by Scan, re-reads that exact file with the
 // same symlink and traversal checks the scan applies, and verifies its bytes
-// against the indexed hash. An unknown or malformed ID returns ErrNotFound;
-// content that no longer matches the scan returns ErrChanged.
+// against the content half of the ID. An unknown or malformed ID returns
+// ErrNotFound; content that no longer matches the scan returns ErrChanged.
+//
+// The scan is the only way to learn which path an ID belongs to, so it runs
+// against a bounded budget and the path is then re-verified against the
+// content half of the ID. A document whose bytes changed gets a different ID,
+// so the caller is told the page is stale instead of being handed new bytes
+// under an old heading.
 func Open(ctx context.Context, root, id string) (Document, []byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -416,15 +422,22 @@ func Open(ctx context.Context, root, id string) (Document, []byte, error) {
 	if err != nil {
 		return Document{}, nil, err
 	}
+	// The path digest is half the ID: it narrows the search to one document
+	// even after its content changed, which is what makes the changed case
+	// reportable rather than merely "not found".
 	for _, d := range inv.Documents {
-		if d.ID != id {
-			continue
+		if d.ID == id {
+			content, err := readVerified(root, d.Path, d.SHA256)
+			if err != nil {
+				return Document{}, nil, err
+			}
+			return d, content, nil
 		}
-		content, err := readVerified(root, d.Path, d.SHA256)
-		if err != nil {
-			return Document{}, nil, err
+	}
+	for _, d := range inv.Documents {
+		if pathPrefix(d.Path) == id[:idHexLen/2] {
+			return Document{}, nil, ErrChanged
 		}
-		return d, content, nil
 	}
 	return Document{}, nil, ErrNotFound
 }

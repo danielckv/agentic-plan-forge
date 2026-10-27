@@ -194,6 +194,9 @@ func Evaluate(ev Evidence, requiredHead string) Decision {
 			// Commented and unrecognized states never qualify and never block.
 		case r.Reviewer == "":
 			pending = append(pending, "an approval review carries no reviewer identity")
+		case isBot(r.Reviewer):
+			// A bot or app account is not a developer. Counting it would let
+			// an automation approve its own change.
 		case r.Reviewer == ev.Author:
 			// The PR author's own approval is not independent evidence; it is
 			// ignored rather than counted.
@@ -368,6 +371,11 @@ func Collect(ctx context.Context, gh GitHub, repo string, number int) (Evidence,
 	}
 	for _, r := range rs {
 		if isBot(r.Reviewer) {
+			continue
+		}
+		// The author's own approval is not independent evidence. It is dropped
+		// here rather than carried and ignored later, so no caller can count it.
+		if r.Reviewer == pr.Author {
 			continue
 		}
 		if r.Reviewer != "" && r.AuthorPermission == "" {

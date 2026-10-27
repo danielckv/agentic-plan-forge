@@ -869,10 +869,11 @@ func (e *executor) emitFor(ctx context.Context) func(contracts.PublicEvent) erro
 // emits: a heartbeat moves last-activity, a terminal status ends the stage, and
 // neither can invent progress that did not happen.
 func (e *executor) noteStage(ev contracts.PublicEvent) {
-	// A public event carries decoded values, not bytes: re-encode once so the
-	// same struct the wire uses is read back, rather than a second decoder that
-	// could disagree with it.
-	payload, err := json.Marshal(ev.Payload)
+	// A public event carries either the struct an emitter built or the bytes it
+	// already encoded. Bytes are used as they are: marshalling them again would
+	// encode a []byte as a base64 string, and the unmarshal below would then
+	// fail without saying so — the stage would simply never move.
+	payload, err := eventPayload(ev.Payload)
 	if err != nil {
 		return
 	}
@@ -917,6 +918,22 @@ func (e *executor) noteStage(ev contracts.PublicEvent) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		e.stages.begin(relay.StageArchitect, time.Duration(e.cfg.Config.StageTimeout())*time.Second, time.Now().UTC())
+	}
+}
+
+// eventPayload returns the JSON an event carries, whichever form it arrived in.
+func eventPayload(v any) ([]byte, error) {
+	switch payload := v.(type) {
+	case nil:
+		return nil, errors.New("an event carries no payload")
+	case []byte:
+		return payload, nil
+	case json.RawMessage:
+		return payload, nil
+	case string:
+		return []byte(payload), nil
+	default:
+		return json.Marshal(v)
 	}
 }
 

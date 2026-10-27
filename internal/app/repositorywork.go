@@ -37,7 +37,9 @@ func (s *appSession) RepositoryWork(ctx context.Context) repowork.Inventory {
 }
 
 // RepositoryWorkDocument opens one indexed document after checking that its
-// content still matches the hash the inventory published.
+// content still matches the identity the inventory published. A document that
+// changed since the page was rendered returns repowork.ErrChanged, so the window
+// offers a refresh instead of showing new bytes under an old heading.
 func (s *appSession) RepositoryWorkDocument(ctx context.Context, id string) (repowork.Document, []byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, repositoryWorkTimeout)
 	defer cancel()
