@@ -29,28 +29,32 @@ import (
 // deliberate: two paid VMs from one click is the failure this prevents.
 type sandboxManager struct {
 	mu    sync.Mutex
+	repo  string
 	cfg   sandbox.Settings
 	lease sandbox.Lifecycle
 	gate  *sandbox.AccessGate
 	prov  sandbox.Provider
 	// configured is false when no provider or key is available. Every launch
-	// then reports a setup problem, and nothing else in the product is affected.
+	// then reports a setup problem, and nothing else in the product changes.
 	configured bool
 	setupHint  string
+
+	// appPort is the port inside the sandbox the preview serves. The lifecycle
+	// record does not carry it because it belongs to this side of the proxy.
+	appPort int
 }
 
 // newSandboxManager resolves the provider settings once per session.
-func newSandboxManager(cfg sandbox.Settings, configured bool, hint string) *sandboxManager {
-	return &sandboxManager{cfg: cfg, configured: configured, setupHint: hint}
+func newSandboxManager(repo string, cfg sandbox.Settings, configured bool, hint string) *sandboxManager {
+	return &sandboxManager{repo: repo, cfg: cfg, configured: configured, setupHint: hint}
 }
 
-// SessionSettings resolves the prepared-VM settings from the configuration and
-// the environment. A missing provider or key disables launching with a reason
-// the window can show; it never fails the session.
-func (s *appSession) SessionSettings() (sandbox.Settings, bool, string) {
+// SessionSandboxSettings resolves the prepared-VM settings from the configuration
+// and the environment. A missing provider or key disables launching with a
+// reason the window can show; it never fails the session.
+func (s *appSession) SessionSandboxSettings() (sandbox.Settings, bool, string) {
 	resolved := s.cfg.Sandbox.Resolved()
-	provider := strings.TrimSpace(resolved.Provider)
-	if provider == "" {
+	if strings.TrimSpace(resolved.Provider) == "" {
 		return sandbox.Settings{}, false,
 			"No prepared-VM provider is configured. Set sandbox.provider to e2b to enable a remote build and preview; documents, implementation and acceptance work without it."
 	}
@@ -60,7 +64,6 @@ func (s *appSession) SessionSettings() (sandbox.Settings, bool, string) {
 			"The sandbox provider key is missing. Set " + resolved.APIKeyEnv + " in the environment that starts Plan Forge."
 	}
 	return sandbox.Settings{
-		BaseURL:        resolved.BaseURL,
 		APIKey:         key,
 		Template:       resolved.Template,
 		TimeoutSeconds: resolved.TimeoutSeconds,
@@ -107,21 +110,24 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 	if !m.configured {
 		return LaunchReport{State: "setup", Problem: m.setupHint}
 	}
-	if s := m.lease.State; s != "" && !s.Terminal() {
+	if m.lease.State != "" && !m.lease.State.Terminal() {
 		return m.report()
 	}
-	if !req.Confirmed {
+	switch {
+	case !req.Confirmed:
 		return LaunchReport{State: "setup", Problem: "A launch spends money and must be confirmed first."}
-	}
-	if req.ApprovalID == "" {
+	case req.ApprovalID == "":
 		return LaunchReport{State: "setup", Problem: "Approve a plan before launching a sandbox."}
-	}
-	if req.AppPort < 1 || req.AppPort > 65535 {
+	case req.AppPort < 1 || req.AppPort > 65535:
 		return LaunchReport{State: "setup", Problem: "The preview needs a port inside the sandbox."}
 	}
-	stored, ok := LoadStoredRecipe(m.repoForLaunch())
+
+	stored, ok := LoadStoredRecipe(m.repo)
 	if !ok {
-		return LaunchReport{State: "setup", Problem: "No execution recipe is recorded yet. Review the build and test commands before launching."}
+		return LaunchReport{
+			State:   "setup",
+			Problem: "No execution recipe is recorded yet. Review the build and test commands before launching.",
+		}
 	}
 	if req.RecipeHash != "" {
 		hash, err := stored.Hash()
@@ -129,11 +135,17 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 			return LaunchReport{State: "setup", Problem: "The recorded recipe could not be hashed."}
 		}
 		if hash != req.RecipeHash {
-			return LaunchReport{State: "setup", Problem: "The recipe changed since it was reviewed. Review it again before spending money."}
+			return LaunchReport{
+				State:   "setup",
+				Problem: "The recipe changed since it was reviewed. Review it again before spending money.",
+			}
 		}
 	}
 
 	operationID := newOperationID()
+	if operationID == "" {
+		return LaunchReport{State: "setup", Problem: "A launch needs a system random source for its operation identity."}
+	}
 	m.lease = sandbox.Lifecycle{
 		OperationID: operationID,
 		ApprovalID:  req.ApprovalID,
@@ -146,7 +158,7 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 		VCPU:           m.cfg.VCPU,
 		MemoryMB:       m.cfg.MemoryMB,
 		OperationID:    operationID,
-		// A preview is reachable only through this process's authenticated
+		// The preview is reachable only through this process's authenticated
 		// proxy, so the provider URL itself stays private.
 		AllowPublicTraffic: false,
 		Metadata:           map[string]string{"operation_id": operationID, "approval_id": req.ApprovalID},
@@ -156,17 +168,17 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 		// The sandbox may exist. Reconcile by operation identity before any
 		// retry, so a paid VM is never created twice.
 		m.lease = m.lease.ReconcileUnknown()
-		m.lease.LastError = "the create outcome is unknown; reconciling"
+		m.lease.LastError = "the create outcome is unknown; reconciling by operation id"
 		return m.report()
 	case err != nil:
-		m.lease = m.lease.MarkFailed(errText(err))
+		m.lease = m.lease.MarkFailed(err.Error())
 		return m.report()
 	}
 
-	m.lease.SandboxID, m.lease.TrafficToken = lease.SandboxID, lease.TrafficToken
+	m.lease.SandboxID = lease.SandboxID
 	m.lease.ExpiresAt = lease.ExpiresAt
 	m.lease.State = sandbox.StateBuilding
-	m.lease.AppPort = req.AppPort
+	m.appPort = req.AppPort
 	return m.report()
 }
 
@@ -176,17 +188,17 @@ func (m *sandboxManager) Stop(ctx context.Context) LaunchReport {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.lease.SandboxID == "" {
-		return LaunchReport{State: "stopped"}
+		return LaunchReport{State: string(sandbox.StateStopped)}
 	}
 	m.lease.State = sandbox.StateStopping
 	if err := m.provider().Kill(ctx, m.lease.SandboxID); err != nil {
 		m.lease.State = sandbox.StateUnknown
-		m.lease.CleanupPending = true
-		m.lease.LastError = errText(err)
-		return m.report()
+		m.lease.LastError = err.Error()
+		report := m.report()
+		report.Cleanup = "Deletion could not be confirmed; the provider will expire this sandbox."
+		return report
 	}
 	m.lease.State = sandbox.StateStopped
-	m.lease.CleanupPending = false
 	if m.gate != nil {
 		m.gate.RevokeAll()
 	}
@@ -202,11 +214,11 @@ func (m *sandboxManager) Report() LaunchReport {
 
 func (m *sandboxManager) report() LaunchReport {
 	r := LaunchReport{
-		State: string(m.lease.State), SandboxID: m.lease.SandboxID,
-		ExpiresAt: m.lease.ExpiresAt, Problem: m.lease.LastError, Receipts: m.lease.Receipts,
-	}
-	if m.lease.CleanupPending {
-		r.Cleanup = "Deletion could not be confirmed; the provider will expire this sandbox."
+		State:     string(m.lease.State),
+		SandboxID: m.lease.SandboxID,
+		ExpiresAt: m.lease.ExpiresAt,
+		Problem:   m.lease.LastError,
+		Receipts:  m.lease.Receipts,
 	}
 	if m.lease.State == sandbox.StateReady && m.lease.SandboxID != "" {
 		r.Preview = "/preview/"
@@ -214,8 +226,8 @@ func (m *sandboxManager) report() LaunchReport {
 	return r
 }
 
-// provider builds the adapter once. It is cheap and holds no state, so building
-// it per call would only spread configuration.
+// provider builds the adapter once. It holds no state, so building one per call
+// would only spread configuration.
 func (m *sandboxManager) provider() sandbox.Provider {
 	if m.prov == nil {
 		m.prov = sandbox.NewHTTPProvider(m.cfg)
@@ -223,12 +235,9 @@ func (m *sandboxManager) provider() sandbox.Provider {
 	return m.prov
 }
 
-// repoForLaunch is the repository whose stored recipe is executed.
-func (m *sandboxManager) repoForLaunch() string { return m.repo }
-
 // newOperationID mints the reconciliation identity for one create. A
 // predictable identity is worse than none, so a failure to read the system
-// random source is an error the caller reports.
+// random source returns empty and the caller refuses the launch.
 func newOperationID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
