@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-27
+
+### Changed
+
+- Deliberation and Page 1 interpretation are bounded to a five-minute budget. Raw normalization (`normBase`) is cached by document text so resolving ambiguity chips on Page 1 applies choices in memory with zero `ingestion` calls; background edits and chip resolutions publish the deterministic lexical impact map (`impact.Lexical`) with zero provider calls while explicit **Re-interpret** runs the impact model; workstreams are capped at `MaxWorkstreams = 4` with `DefaultMaxParallel = 4` so all specialists run in a single parallel wave; the advisory `earlyCritic` call is dropped in favour of the mandatory `criticBarrier`; and `DisableNarrator` defaults to `true` while 10-second `"Running for Ns..."` heartbeats no longer wake the narrator ticker. See [ADR 0016](docs/adrs/0016-five-minute-deliberation-budget.md).
+- When an avatar is placed on `omp` with no explicit model in `config.json`, `OMP.RoleModel` maps the avatar role to `~/.omp/agent/config.yml` and `.omp/config.yml` `modelRoles` (`plan` for `architect`, `judge` for `critic`, `advisor` for `pm`, `smol` for `ingestion`/`impact`/`narrator`, and rotating `task`/`worker`/`slow`/`explore` across concurrent `specialist` lanes) while skipping `disabledProviders`. `parseModelRefs` filters `"kind": "chat"` and indexes `selector` (`provider/id`). See [ADR 0016](docs/adrs/0016-five-minute-deliberation-budget.md).
+
+### Fixed
+
+- Specialist contract claims that match the architect's `ContractHash(k)` and leave `input_schema` or `output_schema` blank or prepend `k.Signature` to the architect's schema now auto-align to the architect contract instead of opening a false-positive `DECISION_PROMPT` card. Genuine schema alternatives still open a human decision card. See [ADR 0016](docs/adrs/0016-five-minute-deliberation-budget.md).
+
 ## [0.7.1] - 2026-10-25
 
 ### Changed
@@ -248,7 +259,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.5.0...v0.6.0
