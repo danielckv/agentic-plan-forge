@@ -80,6 +80,12 @@ type pump struct {
 // blocked on a model call or a human answer.
 const maxPumpEvents = 1024
 
+// maxDroppedInARow bounds how many disposable events may be discarded in a row
+// before the pump assumes the consumer is not draining. Coalescing a handful of
+// heartbeats is the point of the bound; discarding an endless stream is a
+// symptom, and the window needs a snapshot to recover from it.
+const maxDroppedInARow = 32
+
 func newPump() *pump { return &pump{wake: make(chan struct{}, 1)} }
 
 // push queues one event and reports whether it was kept. A rejected event is
