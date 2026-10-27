@@ -162,7 +162,7 @@ func TestAcceptanceRefusesAnotherVersion(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"version":99,"entries":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := RecordAcceptance(repo, acceptanceFixture("head-aaa")); err == nil {
+	if err := RecordAcceptance(repo, acceptanceFixture("head-aaa")); err == nil {
 		t.Fatal("a ledger from another version was written over")
 	}
 }
