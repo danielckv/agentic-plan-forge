@@ -7,7 +7,9 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/danielckv/agentic-plan-forge/internal/recipe"
 	"github.com/danielckv/agentic-plan-forge/internal/sandbox"
 )
 
@@ -71,6 +73,41 @@ func TestLaunchNamesTheMissingPrecondition(t *testing.T) {
 	}
 }
 
+// Ready is never reached without receipts: a run that fails is a failure the
+// page can show, never a green preview.
+func TestRunWithoutReceiptsRefusesReady(t *testing.T) {
+	m := configuredManager(t)
+	m.lease = sandbox.Lifecycle{SandboxID: "sb-1", State: sandbox.StateBuilding}
+	m.drive = stubDriver{err: errors.New("build exited 2")}
+
+	report := m.Run(t.Context(), recipe.Recipe{})
+	if report.State == "ready" {
+		t.Fatal("a failing run reported ready")
+	}
+	if report.Problem == "" {
+		t.Error("a failed run gave no reason")
+	}
+}
+
+// A successful run with every receipt is the only path to ready.
+func TestRunWithEveryReceiptReachesReady(t *testing.T) {
+	m := configuredManager(t)
+	m.lease = sandbox.Lifecycle{SandboxID: "sb-1", State: sandbox.StateTesting}
+	m.drive = stubDriver{receipts: []sandbox.Receipt{
+		{Kind: sandbox.ReceiptBuild, ExitCode: 0},
+		{Kind: sandbox.ReceiptTest, ExitCode: 0},
+		{Kind: sandbox.ReceiptReadiness, ExitCode: 0},
+	}}
+
+	report := m.Run(t.Context(), recipe.Recipe{})
+	if report.State != "ready" {
+		t.Fatalf("state = %q, want ready", report.State)
+	}
+	if report.Preview == "" {
+		t.Error("a ready sandbox offers no preview")
+	}
+}
+
 // A lease that cannot be deleted is reported as pending cleanup, never as
 // stopped: the provider's expiry is then the only backstop.
 func TestStopReportsPendingCleanup(t *testing.T) {
@@ -125,6 +162,16 @@ func TestPreviewOriginAdmitsOnlyItsOwnOrigin(t *testing.T) {
 			t.Errorf("origin %q admitted = %v, want %v", tc.origin, got, tc.want)
 		}
 	}
+}
+
+// stubDriver is a driver that never reaches a provider.
+type stubDriver struct {
+	receipts []sandbox.Receipt
+	err      error
+}
+
+func (d stubDriver) RunRecipe(context.Context, string, recipe.Recipe, time.Time, time.Time) ([]sandbox.Receipt, error) {
+	return d.receipts, d.err
 }
 
 // failingProvider is a provider whose deletion always fails.
