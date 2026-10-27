@@ -210,6 +210,11 @@ type executor struct {
 	// gate decides whether a background edit earns an interpretation. It is
 	// read and written only under mu, next to the phase check below.
 	gate refreshGate
+	// forceRead makes the next background trigger read the document whatever
+	// the gate says. A brief that was already written when the session opened
+	// must be read once, or the rail stays empty until the writer reaches the
+	// first threshold — and they may never type again.
+	forceRead bool
 
 	// checkpoints keeps the resumable drafts of the current run, in memory and
 	// in docs/plans/.plan/run.json. An unfinished run is adopted by the next
@@ -456,6 +461,11 @@ func (e *executor) PressRefresh() {
 // epics appear without waiting for the first edit.
 func (e *executor) scheduleInitialInterpretation(text string) {
 	if strings.TrimSpace(text) != "" {
+		// This read is not an automatic refresh: it is the first look at a
+		// document that already exists. The word budget never suppresses it.
+		e.mu.Lock()
+		e.forceRead = true
+		e.mu.Unlock()
 		e.trigger(false)
 	}
 }
@@ -517,7 +527,9 @@ func (e *executor) normalizeLoop(ctx context.Context) {
 				continue
 			}
 			e.mu.Lock()
-			allowed := e.gate.due(text)
+			forced := e.forceRead
+			e.forceRead = false
+			allowed := forced || e.gate.due(text)
 			e.mu.Unlock()
 			if !allowed {
 				continue

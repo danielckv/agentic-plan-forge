@@ -459,9 +459,11 @@ body {
   gap: 8px 12px;
 }
 
-/* The manual refresh sits beside its own explanation: the note is about the
-   button, not about the footer, and pairing them stops a writer reading it as
-   advice for the Confirm action. */
+/*
+ * The manual refresh sits beside its own explanation: the note is about the
+ * button, not about the footer, and pairing them stops a writer reading it as
+ * advice for the Confirm action.
+ */
 .pf-footer-refresh {
   display: flex;
   flex: 0 1 auto;

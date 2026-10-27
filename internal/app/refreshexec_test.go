@@ -139,3 +139,31 @@ func TestManualRefreshLeavesTheAutomaticCountAlone(t *testing.T) {
 		t.Fatalf("automatic count moved from %d to %d on a manual press", before, after)
 	}
 }
+
+// A brief that already exists when the session opens is read once, whatever
+// its length. Gating it would leave the rail empty on a document the writer may
+// never touch again, which is the regression this gate invites.
+func TestSeededBriefIsReadWhateverItsLength(t *testing.T) {
+	exec := newExecutor(executorConfig{Repo: t.TempDir(), Logger: quietLogger()})
+	exec.scheduleInitialInterpretation("Export invoices.")
+	select {
+	case immediate := <-exec.normTrigger:
+		if immediate {
+			t.Fatal("the seeded read was scheduled as immediate, want the normal debounce")
+		}
+	default:
+		t.Fatal("a seeded brief scheduled no read")
+	}
+	exec.mu.Lock()
+	forced := exec.forceRead
+	exec.mu.Unlock()
+	if !forced {
+		t.Fatal("the seeded read was left to the gate, which would refuse a short brief")
+	}
+
+	// The gate still refuses a short background edit afterwards, so the bypass
+	// is spent on the seeded read and nothing else.
+	if gateFor(exec, "Export invoices.") {
+		t.Error("a short background edit earned a read after the seeded one")
+	}
+}

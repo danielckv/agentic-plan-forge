@@ -68,6 +68,10 @@ try {
   // Page 1: the composer with the brief and its epic files.
   await page.goto(`${session.origin}/`);
   await page.waitForSelector(".pf-composer .cm-content", { state: "visible" });
+  // The rail opens on the Brief tab: an outline of the deliberation's topics.
+  // The epic files are one tab over, so the composer shot shows the rail the
+  // way a writer finds it after writing.
+  await page.getByRole("tab", { name: /Epics/ }).click();
   await page.waitForSelector(".pf-epic-card", { state: "visible" });
   await page.waitForSelector("text=Project notes found", { state: "visible" });
   await page.waitForTimeout(400);
@@ -98,6 +102,9 @@ try {
     globalThis.localStorage.setItem("plan-forge:ui:theme", "dark");
   });
   await page.reload();
+  // A reload puts the rail back on Brief, so the epic cards need the tab again
+  // before the dark shot can show them beside the notes.
+  await page.getByRole("tab", { name: /Epics/ }).click();
   await page.waitForSelector(".pf-epic-card", { state: "visible" });
   await page.getByRole("tab", { name: /Notes/ }).click();
   await page.waitForSelector(".pf-note", { state: "visible" });
