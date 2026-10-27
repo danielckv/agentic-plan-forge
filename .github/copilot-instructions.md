@@ -5,7 +5,9 @@ You review pull requests for `agentic-plan-forge`. Spend most of the review on t
 The rules in `CONTRIBUTING.md` apply to every change. Flag a change that breaks one.
 
 ## Core code
+
 Review these paths first and hardest:
+
 - `.dockerignore`
 - `cmd/`
 - `integrations/`
@@ -22,12 +24,14 @@ For each change there, check:
 6. **Unfinished work.** A TODO, stub, mock data, fake success path, or test-only branch in production code.
 
 Language traps:
+
 - **Go**: an error dropped with `_` or never checked; a goroutine with no way to exit; `defer` inside a loop.
 - **TypeScript/JavaScript**: a promise neither awaited nor caught; a timer, listener, socket or child process with no teardown; `any` or a cast that hides a changed shape.
 - **Shell**: an unquoted `$var` or `$(...)`; `set -e` that does not fire inside `if`, `&&`, `||` or a pipeline; a `cd` with no check; a temp file with no `trap` cleanup.
 - **Python**: `subprocess` with `shell=True` or a joined string built from input; a bare `except` or `except Exception: pass` that hides a failure; a file, socket or child process left open on the error path.
 
 ## Tests
+
 - A behaviour change or a bug fix carries a test in the same PR, and the test fails without the change. Say so when a new test would pass either way.
 - Flag a test edited to match new output when the PR body gives no reason.
 - The gate is `go test ./...` (CI: `.github/workflows/ci.yml`, `.github/workflows/release.yml`). The PR body's Verification section lists each command with its exit code; flag a claim with no command.
