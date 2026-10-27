@@ -133,10 +133,10 @@ can name extra directories with `repository_work_roots`.
 Writing a brief does not require a button press: the plan rail and the impact map follow the document on their own, four times.
 
 - Nothing is read until the brief passes **100 words**. Below that you are still sketching, and an interpretation would describe text you are about to replace.
-- After that, a re-read happens once **30**, then **60**, then **120** more words have arrived, and only after you stop typing for a couple of seconds. Four reads carry a brief to 310 words, which is a plan.
+- After that a re-read happens after **30**, then **60**, then **120** more words. It waits until you stop typing. Four reads carry a brief to 310 words.
 - Then the automatic path stops. **Refresh plan** in the footer re-reads the document once, immediately.
 
-Pressing **Refresh plan** also switches the automatic path off for the session, and the note beside the button says so. That is deliberate: two mechanisms re-reading one document would bill twice and race each other, and a press is you taking control of when it happens. The button keeps working after it has switched the automatic path off.
+Pressing **Refresh plan** also switches the automatic path off for the session, and the note beside the button says so. Two mechanisms reading one document would bill twice and race each other. A press means you control when it happens. The button keeps working afterwards.
 
 #### Questions about the brief
 
