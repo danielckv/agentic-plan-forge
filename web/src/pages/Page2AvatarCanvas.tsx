@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  CircleCheck,
   Cpu,
   Crown,
   FileText,
@@ -41,6 +42,16 @@ import {
   type RoomInput,
 } from "../ui/room";
 import type { AvatarThought, CritiqueIssue, DecisionCard, SyncState, TimelineEntry } from "../store/syncStore";
+import {
+  activeStage,
+  blockedStages,
+  completedStages,
+  elapsedMS,
+  formatDuration,
+  outcomeHeadline,
+  remainingMS,
+  STAGE_LABEL,
+} from "../ui/runStages";
 import { SkeletonCard, SkeletonLines } from "../ui/Skeleton";
 
 /**
@@ -75,6 +86,16 @@ const STATUS_CHIP: Record<AvatarStatus, string> = {
   Cancelled: "",
   Stale: "pf-chip--warn",
 };
+
+/** The reader's name for a stage id. Specialist lanes keep their workstream. */
+function humanStage(id: string): string {
+  if (id === "pm") return "Product brief";
+  if (id === "architect") return "Architecture";
+  if (id === "critic") return "Review";
+  if (id === "synthesizer") return "Specification";
+  if (id.startsWith("specialist:")) return `Specialist ${id.slice("specialist:".length)}`;
+  return id;
+}
 
 type PlanTab = "epics" | "architecture" | "findings" | "usage";
 
@@ -189,6 +210,23 @@ export function Page2AvatarCanvas(): React.ReactElement {
   const pm = useMemo(() => parsePMDraft(sync.drafts.find((d) => d.avatarId === "pm")?.data), [sync.drafts]);
   const arch = useMemo(() => parseArchitectDraft(sync.drafts.find((d) => d.avatarId === "architect")?.data), [sync.drafts]);
 
+  const active = activeStage(sync.status.stages);
+  const completed = completedStages(sync.status.stages);
+  const blocked = blockedStages(sync.status.stages);
+
+  // The stage state is authoritative; only the clock reading is local. A
+  // once-a-second tick keeps elapsed and remaining honest without inventing
+  // progress.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (active === undefined) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active?.id, active?.state]);
+
+  const elapsed = elapsedMS(active, now);
+  const remaining = remainingMS(active, now);
+
   return (
     <div className="pf-page">
       <div className="pf-subbar">
@@ -234,60 +272,97 @@ export function Page2AvatarCanvas(): React.ReactElement {
       <div className="pf-page-body pf-room-page">
         <div className="pf-room">
           <header className="pf-page-header">
-            <h1 className="pf-title">Avatar deliberation</h1>
+            <h1 className="pf-title">{outcomeHeadline(sync.status.stages, sync.status.recovery ?? "")}</h1>
             <p className="pf-caption">
-              Four avatars plan from the frozen requirements, the code and the project's notes. Cycle {cycle} of 3.
+              {active !== undefined ? (
+                <>
+                  {STAGE_LABEL[active.state]} · {formatDuration(elapsed)} elapsed
+                  {remaining !== null ? ` · gives up in ${formatDuration(remaining)}` : ""}
+                </>
+              ) : (
+                <>Cycle {cycle} of 3. The avatars plan from the frozen requirements, the code and the project's notes.</>
+              )}
             </p>
+            {blocked.length > 0 && (
+              <p className="pf-notice pf-notice--warn" role="status">
+                <TriangleAlert size={14} aria-hidden="true" />
+                <span>
+                  {blocked.length === 1 ? "One stage needs you" : `${String(blocked.length)} stages need you`} before the
+                  plan can finish:{" "}
+                  {blocked.map((b) => `${humanStage(b.id)} (${b.recovery ?? "review"})`).join(", ")}.
+                </span>
+              </p>
+            )}
+            {sync.status.checkpointNotice !== undefined && sync.status.checkpointNotice !== "" && (
+              <p className="pf-notice pf-notice--warn" role="status">
+                <TriangleAlert size={14} aria-hidden="true" />
+                <span>{sync.status.checkpointNotice}</span>
+              </p>
+            )}
           </header>
+
+          {completed.length > 0 && (
+            <section className="pf-outcome-done" aria-label="Finished work">
+              <h2 className="pf-section-title">Finished</h2>
+              <ul className="pf-outcome-list">
+                {completed.map((s) => (
+                  <li key={s.id}>
+                    <CircleCheck size={13} aria-hidden="true" />
+                    <span>{humanStage(s.id)}</span>
+                    {s.detail !== undefined && s.detail !== "" && <span className="pf-caption"> — {s.detail}</span>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {narration !== undefined && narration.summary !== "" && (
             <p className="pf-narration" role="status" aria-live="polite">
               <Radio size={13} aria-hidden="true" className={workingCount > 0 ? "pf-spin-slow" : undefined} />
               <span className="pf-narration-text">{narration.summary}</span>
-              {narration.model !== undefined && narration.model !== "" && (
-                <span className="pf-tag" title="The host and model narrating this run">
-                  <Cpu size={10} aria-hidden="true" />
-                  {[narration.model, narration.host].filter((v) => v !== undefined && v !== "").join(" on ")}
-                </span>
-              )}
             </p>
           )}
 
-          <div className="pf-roster" role="group" aria-label="Avatars">
-            {MAIN_AVATARS.map((a) => {
-              const status = statusFor(a.id);
-              const thought = sync.thoughts[a.id];
-              const selected = focus === a.id;
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  className="pf-roster-card"
-                  data-status={status}
-                  aria-pressed={selected}
-                  title={selected ? "Show everyone" : `Show only ${a.name}`}
-                  onClick={() => setFocus(selected ? null : a.id)}
-                  style={{ ["--pf-role" as string]: a.color }}
-                >
-                  <AvatarBadge id={a.id} size={44} speaking={WORKING_STATUS.has(status) && status !== "Queued"} />
-                  <span className="pf-roster-main">
-                    <span className="pf-roster-name">{a.name}</span>
-                    <span className="pf-roster-job">{a.job}</span>
-                    <span key={status} className={`pf-chip pf-chip--swap ${STATUS_CHIP[status]}`}>
-                      <span className="pf-dot" />
-                      {status}
+          <details className="pf-roster-details">
+            <summary className="pf-caption">
+              Avatar detail — who is on which host, and what each one is doing
+            </summary>
+            <div className="pf-roster" role="group" aria-label="Avatars">
+              {MAIN_AVATARS.map((a) => {
+                const status = statusFor(a.id);
+                const thought = sync.thoughts[a.id];
+                const selected = focus === a.id;
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className="pf-roster-card"
+                    data-status={status}
+                    aria-pressed={selected}
+                    title={selected ? "Show everyone" : `Show only ${a.name}`}
+                    onClick={() => setFocus(selected ? null : a.id)}
+                    style={{ ["--pf-role" as string]: a.color }}
+                  >
+                    <AvatarBadge id={a.id} size={44} speaking={WORKING_STATUS.has(status) && status !== "Queued"} />
+                    <span className="pf-roster-main">
+                      <span className="pf-roster-name">{a.name}</span>
+                      <span className="pf-roster-job">{a.job}</span>
+                      <span key={status} className={`pf-chip pf-chip--swap ${STATUS_CHIP[status]}`}>
+                        <span className="pf-dot" />
+                        {status}
+                      </span>
+                      <AvatarMeta thought={thought} />
+                      {thought !== undefined && thought.summary !== "" ? (
+                        <span className="pf-roster-say">{thought.summary}</span>
+                      ) : WORKING_STATUS.has(status) ? (
+                        <SkeletonLines lines={2} />
+                      ) : null}
                     </span>
-                    <AvatarMeta thought={thought} />
-                    {thought !== undefined && thought.summary !== "" ? (
-                      <span className="pf-roster-say">{thought.summary}</span>
-                    ) : WORKING_STATUS.has(status) ? (
-                      <SkeletonLines lines={2} />
-                    ) : null}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                  </button>
+                );
+              })}
+            </div>
+          </details>
 
           <div className="pf-room-grid">
             <section className="pf-room-feed" aria-labelledby="p2-feed">

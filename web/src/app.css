@@ -3406,6 +3406,105 @@ figure > .pf-diagram-source { border-top: none; }
   line-clamp: 3;
 }
 
+/* repository work view */
+.pf-work {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pf-work-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pf-work-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pf-work-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-work-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--pf-dur-fast) ease;
+}
+
+.pf-work-item:hover:not(:disabled) {
+  border-color: var(--pf-accent-border);
+}
+
+.pf-work-item:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.pf-work-item:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+.pf-work-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pf-muted);
+}
+
+.pf-work-item-text {
+  color: var(--pf-ink);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pf-work-item-title {
+  color: var(--pf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-work-item-meta {
+  color: var(--pf-muted);
+}
+
+.pf-work-skipped {
+  border-top: 1px solid var(--pf-border);
+  padding-top: 8px;
+}
+
+.pf-work-skipped-list {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  color: var(--pf-ink-2);
+  font-size: 12px;
+}
+
+.pf-work-insert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
 /* footer grounding pills */
 .pf-footer-status {
   display: flex;
@@ -4542,5 +4641,137 @@ figure > .pf-diagram-source { border-top: none; }
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* questions, outcome-first progress, and the prepared-VM build page */
+
+.pf-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--pf-border);
+}
+
+.pf-questions-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pf-questions-head .pf-caption {
+  margin-left: auto;
+}
+
+.pf-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-border);
+  border-left: 3px solid var(--pf-warn-bright);
+  border-radius: 8px;
+  background: var(--pf-panel);
+}
+
+.pf-question--answered {
+  border-left-color: var(--pf-ok-bright);
+}
+
+.pf-question-text {
+  margin: 0;
+  color: var(--pf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-question-excerpt {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--pf-border);
+  color: var(--pf-ink-2);
+  font-size: 12px;
+}
+
+.pf-question-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pf-question-choices legend {
+  margin-bottom: 4px;
+  color: var(--pf-muted);
+}
+
+.pf-question-choices .pf-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  height: auto;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.pf-question-choice-label {
+  font-weight: 600;
+}
+
+.pf-question-settled {
+  margin: 0;
+  color: var(--pf-ok);
+  font-size: 12.5px;
+}
+
+.pf-outcome-done {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-outcome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--pf-ink-2);
+  font-size: 12.5px;
+}
+
+.pf-outcome-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.pf-roster-details > summary {
+  cursor: pointer;
+  color: var(--pf-muted);
+  padding: 4px 0;
+}
+
+.pf-roster-details[open] > summary {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 720px) {
+  .pf-question-choices .pf-btn {
+    width: 100%;
   }
 }

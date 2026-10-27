@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
 	"sync"
 	"time"
 
@@ -146,6 +145,15 @@ type StatusView struct {
 	RepoPath string `json:"repoPath"`
 	// Branch is the checked-out branch once the scan has read it.
 	Branch string `json:"branch,omitempty"`
+	// Stages is where each stage of the current run stands. It is authored by
+	// the executor that owns the calls, never inferred in the browser.
+	Stages []StageView `json:"stages,omitempty"`
+	// Recovery names the action the owner must take to move the run forward.
+	// Empty when nothing is waiting on them.
+	Recovery string `json:"recovery,omitempty"`
+	// CheckpointNotice explains a saved run that could not be restored, so a
+	// restart does not look like a forgotten run.
+	CheckpointNotice string `json:"checkpointNotice,omitempty"`
 	HostSummary
 }
 
@@ -200,6 +208,10 @@ type executor struct {
 	// in docs/plans/.plan/run.json. An unfinished run is adopted by the next
 	// run over the same baseline; an approved plan clears it.
 	checkpoints *avatars.CheckpointStore
+	// checkpointSink is the same store's disk writer. The executor keeps it so
+	// the window can be told when a damaged record was preserved instead of
+	// resumed.
+	checkpointSink *runCheckpointSink
 
 	mu        sync.Mutex
 	phase     relay.Phase
@@ -230,19 +242,22 @@ type executor struct {
 	impactCancel context.CancelFunc
 	lastScan     time.Time
 	pills        StatusView
-	norm         *contracts.NormalizedPRD
-	normBase     *contracts.NormalizedPRD
-	normText     string
-	normKey      string
-	normRev      uint64
-	modelImpact  bool
-	approvalID   string
-	createdAt    time.Time
-	failure      *approvalFailure
-	members      map[string]bool
-	synced       chan struct{}
-	finished     bool
-	leaseCancel  context.CancelFunc
+	// stages is the authoritative progress of the current run. It is written
+	// under e.mu, so Status() can copy it without racing a stage.
+	stages      stageBook
+	norm        *contracts.NormalizedPRD
+	normBase    *contracts.NormalizedPRD
+	normText    string
+	normKey     string
+	normRev     uint64
+	modelImpact bool
+	approvalID  string
+	createdAt   time.Time
+	failure     *approvalFailure
+	members     map[string]bool
+	synced      chan struct{}
+	finished    bool
+	leaseCancel context.CancelFunc
 }
 
 func newExecutor(cfg executorConfig) *executor {
@@ -263,7 +278,9 @@ func newExecutor(cfg executorConfig) *executor {
 		},
 	}
 	e.checkpoints = avatars.NewCheckpointStore()
-	e.checkpoints.Persist(newRunCheckpointSink(cfg.Repo), func(err error) {
+	sink := newRunCheckpointSink(cfg.Repo)
+	e.checkpointSink = sink
+	e.checkpoints.Persist(sink, func(err error) {
 		e.log.Warn("the unfinished run was not kept on disk", "err", err)
 	})
 	return e
@@ -387,7 +404,12 @@ func (e *executor) Status() StatusView {
 	if e.graph != nil {
 		v.Branch = e.graph.GitBranch
 	}
+	v.Stages = e.stages.views()
+	v.Recovery = e.stages.recoveryLine()
 	e.mu.Unlock()
+	if e.checkpointSink != nil {
+		v.CheckpointNotice = e.checkpointSink.Notice()
+	}
 	v.RepoPath = e.cfg.Repo
 	v.Repo = filepath.Base(e.cfg.Repo)
 	return v
@@ -740,6 +762,9 @@ func (e *executor) stopRun() {
 	e.runCancel = nil
 	e.runGen++
 	e.busy = ""
+	// A cancelled run must not leave a stage looking like it is still working:
+	// the window would keep spinning on work that will never finish.
+	e.stages.cancelAll(time.Now().UTC())
 	e.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -775,6 +800,7 @@ func (e *executor) startRun(runID string, startCycle int) {
 	e.mu.Lock()
 	e.converged, e.synthesized, e.synthHash = nil, nil, ""
 	e.cycle = startCycle
+	e.stages.reset()
 	e.mu.Unlock()
 	ctx, gen, decisions := e.newRunContext(runID)
 	go e.deliberate(ctx, gen, runID, startCycle, decisions)
@@ -811,6 +837,11 @@ func (e *executor) stageAlreadyRunning(runID, stage string, cycle int) {
 		stage = relay.StageArchitect
 	}
 	e.log.Info("retry ignored: the stage is still running", "stage", stage, "run", runID)
+	e.mu.Lock()
+	// The stage stays running; the book records that a retry was seen so a
+	// second click is visible instead of silent.
+	e.stages.touch(stageID(stage), time.Now().UTC())
+	e.mu.Unlock()
 	_ = e.cfg.Auth.Emit(relay.EventAvatarThought, relay.AvatarThoughtPayload{
 		RunID: runID, AvatarID: stage, Cycle: cycle, Status: "Thinking",
 		PublicSummary: "This stage is already running; the retry was ignored. Wait for it to finish or stop the run.",
@@ -828,9 +859,69 @@ func (e *executor) emitFor(ctx context.Context) func(contracts.PublicEvent) erro
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		e.noteStage(ev)
 		return e.cfg.Auth.Emit(relay.WSEventType(ev.Type), ev.Payload)
 	}
 }
+
+// noteStage keeps the stage book in step with what the avatars report, so
+// Status() never has to guess. It reads only events the orchestrator already
+// emits: a heartbeat moves last-activity, a terminal status ends the stage, and
+// neither can invent progress that did not happen.
+func (e *executor) noteStage(ev contracts.PublicEvent) {
+	switch relay.WSEventType(ev.Type) {
+	case relay.EventAvatarThought:
+		var p relay.AvatarThoughtPayload
+		if json.Unmarshal(ev.Payload, &p) != nil || p.AvatarID == "" {
+			return
+		}
+		id := stageID(p.AvatarID)
+		now := time.Now().UTC()
+		budget := time.Duration(e.cfg.Config.StageTimeout()) * time.Second
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		switch p.Status {
+		case statusSyncedLike:
+			e.stages.finish(id, StageCompleted, p.PublicSummary, "", now)
+		case statusFailedLike:
+			e.stages.fail(id, p.PublicSummary, now)
+		case statusCancelledLike:
+			e.stages.finish(id, StageCancelled, p.PublicSummary, "start the run again", now)
+		case statusStaleLike:
+			e.stages.finish(id, StageFailed, p.PublicSummary, "retry", now)
+		default:
+			// A heartbeat is a call that is alive; a status change is a call
+			// that started. Both keep the same record.
+			if _, seen := e.stages.byID[id]; seen {
+				e.stages.touch(id, now)
+				return
+			}
+			e.stages.begin(id, budget, now)
+		}
+	case relay.EventDecisionPrompt:
+		var p relay.DecisionPromptPayload
+		if json.Unmarshal(ev.Payload, &p) != nil {
+			return
+		}
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		e.stages.wait(relay.StageArchitect, "waiting for an answer to "+p.DecisionID)
+	case relay.EventDecisionResolve:
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		e.stages.begin(relay.StageArchitect, time.Duration(e.cfg.Config.StageTimeout())*time.Second, time.Now().UTC())
+	}
+}
+
+// Avatar thought statuses, as they arrive on the wire. They are duplicated here
+// rather than imported: the avatars package keeps them unexported because no
+// other package should be deciding what a status means.
+const (
+	statusSyncedLike    = "Synced"
+	statusFailedLike    = "Failed"
+	statusCancelledLike = "Cancelled"
+	statusStaleLike     = "Stale"
+)
 
 // stageFailed reports a failure that happened before any avatar could, such as
 // an interpretation error, in the shape the window already renders.

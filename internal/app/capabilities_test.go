@@ -45,7 +45,7 @@ func TestCapabilitiesNeverReportsANullList(t *testing.T) {
 func TestCapabilitiesNeverReportsANullListWithNoHostsInstalled(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	view := Capabilities(context.Background(), config.Config{}, t.TempDir(), "test")
-	if view.Hosts == nil || view.Tools == nil || view.Skills == nil || view.Hooks == nil || view.Pinned == nil {
+	if view.Hosts == nil || view.Tools == nil || view.Skills == nil || view.Hooks == nil || view.Pinned == nil || view.CLIs == nil {
 		t.Fatalf("a list is nil with no hosts installed: %+v", view)
 	}
 	for _, h := range view.Hosts {
@@ -59,7 +59,7 @@ func TestCapabilitiesNeverReportsANullListWithNoHostsInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	for _, key := range []string{"hosts", "tools", "skills", "hooks", "pinned"} {
+	for _, key := range []string{"hosts", "tools", "skills", "hooks", "pinned", "clis"} {
 		if bytes.Contains(raw, []byte(`"`+key+`":null`)) {
 			t.Errorf("%q marshalled to null", key)
 		}

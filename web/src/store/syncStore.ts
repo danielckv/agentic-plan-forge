@@ -169,6 +169,26 @@ export interface StatusView {
    * forever.
    */
   impactRevision?: number;
+  /**
+   * Per-stage progress of the current run, authored by the executor. Absent on
+   * an older bridge; the page then falls back to the per-avatar cards.
+   */
+  stages?: StageView[];
+  /** The action that moves a blocked run forward, when one exists. */
+  recovery?: string;
+  /** Why a saved run was not resumed, when its record had to be preserved. */
+  checkpointNotice?: string;
+}
+
+/** One stage of the current run (`app.StageView`). */
+export interface StageView {
+  id: string;
+  state: "queued" | "running" | "waiting_for_answer" | "retrying" | "failed" | "cancelled" | "completed";
+  detail?: string;
+  startedAt?: string;
+  lastActivity?: string;
+  deadlineAt?: string;
+  recovery?: string;
 }
 
 export const STATUS_UNKNOWN: StatusView = {
@@ -210,7 +230,27 @@ export interface SyncState {
   /** False until the first `/api/status` answer lands; pages show skeletons. */
   statusLoaded: boolean;
   status: StatusView;
+  /**
+   * Question answers this window has submitted, keyed by ambiguity id. It
+   * records an attempt, not a confirmation: the authority's
+   * AMBIGUITY_RESOLVE / ALREADY_RESOLVED answer decides what is settled.
+   */
+  ambiguityAnswers: Record<string, AmbiguityAnswer>;
 }
+
+/** One submitted answer to a classification question. */
+export interface AmbiguityAnswer {
+  choice: AmbiguityChoice;
+  note?: string | undefined;
+  /** True until the authority confirms or reports the question already answered. */
+  pending: boolean;
+  /** True when another member answered first. */
+  superseded: boolean;
+  error?: string | undefined;
+}
+
+/** The three answers a classification question accepts. */
+export type AmbiguityChoice = "product" | "technical" | "dismiss";
 
 type Listener = () => void;
 
@@ -238,6 +278,7 @@ let state: SyncState = {
   errorMessage: null,
   statusLoaded: false,
   status: STATUS_UNKNOWN,
+  ambiguityAnswers: {},
 };
 
 let ws: WebSocket | null = null;
@@ -581,6 +622,25 @@ function handleEnvelope(env: WSEnvelope): void {
       });
       break;
     }
+    case "AMBIGUITY_RESOLVE": {
+      const p = env.payload as { ambiguity_id?: string; choice?: string; note?: string; actor_id?: string };
+      const id = p.ambiguity_id ?? "";
+      if (id === "" || state.ambiguityAnswers[id] === undefined) break;
+      const choice = p.choice;
+      const valid = choice === "product" || choice === "technical" || choice === "dismiss";
+      setState({
+        ambiguityAnswers: {
+          ...state.ambiguityAnswers,
+          [id]: {
+            ...state.ambiguityAnswers[id]!,
+            pending: false,
+            superseded: false,
+            ...(valid ? { choice } : {}),
+          },
+        },
+      });
+      break;
+    }
     case "DECISION_RESOLVE": {
       const p = env.payload as { decision_id?: string; option_id?: string; actor_id?: string };
       setState({
@@ -614,6 +674,19 @@ function handleEnvelope(env: WSEnvelope): void {
             : d,
         ),
       });
+
+      // The same answer can also concern a classification question: the
+      // authority reports the earlier resolution by ambiguity id, and this
+      // window must show the accepted answer instead of pretending its own.
+      const ambiguity = (env.payload as { ambiguity_id?: string }).ambiguity_id;
+      if (ambiguity !== undefined && state.ambiguityAnswers[ambiguity] !== undefined) {
+        setState({
+          ambiguityAnswers: {
+            ...state.ambiguityAnswers,
+            [ambiguity]: { ...state.ambiguityAnswers[ambiguity]!, pending: false, superseded: true },
+          },
+        });
+      }
       break;
     }
     case "ERROR": {
@@ -858,6 +931,50 @@ export function freezeRequest(): void {
 export function resolveDecision(decisionId: string, optionId: string): void {
   send(commandEnvelope("DECISION_RESOLVE", { decision_id: decisionId, option_id: optionId }));
 }
+
+/**
+ * Answer one classification question. Owner only, and only while the document
+ * is still being read: the reducer rejects the command in any other phase, so
+ * refusing here says why instead of sending a command that cannot be applied.
+ *
+ * The answer is recorded as submitted, not settled. `AMBIGUITY_RESOLVE` or
+ * `ALREADY_RESOLVED` from the authority decides, and a second answer for the
+ * same id is refused locally rather than racing another member's.
+ */
+export function resolveAmbiguity(id: string, choice: AmbiguityChoice, note = ""): void {
+  const refusal = ambiguityRefusal(id, note);
+  if (refusal !== null) {
+    toastStore.push("error", refusal);
+    return;
+  }
+  setState({
+    ambiguityAnswers: {
+      ...state.ambiguityAnswers,
+      [id]: { choice, note: note.trim() === "" ? undefined : note, pending: true, superseded: false },
+    },
+  });
+  send(
+    commandEnvelope("AMBIGUITY_RESOLVE", {
+      ambiguity_id: id,
+      choice,
+      ...(note.trim() === "" ? {} : { note }),
+    }),
+  );
+}
+
+/** Why this window may not answer, or null when the answer can be sent. */
+export function ambiguityRefusal(id: string, note: string): string | null {
+  if (id.trim() === "") return "A question needs its id before it can be answered.";
+  if (note.length > MAX_AMBIGUITY_NOTE) return `Keep a note under ${String(MAX_AMBIGUITY_NOTE)} characters.`;
+  if (state.role !== "owner") return "Only the session owner can answer the questions.";
+  if (state.conn !== "open") return "Answering needs a live connection to the session.";
+  if (state.phase !== "INGESTION") return "These questions were already answered; the plan has moved on.";
+  if (state.ambiguityAnswers[id] !== undefined) return "This question already has an answer from this window.";
+  return null;
+}
+
+/** The longest note a question answer carries. */
+export const MAX_AMBIGUITY_NOTE = 500;
 
 /** Owner commands. */
 export function cancelSession(): void {

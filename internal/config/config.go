@@ -120,6 +120,14 @@ type Config struct {
 	DeployTarget string `json:"deploy_target,omitempty"`
 	// AgentBoxURL is the Agent Box endpoint. Empty selects DefaultAgentBoxURL.
 	AgentBoxURL string `json:"agent_box_url,omitempty"`
+	// RepositoryWorkRoots lists extra repository-relative directories the work
+	// view indexes, for a project that keeps its plans outside the usual
+	// docs/ hierarchy. The standard roots are always read.
+	RepositoryWorkRoots []string `json:"repository_work_roots,omitempty"`
+	// Sandbox is the prepared-VM settings for the optional remote build and
+	// preview. An empty provider disables launching and leaves every document
+	// and implementation path available.
+	Sandbox SandboxConfig `json:"sandbox,omitempty"`
 
 	// unknown preserves keys written by another build.
 	unknown map[string]json.RawMessage
@@ -209,6 +217,7 @@ var knownKeys = map[string]bool{
 	"browser_path": true, "ocr_language": true, "host_env_allow": true,
 	"stage_timeout_seconds": true, "role_models": true, "disable_narrator": true,
 	"deploy_target": true, "agent_box_url": true,
+	"repository_work_roots": true, "sandbox": true,
 }
 
 // Save writes the configuration atomically: same-directory temporary file,
@@ -328,6 +337,12 @@ func Validate(cfg Config) error {
 		if err := ValidateAgentBoxURL(cfg.AgentBoxURL); err != nil {
 			return err
 		}
+	}
+	if err := ValidateRepositoryWorkRoots(cfg.RepositoryWorkRoots); err != nil {
+		return err
+	}
+	if err := ValidateSandbox(cfg.Sandbox); err != nil {
+		return err
 	}
 	return nil
 }
