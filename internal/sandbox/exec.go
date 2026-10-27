@@ -100,8 +100,8 @@ func (e *Executor) do(ctx context.Context, method, urlPath string, body any, out
 // Upload writes an archive into the sandbox under dir. The directory must stay
 // inside the sandbox root: a caller cannot place files outside it.
 func (e *Executor) Upload(ctx context.Context, sandboxID string, archive []byte, dir string) error {
-	if verr := validSandboxID(sandboxID); verr != nil {
-		return verr
+	if !validSandboxID(sandboxID) {
+		return fmt.Errorf("sandbox exec: %q is not a sandbox id", sandboxID)
 	}
 	clean, derr := safeSandboxDir(dir)
 	if derr != nil {
@@ -133,8 +133,8 @@ func safeSandboxDir(dir string) (string, error) {
 // Run executes one recorded command and returns its receipt. deadline is the
 // time the command may take; it is further bounded by the lease.
 func (e *Executor) Run(ctx context.Context, sandboxID string, cmd recipe.Command, deadline time.Duration) (Receipt, error) {
-	if verr := validSandboxID(sandboxID); verr != nil {
-		return Receipt{}, verr
+	if !validSandboxID(sandboxID) {
+		return Receipt{}, fmt.Errorf("sandbox exec: %q is not a sandbox id", sandboxID)
 	}
 	if len(cmd.Argv) == 0 {
 		return Receipt{}, errors.New("sandbox exec: a command needs an argv")
@@ -190,8 +190,8 @@ func (e *Executor) Ready(ctx context.Context, sandboxID string, probe []string, 
 // failure and returns every receipt it collected, so the window can show exactly
 // how far the run got.
 func (e *Executor) RunRecipe(ctx context.Context, sandboxID string, r recipe.Recipe, leaseExpiry, now time.Time) ([]Receipt, error) {
-	if verr := validSandboxID(sandboxID); verr != nil {
-		return nil, verr
+	if !validSandboxID(sandboxID) {
+		return nil, fmt.Errorf("sandbox exec: %q is not a sandbox id", sandboxID)
 	}
 	remaining := leaseExpiry.Sub(now) - leaseMargin
 	if remaining <= 0 {
