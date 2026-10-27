@@ -24,7 +24,6 @@ For each change there, check:
 5. **Cost on hot paths.** A process spawn, network call or full-file read inside a loop or on a path that runs per event or per request; a cache or list that grows without bound.
 6. **Unfinished work.** A TODO, stub, mock data, fake success path, or test-only branch in production code.
 
-
 Language traps:
 
 - **Go**: an error dropped with `_` or never checked; a goroutine with no way to exit; `defer` inside a loop.
@@ -38,7 +37,6 @@ Language traps:
 - Flag a test edited to match new output when the PR body gives no reason.
 - The gate is `go test ./...` (CI: `.github/workflows/ci.yml`, `.github/workflows/release.yml`). The PR body's Verification section lists each command with its exit code; flag a claim with no command.
 
-
 ## Docs drift
 
 Docs are part of the change. For each changed code path, open the doc that describes it and compare names, flags, env vars, defaults, file paths, numbers and stated behaviour. Quote the doc line that is now wrong next to the code line that contradicts it.
@@ -48,7 +46,6 @@ Docs are part of the change. For each changed code path, open the doc that descr
 - **Plans** (`docs/plans/`): flag a plan that still lists as pending, or describes another way, what this PR builds or replaces.
 - A structural change (a new top-level directory, or more than 10 changed files) needs an ADR in the same PR.
 - A doc changed with no code change: check it describes the code as it is now, not as planned.
-
 
 ## Do not review
 
