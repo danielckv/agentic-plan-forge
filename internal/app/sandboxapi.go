@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/danielckv/agentic-plan-forge/internal/recipe"
 	"github.com/danielckv/agentic-plan-forge/internal/sandbox"
 )
 
@@ -42,6 +43,14 @@ type sandboxManager struct {
 	// appPort is the port inside the sandbox the preview serves. The lifecycle
 	// record does not carry it because it belongs to this side of the proxy.
 	appPort int
+	// drive runs the recorded commands inside the lease. It is a field so a test
+	// can substitute a driver that never reaches a provider.
+	drive sandboxRun
+}
+
+// sandboxRun runs one recipe in a created sandbox and returns its receipts.
+type sandboxRun interface {
+	RunRecipe(ctx context.Context, sandboxID string, r recipe.Recipe, leaseExpiry, now time.Time) ([]sandbox.Receipt, error)
 }
 
 // newSandboxManager resolves the provider settings once per session.
@@ -179,10 +188,45 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 	m.lease.ExpiresAt = lease.ExpiresAt
 	m.lease.State = sandbox.StateBuilding
 	m.appPort = req.AppPort
-	// The command receipts come from the execution driver. Without it the lease
-	// would sit at "building" while the window believed work was happening, so a
-	// sandbox with no driver is a stated limitation, not a silent stall.
-	m.lease.LastError = "the sandbox is created; the recorded commands run through the execution driver, which this build does not yet call from the window"
+	return m.report()
+}
+
+// Run executes the recorded recipe in the created sandbox and records each
+// receipt on the lease. It is the only path that can move a lease to ready, and
+// it refuses to do so without a successful build, test and readiness receipt.
+func (m *sandboxManager) Run(ctx context.Context, r recipe.Recipe) LaunchReport {
+	m.mu.Lock()
+	if m.lease.SandboxID == "" {
+		m.mu.Unlock()
+		return LaunchReport{State: "setup", Problem: "There is no sandbox to run in."}
+	}
+	driver := m.drive
+	sandboxID, expiry := m.lease.SandboxID, m.lease.ExpiresAt
+	m.lease.State = sandbox.StateTesting
+	m.mu.Unlock()
+
+	if driver == nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.lease = m.lease.MarkFailed("no execution driver is configured for this build")
+		return m.report()
+	}
+	receipts, err := driver.RunRecipe(ctx, sandboxID, r, expiry, time.Now())
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, receipt := range receipts {
+		m.lease = m.lease.AddReceipt(receipt)
+	}
+	if err != nil {
+		m.lease = m.lease.MarkFailed(err.Error())
+		return m.report()
+	}
+	m.lease.State = sandbox.StateReady
+	if verr := m.lease.Validate(); verr != nil {
+		// Receipts that do not add up are a failure, not a ready page.
+		m.lease = m.lease.MarkFailed(verr.Error())
+	}
 	return m.report()
 }
 

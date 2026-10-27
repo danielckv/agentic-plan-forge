@@ -39,6 +39,9 @@ const (
 // the zero value disables launching without affecting document generation.
 type SandboxConfig struct {
 	Provider string `json:"provider,omitempty"`
+	// BaseURL is the provider API root. Empty selects the public API; a
+	// self-hosted provider sets its own.
+	BaseURL string `json:"base_url,omitempty"`
 	// APIKeyEnv names the environment variable that holds the provider key. It
 	// is a name, never a value, so the config file stays safe to copy.
 	APIKeyEnv string `json:"api_key_env,omitempty"`
