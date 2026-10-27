@@ -38,6 +38,12 @@ describe("outcome-first derivations", () => {
     expect(stageNeedsReader("waiting_for_answer")).toBe(true);
   });
 
+  it("treats a failed stage as no longer active, so the headline must look it up", () => {
+    const stages = [stage({ state: "failed" })];
+    expect(activeStage(stages)).toBeUndefined();
+    expect(blockedStages(stages)).toHaveLength(1);
+  });
+
   it("leads with the question rather than a generic progress line", () => {
     expect(outcomeHeadline([stage({ state: "waiting_for_answer" })], "")).toContain("waiting for your answer");
   });

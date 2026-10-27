@@ -81,10 +81,14 @@ export function formatDuration(ms: number): string {
  * decoding four avatar cards.
  */
 export function outcomeHeadline(stages: StageView[] | undefined, recovery: string): string {
-  const blocked = activeStage(stages);
+  // A failure is terminal, so it is not the "active" stage: it is a stage the
+  // reader must act on, and it has to lead the sentence rather than hide behind
+  // a generic progress line.
+  const blocked = blockedStages(stages)[0];
   if (blocked?.state === "waiting_for_answer") return "The run is waiting for your answer.";
   if (blocked?.state === "failed") return "A stage stopped before the plan was finished.";
-  if (blocked !== undefined) return `Planning: ${STAGE_LABEL[blocked.state].toLowerCase()}.`;
+  const active = activeStage(stages);
+  if (active !== undefined) return `Planning: ${STAGE_LABEL[active.state].toLowerCase()}.`;
   if (recovery !== "") return recovery;
   const done = (stages ?? []).filter((s) => s.state === "completed").length;
   if (done > 0) return "Every stage of this cycle has finished.";
