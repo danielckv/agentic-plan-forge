@@ -16,12 +16,14 @@ Review these paths first and hardest:
 - `web/`
 
 For each change there, check:
+
 1. **Correctness.** A wrong condition, an off-by-one, a changed default or return value that a caller still reads the old way, a branch that can never run.
 2. **Failure paths.** Every subprocess, file, network and parse call handles failure, and has a timeout where it can hang. Flag a swallowed error, an empty catch, a fallback that reports success, and cleanup (temp files, child processes, locks) that the error path skips.
 3. **Input edges.** Empty, missing, oversized, malformed or concurrent input.
 4. **Security.** Untrusted input that reaches a shell, SQL, HTML, a file path or `eval`; a secret or token in code, logs, fixtures or error messages; a file created readable by other users.
 5. **Cost on hot paths.** A process spawn, network call or full-file read inside a loop or on a path that runs per event or per request; a cache or list that grows without bound.
 6. **Unfinished work.** A TODO, stub, mock data, fake success path, or test-only branch in production code.
+
 
 Language traps:
 
@@ -36,19 +38,25 @@ Language traps:
 - Flag a test edited to match new output when the PR body gives no reason.
 - The gate is `go test ./...` (CI: `.github/workflows/ci.yml`, `.github/workflows/release.yml`). The PR body's Verification section lists each command with its exit code; flag a claim with no command.
 
+
 ## Docs drift
+
 Docs are part of the change. For each changed code path, open the doc that describes it and compare names, flags, env vars, defaults, file paths, numbers and stated behaviour. Quote the doc line that is now wrong next to the code line that contradicts it.
+
 - Find the README or `docs/` page that names each changed path, and check it still holds.
 - **ADRs** (`docs/adrs/`): an ADR records a decision. A PR that reverses or bends an accepted ADR needs a new ADR or a dated addendum. Ask for that, not for an edit to the old decision text.
 - **Plans** (`docs/plans/`): flag a plan that still lists as pending, or describes another way, what this PR builds or replaces.
 - A structural change (a new top-level directory, or more than 10 changed files) needs an ADR in the same PR.
 - A doc changed with no code change: check it describes the code as it is now, not as planned.
 
+
 ## Do not review
+
 - Lockfiles, unless the PR is about a dependency.
 - Formatting and style that a formatter or linter owns.
 
 ## Output
+
 - One comment per finding, on the line it is about. Start it with **High**, **Medium** or **Low**:
   - **High**: wrong behaviour, data loss, a security hole, or a doc that now states something false.
   - **Medium**: a missing test, a missing error path, drift in a secondary doc.
