@@ -869,10 +869,17 @@ func (e *executor) emitFor(ctx context.Context) func(contracts.PublicEvent) erro
 // emits: a heartbeat moves last-activity, a terminal status ends the stage, and
 // neither can invent progress that did not happen.
 func (e *executor) noteStage(ev contracts.PublicEvent) {
+	// A public event carries decoded values, not bytes: re-encode once so the
+	// same struct the wire uses is read back, rather than a second decoder that
+	// could disagree with it.
+	payload, err := json.Marshal(ev.Payload)
+	if err != nil {
+		return
+	}
 	switch relay.WSEventType(ev.Type) {
 	case relay.EventAvatarThought:
 		var p relay.AvatarThoughtPayload
-		if json.Unmarshal(ev.Payload, &p) != nil || p.AvatarID == "" {
+		if json.Unmarshal(payload, &p) != nil || p.AvatarID == "" {
 			return
 		}
 		id := stageID(p.AvatarID)
@@ -900,7 +907,7 @@ func (e *executor) noteStage(ev contracts.PublicEvent) {
 		}
 	case relay.EventDecisionPrompt:
 		var p relay.DecisionPromptPayload
-		if json.Unmarshal(ev.Payload, &p) != nil {
+		if json.Unmarshal(payload, &p) != nil {
 			return
 		}
 		e.mu.Lock()

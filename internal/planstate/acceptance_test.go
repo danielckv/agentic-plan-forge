@@ -17,6 +17,18 @@ func countOccurrences(haystack, needle string) int {
 	return strings.Count(haystack, needle)
 }
 
+// newAcceptanceRepo returns a real directory plus an isolated Plan Forge home,
+// so the ledger is written somewhere private and the repository resolves.
+func newAcceptanceRepo(t *testing.T) string {
+	t.Helper()
+	t.Setenv("PLAN_FORGE_HOME", t.TempDir())
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func acceptanceFixture(head string) AcceptanceEntry {
 	return AcceptanceEntry{
 		ApprovalID:      "approval-1",
@@ -46,8 +58,7 @@ func acceptancePathForTest(t *testing.T) string {
 // says what to build, accepting an implementation says this exact revision was
 // reviewed and validated. A head that moved must not inherit the record.
 func TestImplementationAcceptanceBindsToTheExactRevision(t *testing.T) {
-	isolate(t)
-	repo := newRepo(t)
+	repo := newAcceptanceRepo(t)
 
 	if err := RecordAcceptance(repo, acceptanceFixture("head-aaa")); err != nil {
 		t.Fatalf("RecordAcceptance: %v", err)
@@ -73,8 +84,7 @@ func TestImplementationAcceptanceBindsToTheExactRevision(t *testing.T) {
 // Re-checking the same decision is idempotent: the ledger keeps one entry, so a
 // repeated acceptance check cannot inflate the file or create two truths.
 func TestRecordAcceptanceIsIdempotentOnOneRevision(t *testing.T) {
-	isolate(t)
-	repo := newRepo(t)
+	repo := newAcceptanceRepo(t)
 	entry := acceptanceFixture("head-aaa")
 	for range 3 {
 		if err := RecordAcceptance(repo, entry); err != nil {
@@ -93,8 +103,7 @@ func TestRecordAcceptanceIsIdempotentOnOneRevision(t *testing.T) {
 // A different revision of the same approval is a second record, not an update:
 // both revisions were genuinely decided on.
 func TestAcceptanceOfTwoRevisionsKeepsBoth(t *testing.T) {
-	isolate(t)
-	repo := newRepo(t)
+	repo := newAcceptanceRepo(t)
 	for _, head := range []string{"head-aaa", "head-bbb"} {
 		if err := RecordAcceptance(repo, acceptanceFixture(head)); err != nil {
 			t.Fatalf("RecordAcceptance(%s): %v", head, err)
@@ -120,8 +129,7 @@ func TestAcceptanceOfTwoRevisionsKeepsBoth(t *testing.T) {
 // A record needs both actors and the revision it covers: a half-filled
 // acceptance must not be written.
 func TestRecordAcceptanceRefusesIncompleteEvidence(t *testing.T) {
-	isolate(t)
-	repo := newRepo(t)
+	repo := newAcceptanceRepo(t)
 	base := acceptanceFixture("head-aaa")
 	for _, tc := range []struct {
 		name string
@@ -146,8 +154,7 @@ func TestRecordAcceptanceRefusesIncompleteEvidence(t *testing.T) {
 
 // A ledger written by a newer build is reported, never reinterpreted.
 func TestAcceptanceRefusesAnotherVersion(t *testing.T) {
-	isolate(t)
-	repo := newRepo(t)
+	repo := newAcceptanceRepo(t)
 	path := acceptancePathForTest(t)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
@@ -162,8 +169,7 @@ func TestAcceptanceRefusesAnotherVersion(t *testing.T) {
 
 // The record is private: it names people and the revision they approved.
 func TestAcceptanceLedgerIsOwnerOnly(t *testing.T) {
-	isolate(t)
-	repo := newRepo(t)
+	repo := newAcceptanceRepo(t)
 	if err := RecordAcceptance(repo, acceptanceFixture("head-aaa")); err != nil {
 		t.Fatalf("RecordAcceptance: %v", err)
 	}
