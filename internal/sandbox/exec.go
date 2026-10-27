@@ -240,8 +240,3 @@ func stepBudget(step recipe.Command, remaining time.Duration) time.Duration {
 	}
 	return budget
 }
-
-var (
-	_ = os.Getenv
-	_ = strconv.Itoa
-)
