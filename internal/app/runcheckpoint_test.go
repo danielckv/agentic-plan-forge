@@ -3,7 +3,6 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
