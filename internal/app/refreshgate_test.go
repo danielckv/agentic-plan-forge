@@ -75,12 +75,20 @@ func TestRefreshGateRefreshesALongOpeningAtOnce(t *testing.T) {
 	if !g.due(words(250)) {
 		t.Fatal("a 250-word brief earned no first refresh")
 	}
-	// The next one is measured from there, not from empty.
-	if g.due(words(300)) {
-		t.Error("a refresh was due 50 words after the first, want none until 30 more and then 60")
+	// The next one is measured from there, not from empty: the first press set
+	// the mark at 250, so the second refresh waits for 280.
+	if g.due(words(279)) {
+		t.Error("29 more words earned a second refresh, want none until 30")
 	}
-	if !g.due(words(310)) {
-		t.Fatal("60 more words earned no second refresh")
+	if !g.due(words(280)) {
+		t.Fatal("30 more words earned no second refresh")
+	}
+	// The third waits for 60 more from 280.
+	if g.due(words(339)) {
+		t.Error("59 more words earned a third refresh, want none before 60")
+	}
+	if !g.due(words(340)) {
+		t.Fatal("60 more words earned no third refresh")
 	}
 }
 
@@ -153,7 +161,10 @@ func TestCountWords(t *testing.T) {
 		{"spaces only", "   \n\t ", 0},
 		{"one", "hello", 1},
 		{"a heading and a paragraph", "# Title\n\nTwo words here.\n", 5},
-		{"markdown punctuation still counts as words", "- [ ] a task\n", 4},
+		// A checkbox is five whitespace-separated tokens: "-", "[", "]", the
+		// article and the noun. The count decides when to spend a call, so a
+		// stable approximation is what matters, not a grammar.
+		{"markdown punctuation still counts as words", "- [ ] a task\n", 5},
 	} {
 		if got := CountWords(tc.text); got != tc.want {
 			t.Errorf("%s: CountWords = %d, want %d", tc.name, got, tc.want)
