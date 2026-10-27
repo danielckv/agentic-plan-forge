@@ -116,9 +116,9 @@ func BuildBundle(input contracts.SynthesisInput, meta contracts.ApprovalMeta, op
 	}
 	entries = append(entries, newEntry(specPath, KindSpec, title, plan.SpecMarkdown))
 
-	// One record per decision that carries a rationale. A plan with no such
-	// decision gets none: inventing an architecture decision to have a file is
-	// worse than having no file.
+	// One record per decision that was actually made. A plan with none gets no
+	// record: inventing an architecture decision to have a file is worse than
+	// having no file.
 	number := opts.NextADRNumber
 	if number <= 0 {
 		number = 1
