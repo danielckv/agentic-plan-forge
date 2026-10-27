@@ -383,6 +383,17 @@ func TestCollectGathersQualifyingEvidence(t *testing.T) {
 	}
 }
 
+// A bot approval that reaches Evaluate directly never qualifies: the filter in
+// Collect is one layer, and evidence can also arrive from a stored record.
+func TestEvaluateRefusesABotApproval(t *testing.T) {
+	ev := okEvidence()
+	ev.Reviews = []Review{{Reviewer: "dependabot[bot]", State: ReviewStateApproved, CommitSHA: head, AuthorPermission: "write"}}
+	d := Evaluate(ev, head)
+	if d.Status != StatusPending || d.Accepted {
+		t.Fatalf("Evaluate = %q %v, want pending", d.Status, d.Reasons)
+	}
+}
+
 // TestCollectFiltersBotsAndAuthorApprovals proves bot reviews and the PR
 // author's own approval are filtered out of qualifying evidence.
 func TestCollectFiltersBotsAndAuthorApprovals(t *testing.T) {

@@ -126,6 +126,20 @@ func TestAcceptanceOfTwoRevisionsKeepsBoth(t *testing.T) {
 	}
 }
 
+// Asking for a revision that has no record while another revision does reports
+// stale, never found: the caller must not accept a revision nobody decided on.
+func TestAcceptanceOfAnotherRevisionIsStaleNotFound(t *testing.T) {
+	repo := newAcceptanceRepo(t)
+	if err := RecordAcceptance(repo, acceptanceFixture("head-aaa")); err != nil {
+		t.Fatalf("RecordAcceptance: %v", err)
+	}
+	if _, found, stale, err := ImplementationAcceptance(repo, "approval-1", "head-zzz"); err != nil {
+		t.Fatalf("ImplementationAcceptance: %v", err)
+	} else if found || !stale {
+		t.Fatalf("found=%v stale=%v, want stale and not found", found, stale)
+	}
+}
+
 // A record needs both actors and the revision it covers: a half-filled
 // acceptance must not be written.
 func TestRecordAcceptanceRefusesIncompleteEvidence(t *testing.T) {

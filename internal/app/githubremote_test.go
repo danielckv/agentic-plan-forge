@@ -49,6 +49,32 @@ func TestGithubSlugFromTheOriginRemote(t *testing.T) {
 	}
 }
 
+// A remote on another host is refused even when its owner/name pair looks like
+// a GitHub one: reading it would query the wrong server for a pull request.
+func TestSlugFromAnotherHostIsRefused(t *testing.T) {
+	for _, remote := range []string{
+		"git@gitlab.com:acme/widget.git",
+		"git@git.example.com:acme/widget.git",
+		"https://ghe.example.com/acme/widget.git",
+		"ssh://git@bitbucket.org/acme/widget.git",
+	} {
+		if slug, err := slugFromRemote(remote); err == nil {
+			t.Errorf("%q produced %q", remote, slug)
+		}
+	}
+	// The GitHub forms of the same shapes are still accepted.
+	for _, remote := range []string{
+		"git@github.com:acme/widget.git",
+		"https://github.com/acme/widget.git",
+		"https://www.github.com/acme/widget",
+		"ssh://git@github.com/acme/widget.git",
+	} {
+		if slug, err := slugFromRemote(remote); err != nil || slug != "acme/widget" {
+			t.Errorf("%q = %q, %v", remote, slug, err)
+		}
+	}
+}
+
 // A remote that is not GitHub is reported, not silently reshaped into a name.
 func TestSlugFromANonGithubRemoteIsReported(t *testing.T) {
 	for _, remote := range []string{"https://gitlab.com/acme/widget.git", "not a url", ""} {

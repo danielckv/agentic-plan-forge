@@ -35,8 +35,10 @@ const (
 	// statePath is the one active state file whose ## Next order feeds
 	// Inventory.Next. No other file contributes to it.
 	statePath = ".agents/STATE.md"
-	// idHexLen is the length of a document ID: the first 16 hex characters of
-	// the SHA-256 of the slash-separated repository-relative path.
+	// idHexLen is the length of a document ID: 8 hex characters of the path
+	// digest, then 8 of the content digest. The path half finds the document
+	// after its bytes changed; the content half makes a changed document a
+	// different identity, which is what lets Open report it as stale.
 	idHexLen = 16
 )
 

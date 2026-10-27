@@ -88,11 +88,12 @@ func pathPrefix(rel string) string {
 // item order follow source order, and no clock, environment or randomness
 // takes part.
 func buildDocument(rel string, raw []byte) (Document, []Item) {
+	sum := hashBytes(raw)
 	doc := Document{
-		ID:       docID(rel, hashBytes(raw)),
+		ID:       docID(rel, sum),
 		Path:     rel,
 		Kind:     classify(rel),
-		SHA256:   hashBytes(raw),
+		SHA256:   sum,
 		Bytes:    len(raw),
 		Headings: []Heading{},
 		Items:    []Item{},

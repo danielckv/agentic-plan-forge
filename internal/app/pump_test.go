@@ -72,6 +72,23 @@ func TestPumpDropsHeartbeatsBeforeDecisions(t *testing.T) {
 	}
 }
 
+// A consumer that never drains is not healthy just because every event it
+// missed was disposable. An unbroken run of drops has to surface as resync.
+func TestPumpRaisesResyncWhenNothingEverDrains(t *testing.T) {
+	p := newPump()
+	// Fill the queue, then keep pushing. Every push after the fill drops one
+	// heartbeat, and the run never ends because nothing is consumed.
+	for range maxPumpEvents {
+		p.push(thought(t, "Thinking", ""))
+	}
+	for range maxDroppedInARow + 1 {
+		p.push(thought(t, "Thinking", ""))
+	}
+	if !p.resyncNeeded() {
+		t.Fatal("an endless run of drops did not raise resync")
+	}
+}
+
 // A grounded thought (host, model, step) is what the window uses to say where
 // work is running, so it is not disposable chatter.
 func TestPumpKeepsGroundedThoughts(t *testing.T) {

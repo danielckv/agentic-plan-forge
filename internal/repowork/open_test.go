@@ -52,6 +52,31 @@ func TestOpenDetectsChangedContent(t *testing.T) {
 	}
 }
 
+// A document's identity carries its bytes, so the same path with different
+// content is a different document, not a renamed one.
+func TestDocumentIdentityChangesWithContent(t *testing.T) {
+	root := writeRepo(t, map[string]string{"docs/plans/p.md": "# Plan\n"})
+	first := findDoc(t, mustScan(t, root, Options{}), "docs/plans/p.md")
+
+	if err := os.WriteFile(filepath.Join(root, "docs", "plans", "p.md"), []byte("# Plan changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second := findDoc(t, mustScan(t, root, Options{}), "docs/plans/p.md")
+	if first.ID == second.ID {
+		t.Fatal("a changed document kept the identity of its old content")
+	}
+	if first.SHA256 == second.SHA256 {
+		t.Fatal("a changed document kept the hash of its old content")
+	}
+
+	// Unchanged bytes keep their identity, so a page can be re-rendered without
+	// every document looking stale.
+	third := findDoc(t, mustScan(t, root, Options{}), "docs/plans/p.md")
+	if second.ID != third.ID {
+		t.Fatal("an unchanged document changed identity between two scans")
+	}
+}
+
 func TestOpenRefusesSymlinkSwap(t *testing.T) {
 	outside := t.TempDir()
 	if err := os.WriteFile(filepath.Join(outside, "elsewhere.md"), []byte("# elsewhere"), 0o644); err != nil {
