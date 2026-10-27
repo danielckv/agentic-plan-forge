@@ -29,6 +29,8 @@ export interface RecipeView {
   reused: boolean;
   stored?: string;
   problem?: string;
+  /** SHA-256 of the recipe the owner reviewed; a launch pins it. */
+  hash?: string;
   recipe?: {
     schema_version: string;
     revision: string;

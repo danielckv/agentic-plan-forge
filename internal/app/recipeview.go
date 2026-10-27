@@ -119,11 +119,14 @@ func LoadStoredRecipe(repo string) (recipe.Recipe, bool) {
 // RecipeView is what the implementation page shows: the commands, where each
 // one came from, and whether the project has a step at all.
 type RecipeView struct {
-	Available bool           `json:"available"`
-	Reused    bool           `json:"reused"`
-	Stored    string         `json:"stored,omitempty"`
-	Problem   string         `json:"problem,omitempty"`
-	Recipe    *recipe.Recipe `json:"recipe,omitempty"`
+	Available bool   `json:"available"`
+	Reused    bool   `json:"reused"`
+	Stored    string `json:"stored,omitempty"`
+	Problem   string `json:"problem,omitempty"`
+	// Hash is the recipe's own digest, so a launch can pin the exact commands the
+	// owner reviewed.
+	Hash   string         `json:"hash,omitempty"`
+	Recipe *recipe.Recipe `json:"recipe,omitempty"`
 }
 
 // CurrentRecipe returns the recipe state for the window.
@@ -141,6 +144,11 @@ func (s *appSession) CurrentRecipe(ctx context.Context) RecipeView {
 		view.Available = true
 	case err != nil:
 		view.Problem = err.Error()
+	}
+	if view.Available {
+		if hash, herr := r.Hash(); herr == nil {
+			view.Hash = hash
+		}
 	}
 	if view.Available && !reused {
 		if path, serr := StoreRecipe(s.repo, r); serr == nil {

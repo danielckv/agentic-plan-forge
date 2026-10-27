@@ -73,6 +73,7 @@ func (s *appSession) SessionSandboxSettings() (sandbox.Settings, bool, string) {
 			"The sandbox provider key is missing. Set " + resolved.APIKeyEnv + " in the environment that starts Plan Forge."
 	}
 	return sandbox.Settings{
+		BaseURL:        resolved.BaseURL,
 		APIKey:         key,
 		Template:       resolved.Template,
 		TimeoutSeconds: resolved.TimeoutSeconds,
