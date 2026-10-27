@@ -21,7 +21,7 @@ const SchemaVersion = 1
 const (
 	DefaultWorkdayHours = 9
 	DefaultMaxCycles    = 3
-	DefaultMaxParallel  = 3
+	DefaultMaxParallel  = 4
 	DefaultOCRLanguage  = "eng"
 	// DefaultStageTimeoutSeconds is the budget one deliberation call gets. The
 	// architect design part was measured at 110 seconds on opus with a minimal
@@ -104,9 +104,9 @@ type Config struct {
 	// StageTimeoutSeconds bounds one deliberation call. Zero selects
 	// DefaultStageTimeoutSeconds.
 	StageTimeoutSeconds int `json:"stage_timeout_seconds"`
-	// DisableNarrator turns off the live status avatar. It is off by name
-	// rather than on by name so an existing config keeps the narrator.
-	DisableNarrator bool `json:"disable_narrator,omitempty"`
+	// DisableNarrator turns off the live status avatar. It defaults to true so
+	// deliberation does not spend provider calls on periodic status summaries.
+	DisableNarrator bool `json:"disable_narrator"`
 	// RoleModels pins avatar roles to hosts and models, keyed by role name. A
 	// role with no entry is spread across the ready hosts by the router, so a
 	// default install uses every host it is signed in to rather than one.
@@ -138,6 +138,7 @@ func Default() Config {
 		HumanWorkdayHours:   DefaultWorkdayHours,
 		MaxCycles:           DefaultMaxCycles,
 		MaxParallel:         DefaultMaxParallel,
+		DisableNarrator:     true,
 		OCRLanguage:         DefaultOCRLanguage,
 		StageTimeoutSeconds: DefaultStageTimeoutSeconds,
 	}

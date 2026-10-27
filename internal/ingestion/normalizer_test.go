@@ -129,6 +129,40 @@ func TestNormalizeAppliesOwnerResolutions(t *testing.T) {
 	}
 }
 
+func TestApplyResolutionsReusesBaseWithoutModelCalls(t *testing.T) {
+	gen := &stubGen{responses: []string{fullResponse}}
+	base, err := Normalize(context.Background(), gen, "Finance needs a CSV export of invoices.", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gen.requests) != 1 || len(base.Ambiguities) != 1 {
+		t.Fatalf("requests = %d, ambiguities = %d", len(gen.requests), len(base.Ambiguities))
+	}
+	id := base.Ambiguities[0].ID
+
+	prod, err := ApplyResolutions(base, []contracts.AmbiguityResolution{{AmbiguityID: id, Choice: contracts.AmbiguityProduct}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prod.Ambiguities) != 0 || !containsString(prod.Product.Requirements, ambiguityText) {
+		t.Errorf("product resolution = %+v", prod)
+	}
+	// base must remain unchanged so subsequent resolution edits can re-apply cleanly.
+	if len(base.Ambiguities) != 1 || len(base.Product.Requirements) != 1 {
+		t.Errorf("base mutated by ApplyResolutions: %+v", base)
+	}
+	tech, err := ApplyResolutions(base, []contracts.AmbiguityResolution{{AmbiguityID: id, Choice: contracts.AmbiguityTechnical}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tech.Ambiguities) != 0 || !strings.Contains(tech.TechnicalAppendix, ambiguityText) || len(tech.Product.Requirements) != 1 {
+		t.Errorf("technical resolution = %+v", tech)
+	}
+	if len(gen.requests) != 1 {
+		t.Errorf("model called %d times, want 1", len(gen.requests))
+	}
+}
+
 func containsString(list []string, s string) bool {
 	for _, x := range list {
 		if x == s {

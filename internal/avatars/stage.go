@@ -200,11 +200,13 @@ func (o *orchestrator) thoughtOfStep(ctx context.Context, avatar string, cycle i
 	if !d.started.IsZero() && !terminalStatus(status) {
 		payload.ElapsedMS = time.Since(d.started).Milliseconds()
 	}
-	o.tell.record(stepRecord{
-		Avatar: avatar, Cycle: cycle, Status: status, Step: step,
-		Host: d.host, Model: d.model, Context: d.contextNote,
-		Summary: payload.PublicSummary, Seconds: int(payload.ElapsedMS / 1000),
-	})
+	if o.in.NarrateEvery > 0 || !strings.HasPrefix(payload.PublicSummary, "Running for ") {
+		o.tell.record(stepRecord{
+			Avatar: avatar, Cycle: cycle, Status: status, Step: step,
+			Host: d.host, Model: d.model, Context: d.contextNote,
+			Summary: payload.PublicSummary, Seconds: int(payload.ElapsedMS / 1000),
+		})
+	}
 	return o.emitEvent(ctx, relay.EventAvatarThought, payload)
 }
 
@@ -919,6 +921,7 @@ func (o *orchestrator) parseSpecialist(ws string) func(json.RawMessage) (synthes
 		o.mu.Lock()
 		arch := o.arch
 		o.mu.Unlock()
+		synthesizer.AlignSpecialistClaims(&d, arch)
 		if verr := d.Validate(arch, o.designContext()); verr != nil {
 			problems = append(problems, problemsOf(verr)...)
 		}

@@ -129,14 +129,16 @@ Each epic names the parts of your project it affects, and says what happens to e
 | **Clashes** | The requirement contradicts a decision or specification the team already recorded. The contradicted document is named, with what it says. |
 | **Possibly involved** | A name match only, shown while the full read is still running. It claims nothing more. |
 
-The panel paints immediately with name matches, then the model reads your repository's code, documentation and decision
-records and replaces them with the list above, usually within a minute. Every file it names exists: the model chooses
+The panel paints immediately with deterministic name matches as you edit or resolve ambiguity chips, without making a
+model call. Clicking **Re-interpret** runs the model pass over your repository's code, documentation and decision
+records and replaces the name matches with the list above. Every file it names exists: the model chooses
 among declarations and excerpts it was shown, so it cannot invent a path. The map is advisory and is not given to the
 avatars, who read the code and the decisions for themselves.
 
-It is recomputed only when something changed — the requirements, the code, or the project's notes — and cached in
-`docs/plans/.plan/cache/`, which is not committed. Without a signed-in agent CLI the name matches are all you get, and
-the panel says so. See [ADR 0005](adrs/0005-prd-impact-map.md).
+Raw normalization is cached by document text, so resolving ambiguity chips on Page 1 applies in memory with zero model
+calls. Impact model results are cached in `docs/plans/.plan/cache/`, which is not committed. Without a signed-in agent
+CLI the name matches are all you get, and the panel says so. See [ADR 0005](adrs/0005-prd-impact-map.md) and
+[ADR 0016](adrs/0016-five-minute-deliberation-budget.md).
 
 ### 2. Deliberation: the avatar room
 
@@ -159,23 +161,27 @@ rather than cancelling the call the first one started.
 
 A draft is failed for what it got wrong, never for what the payload already decided. A Domain Specialist plans one
 workstream, so a task of its draft that leaves `workstream_id` empty inherits the draft's; a task that names a
-*different* workstream is still rejected, because that is a disagreement rather than an omitted field.
+*different* workstream is still rejected, because that is a disagreement rather than an omitted field. Similarly, a
+specialist contract claim that quotes the architect's exact `version_hash` and leaves a schema field blank or restates
+the contract signature alongside the schema is aligned to the architect's contract without opening a decision card,
+while genuine schema alternatives still wait for your choice.
 
-**How the architect runs.** The stage answers in three parts: the design (workstreams and interface contracts), the
-diagrams drawn from it, and the documentation tasks in batches of at most 20 stale documents. Each part is kept on its
-own, so a retry re-runs only the part that failed.
+**How the architect runs.** The stage answers in three parts: the design (up to 4 cohesive workstreams and interface
+contracts), the diagrams drawn from it, and the documentation tasks in batches of at most 20 stale documents. Each part
+is kept on its own, so a retry re-runs only the part that failed.
 
 The specialists wait for the design part and for nothing else. The diagrams and the documentation batches run beside
 them, not before them, so a repository with a lot of stale documentation no longer holds the specialists up: measured on
 this repository, the architect spent 43m46s across 15 calls, 13 of them documentation batches, and every one of those 13
 used to block the stage. One limit covers the whole cycle, so the architect's remaining parts and the specialists
-together never exceed the configured `max_parallel`.
+together never exceed the configured `max_parallel` (default 4).
 
 A call that outruns its budget — `stage_timeout_seconds`, 600 seconds by default — is not repeated unchanged: it runs
 again with half its evidence, and says in the payload what it gave up. See
 [ADR 0007](adrs/0007-the-architect-answers-in-parts.md),
-[ADR 0009](adrs/0009-one-budget-per-stage-roles-across-hosts-and-a-live-room.md) and
-[ADR 0011](adrs/0011-the-documentation-batches-leave-the-critical-path.md).
+[ADR 0009](adrs/0009-one-budget-per-stage-roles-across-hosts-and-a-live-room.md),
+[ADR 0011](adrs/0011-the-documentation-batches-leave-the-critical-path.md) and
+[ADR 0016](adrs/0016-five-minute-deliberation-budget.md).
 
 **When you come back.** An unfinished run is kept in `docs/plans/.plan/run.json`, so closing the window or losing the
 process does not throw away work a model was already paid for. The next run over the same requirements picks the drafts

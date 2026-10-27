@@ -187,13 +187,10 @@ func TestRunHappyPathStageOrderAndModels(t *testing.T) {
 	if len(payload.Specialists) != 2 || len(payload.Architect.Contracts) != 1 {
 		t.Errorf("barrier payload has %d specialists and %d contracts", len(payload.Specialists), len(payload.Architect.Contracts))
 	}
-	// The in-stage critic ran while specialists were still drafting.
+	// Only the mandatory barrier review runs for the critic.
 	critics := h.stub.callsOf("critic")
-	if len(critics) != 2 || critics[0].End == 0 {
-		t.Fatalf("critic calls = %d, want the in-stage pass plus the barrier", len(critics))
-	}
-	if critics[0].Start >= barrier[0].Start {
-		t.Error("the in-stage critic must precede the barrier")
+	if len(critics) != 1 || critics[0].End == 0 {
+		t.Fatalf("critic calls = %d, want the barrier review only", len(critics))
 	}
 
 	for _, c := range calls {
@@ -254,7 +251,7 @@ func TestRunHappyPathStageOrderAndModels(t *testing.T) {
 
 func TestSpecialistsRunAtMostMinOfMaxParallelAndFour(t *testing.T) {
 	for _, tc := range []struct{ maxParallel, want int }{{1, 1}, {2, 2}, {8, 4}, {0, 4}} {
-		h := newHarness(t, bigFixture(6)) // eight specialists
+		h := newHarness(t, bigFixture(2)) // four specialists plus concurrent diagram and doc-task calls
 		h.in.MaxParallel = tc.maxParallel
 		h.stub.delay = 12 * time.Millisecond
 		if _, err := h.run(context.Background(), nil); err != nil {
@@ -264,6 +261,22 @@ func TestSpecialistsRunAtMostMinOfMaxParallelAndFour(t *testing.T) {
 			t.Errorf("MaxParallel=%d: peak concurrent provider calls = %d, want %d", tc.maxParallel, got, tc.want)
 		}
 	}
+}
+
+func TestSpecialistClaimPrependingSignatureAutoAlignsWithoutDecisionPrompt(t *testing.T) {
+	fx := synthtest.Sample()
+	k := fx.Architect.Contracts[0]
+	// Producer prepends the contract signature to input_schema while quoting the exact version_hash.
+	fx.Specialists[0].Implements[0].InputSchema = k.Signature + ". " + k.InputSchema
+	h := newHarness(t, fx)
+	si, err := h.run(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if n := len(h.sink.ofType(relay.EventDecisionPrompt)); n != 0 {
+		t.Errorf("DECISION_PROMPT events = %d, want 0 when version_hash matches and schema restates the contract", n)
+	}
+	mustCompile(t, si)
 }
 
 // --- cycle cap ---------------------------------------------------------------------------------

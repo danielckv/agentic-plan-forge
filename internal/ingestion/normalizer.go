@@ -155,14 +155,8 @@ func Normalize(ctx context.Context, gen contracts.Generator, prdText string, res
 	}
 
 	merged := mergeWire(parts, sections)
-	out, err := finalizeNormalized(merged, text, sections, resolutions)
-	if err != nil {
-		return contracts.NormalizedPRD{}, err
-	}
-	if err := contracts.Validate(NormalizedPRDSchemaID, WireJSON(out)); err != nil {
-		return contracts.NormalizedPRD{}, contracts.Wrap(contracts.CodeInvalidPayload, err, "normalized result violates %s", NormalizedPRDSchemaID)
-	}
-	return out, nil
+	base := finalizeNormalized(merged, text, sections)
+	return ApplyResolutions(base, resolutions)
 }
 
 // WireJSON returns the schema-conformant JSON form of a normalization result:
@@ -394,20 +388,86 @@ func ambiguityID(a contracts.Ambiguity) string {
 // emptyChipID is the ID of the chip for an empty ProductPRD field.
 func emptyChipID(field string) string { return "empty-" + field }
 
-// finalizeNormalized assigns stable IDs, applies owner resolutions and adds the
-// small-input chips.
-func finalizeNormalized(w wireNormalized, text string, sections []textSection, resolutions []contracts.AmbiguityResolution) (contracts.NormalizedPRD, error) {
+// finalizeNormalized assigns stable ambiguity IDs and adds the small-input
+// chips before owner resolutions are applied.
+func finalizeNormalized(w wireNormalized, text string, sections []textSection) contracts.NormalizedPRD {
+	product := w.Product
+	var open []contracts.Ambiguity
+	seen := map[string]bool{}
+	for _, a := range w.Ambiguities {
+		a.ID = ambiguityID(a)
+		if seen[a.ID] {
+			continue
+		}
+		seen[a.ID] = true
+		open = append(open, a)
+	}
+
+	if len(strings.Fields(text)) < SmallInputWords {
+		counts := map[string]int{
+			"goals":               len(product.Goals),
+			"actors":              len(product.Actors),
+			"flows":               len(product.Flows),
+			"acceptance_criteria": len(product.AcceptanceCriteria),
+		}
+		for _, f := range emptyFieldChips {
+			id := emptyChipID(f.field)
+			if counts[f.field] > 0 || seen[id] {
+				continue
+			}
+			seen[id] = true
+			open = append(open, contracts.Ambiguity{
+				ID:       id,
+				Text:     "",
+				Question: fmt.Sprintf("The input does not state any %s. Add them to the document and re-interpret, or dismiss to continue without.", f.label),
+			})
+		}
+	}
+
+	warnings := append([]string(nil), w.Warnings...)
+	if len(sections) > 1 {
+		warnings = append(warnings, fmt.Sprintf("document normalized in %d sections", len(sections)))
+	}
+	return contracts.NormalizedPRD{
+		SchemaVersion:     contracts.SchemaVersion,
+		Product:           product,
+		TechnicalAppendix: w.TechnicalAppendix,
+		Epics:             append([]contracts.DraftEpic(nil), w.Epics...),
+		SourceRefs:        sourceRefs(text, sections),
+		Ambiguities:       open,
+		Warnings:          warnings,
+	}
+}
+
+// ApplyResolutions applies owner ambiguity choices to a raw normalized PRD
+// without calling the model. A "product" choice appends the excerpt to
+// Product.Requirements, "technical" appends it to TechnicalAppendix, and
+// "dismiss" drops it.
+func ApplyResolutions(base contracts.NormalizedPRD, resolutions []contracts.AmbiguityResolution) (contracts.NormalizedPRD, error) {
+	if err := validateResolutions(resolutions); err != nil {
+		return contracts.NormalizedPRD{}, err
+	}
 	byID := map[string]contracts.AmbiguityResolution{}
 	for _, r := range resolutions {
 		byID[r.AmbiguityID] = r
 	}
 
-	product := w.Product
-	appendix := w.TechnicalAppendix
+	product := base.Product
+	product.Goals = append([]string(nil), base.Product.Goals...)
+	product.Actors = append([]string(nil), base.Product.Actors...)
+	product.Flows = append([]string(nil), base.Product.Flows...)
+	product.Requirements = append([]string(nil), base.Product.Requirements...)
+	product.AcceptanceCriteria = append([]string(nil), base.Product.AcceptanceCriteria...)
+	product.Constraints = append([]string(nil), base.Product.Constraints...)
+	product.OpenQuestions = append([]string(nil), base.Product.OpenQuestions...)
+
+	appendix := base.TechnicalAppendix
 	var open []contracts.Ambiguity
 	seen := map[string]bool{}
-	for _, a := range w.Ambiguities {
-		a.ID = ambiguityID(a)
+	for _, a := range base.Ambiguities {
+		if a.ID == "" {
+			a.ID = ambiguityID(a)
+		}
 		if seen[a.ID] {
 			continue
 		}
@@ -440,34 +500,11 @@ func finalizeNormalized(w wireNormalized, text string, sections []textSection, r
 		}
 	}
 
-	if len(strings.Fields(text)) < SmallInputWords {
-		counts := map[string]int{
-			"goals":               len(product.Goals),
-			"actors":              len(product.Actors),
-			"flows":               len(product.Flows),
-			"acceptance_criteria": len(product.AcceptanceCriteria),
-		}
-		for _, f := range emptyFieldChips {
-			id := emptyChipID(f.field)
-			if counts[f.field] > 0 || seen[id] {
-				continue
-			}
-			if _, resolved := byID[id]; resolved {
-				continue
-			}
-			open = append(open, contracts.Ambiguity{
-				ID:       id,
-				Text:     "",
-				Question: fmt.Sprintf("The input does not state any %s. Add them to the document and re-interpret, or dismiss to continue without.", f.label),
-			})
-		}
-	}
-
 	// An epic regroups the product view and never adds to it: an item the
 	// model placed in an epic but not in the product view is dropped, and an
 	// epic left with no requirement goes with it.
-	epics := make([]contracts.DraftEpic, 0, len(w.Epics))
-	for _, e := range w.Epics {
+	epics := make([]contracts.DraftEpic, 0, len(base.Epics))
+	for _, e := range base.Epics {
 		e.Requirements = knownItems(e.Requirements, product.Requirements)
 		e.AcceptanceCriteria = knownItems(e.AcceptanceCriteria, product.AcceptanceCriteria)
 		if strings.TrimSpace(e.Title) == "" || len(e.Requirements) == 0 {
@@ -485,16 +522,15 @@ func finalizeNormalized(w wireNormalized, text string, sections []textSection, r
 		Product:           product,
 		TechnicalAppendix: appendix,
 		Epics:             epics,
-		SourceRefs:        sourceRefs(text, sections),
+		SourceRefs:        append([]contracts.SourceRef{}, base.SourceRefs...),
 		Ambiguities:       open,
-		Warnings:          w.Warnings,
-	}
-	if len(sections) > 1 {
-		out.Warnings = append(out.Warnings, fmt.Sprintf("document normalized in %d sections", len(sections)))
+		Warnings:          append([]string(nil), base.Warnings...),
 	}
 	nw := nonNilWire(wireNormalized{Product: out.Product, Epics: out.Epics, Ambiguities: out.Ambiguities})
 	out.Product, out.Epics, out.Ambiguities = nw.Product, nw.Epics, nw.Ambiguities
-	out.SourceRefs = append([]contracts.SourceRef{}, out.SourceRefs...)
+	if err := contracts.Validate(NormalizedPRDSchemaID, WireJSON(out)); err != nil {
+		return contracts.NormalizedPRD{}, contracts.Wrap(contracts.CodeInvalidPayload, err, "normalized result violates %s", NormalizedPRDSchemaID)
+	}
 	return out, nil
 }
 
