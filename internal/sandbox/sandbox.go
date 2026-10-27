@@ -223,13 +223,11 @@ func (p HTTPProvider) createOnce(ctx context.Context, req CreateRequest, body ma
 	// resolves to the first sandbox rather than a second paid one.
 	httpReq.Header.Set("Idempotency-Key", req.OperationID)
 
+	// From here the request is on the wire. Any failure, including the caller's
+	// own deadline, may have created a paid sandbox: it is ambiguous, never
+	// terminal. A terminal error here lets a retry buy a second VM.
 	resp, err := p.Client().Do(httpReq)
 	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			// The caller's own deadline fired: creating was cancelled, not
-			// lost in flight.
-			return Lease{}, fmt.Errorf("sandbox create: %w", ctxErr)
-		}
 		return Lease{}, fmt.Errorf("%w: %s", ErrAmbiguous, errText(err))
 	}
 	defer drainClose(resp.Body)

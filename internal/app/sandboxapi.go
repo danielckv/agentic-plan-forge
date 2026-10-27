@@ -179,6 +179,10 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 	m.lease.ExpiresAt = lease.ExpiresAt
 	m.lease.State = sandbox.StateBuilding
 	m.appPort = req.AppPort
+	// The command receipts come from the execution driver. Without it the lease
+	// would sit at "building" while the window believed work was happening, so a
+	// sandbox with no driver is a stated limitation, not a silent stall.
+	m.lease.LastError = "the sandbox is created; the recorded commands run through the execution driver, which this build does not yet call from the window"
 	return m.report()
 }
 

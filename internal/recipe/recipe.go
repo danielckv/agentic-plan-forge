@@ -353,7 +353,9 @@ func Derive(f Facts) (Recipe, error) {
 	r := Recipe{
 		SchemaVersion: SchemaVersion,
 		Revision:      f.Revision,
-		ProjectRoot:   f.Root,
+		// ProjectRoot is repository-relative. The stored recipe is served to the
+		// window and sent to a sandbox, so it must never name a host path.
+		ProjectRoot: ".",
 	}
 	if f.GoMod {
 		r.Toolchains = append(r.Toolchains, toolchainName)
@@ -422,7 +424,8 @@ func Derive(f Facts) (Recipe, error) {
 	// Run: package start script, then compose service, then Dockerfile.
 	switch {
 	case len(f.PackageScripts["start"]) > 0:
-		r.Run = packageCmd("run", pkgDir, f.PackageScripts["start"], 600)
+		r.Run = Command{ID: "run", Argv: []string{"npm", "run", "start"}, Dir: emptyOr(pkgDir),
+			TimeoutSeconds: 600, SourceRef: path.Join(emptyOr(pkgDir), pkgJSONName) + " script 'start'"}
 		r.Scripts = appendScriptIfNew(r.Scripts, scriptRef(or, pkgRef))
 	case f.ComposeFile:
 		r.Run = Command{ID: "run", Argv: []string{"docker", "compose", "up", "--build"}, Dir: ".", TimeoutSeconds: 600, SourceRef: composeName}
@@ -453,8 +456,10 @@ func pickCommand(f Facts, or *os.Root, step string, timeout int, pkgDir, pkgRef 
 			}, nil
 		}
 	}
-	if script := f.PackageScripts[step]; script != "" {
-		return packageCmd(step, pkgDir, script, timeout), nil
+	// The map holds script *bodies*; npm needs the script *name*, which is the
+	// step. Passing the body would ask npm to run a command as a script name.
+	if _, ok := f.PackageScripts[step]; ok {
+		return packageCmd(step, pkgDir, timeout), nil
 	}
 	switch step {
 	case "test":
@@ -491,14 +496,13 @@ func portFor(f Facts) int {
 	return defaultPort
 }
 
-func packageCmd(id, dir, name string, timeout int) Command {
-	argv := []string{"npm", "run", name}
-	if dir != "" {
-		argv = []string{"npm", "--prefix", dir, "run", name}
-	}
+// packageCmd runs a package script. npm is given the directory as its working
+// directory rather than a prefix flag, so the command means the same thing to a
+// reader and to the sandbox, and the path is never applied twice.
+func packageCmd(id, dir string, timeout int) Command {
 	return Command{
-		ID: id, Argv: argv, Dir: emptyOr(dir), TimeoutSeconds: timeout,
-		SourceRef: path.Join(emptyOr(dir), pkgJSONName) + " script '" + name + "'",
+		ID: id, Argv: []string{"npm", "run", id}, Dir: emptyOr(dir), TimeoutSeconds: timeout,
+		SourceRef: path.Join(emptyOr(dir), pkgJSONName) + " script '" + id + "'",
 	}
 }
 
@@ -513,6 +517,9 @@ func scriptRef(or *os.Root, rel string) Script {
 	return Script{Path: rel, SHA256: hashExisting(or, rel), SourceRef: rel + " script"}
 }
 
+// hashExisting hashes a file the facts said exists. A tree race is reported by
+// an empty hash, which Validate rejects, rather than by taking the process down.
+
 func appendScriptIfNew(scripts []Script, s Script) []Script {
 	for _, existing := range scripts {
 		if existing.Path == s.Path {
@@ -522,12 +529,10 @@ func appendScriptIfNew(scripts []Script, s Script) []Script {
 	return append(scripts, s)
 }
 
-// hashExisting hashes a file known to exist; an error here is a tree race and
-// fails loudly rather than recording an empty hash.
 func hashExisting(or *os.Root, rel string) string {
 	h, err := hashUnderRoot(or, rel)
 	if err != nil {
-		panic(fmt.Sprintf("recipe: hash %s: %v", rel, err))
+		return ""
 	}
 	return h
 }
@@ -564,6 +569,11 @@ func (r Recipe) Validate() error {
 	}
 	if r.Revision == "" {
 		return fmt.Errorf("recipe: empty revision")
+	}
+	if r.ProjectRoot != "" && r.ProjectRoot != "." {
+		if err := validateRel(r.ProjectRoot); err != nil {
+			return fmt.Errorf("recipe: project root %q is not repository-relative: %w", r.ProjectRoot, err)
+		}
 	}
 	ids := map[string]bool{}
 	for _, c := range []Command{r.Build, r.Test, r.Run} {

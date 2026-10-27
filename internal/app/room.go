@@ -280,11 +280,28 @@ func (r *room) broadcastLocked(t relay.WSEventType, sender string, payload json.
 		r.sendLocked(raw)
 	}
 	if !r.events.push(env) {
-		// The executor queue is full of essential events. Say so: the window
-		// resynchronises from its status poll, and the run is not left believing
-		// a decision was delivered when it was not.
-		r.logger.Warn("the executor queue could not take an event; the window must resynchronise", "event", string(env.EventType))
+		// The executor queue is full of essential events. The event is not lost:
+		// the authority keeps it in the replay log and the window refreshes its
+		// snapshot, which carries the stages, the pending decisions and the
+		// recovery line. What must not happen is a silent gap, so this is loud.
+		r.logger.Warn("the executor queue could not take an event; the window must resynchronise",
+			"event", string(env.EventType), "resync", r.events.resyncNeeded())
+		r.publishResyncHintLocked()
 	}
+}
+
+// publishResyncHintLocked tells the window its stream has a gap. It is a
+// local frame, so it reaches the page without waiting for a replay.
+func (r *room) publishResyncHintLocked() {
+	payload, err := json.Marshal(map[string]string{
+		"code":    "RESYNC_REQUIRED",
+		"message": "the window missed one or more events; refresh to resynchronise",
+	})
+	if err != nil {
+		return
+	}
+	_, raw := r.frameLocked(relay.EventError, authorityID, "", 0, payload)
+	r.sendLocked(raw)
 }
 
 // unicastLocked answers the window directly with seq 0, echoing the command's

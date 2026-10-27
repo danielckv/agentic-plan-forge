@@ -54,8 +54,9 @@ func TestPumpDropsHeartbeatsBeforeDecisions(t *testing.T) {
 		t.Error("resync was raised while a disposable event could still be dropped")
 	}
 
-	// Drain and look for the decision: order of everything else is preserved,
-	// and only disposable events were removed.
+	// Close first: a live pump blocks in next until the next push, so draining
+	// without closing would hang the test rather than fail it.
+	p.close()
 	found := false
 	for {
 		env, ok := p.next(context.Background())
@@ -108,6 +109,7 @@ func TestPumpPreservesOrderOfWhatItKeeps(t *testing.T) {
 	second := decision(t, "d-2")
 	p.push(first)
 	p.push(second)
+	p.close()
 
 	got1, ok := p.next(context.Background())
 	if !ok {

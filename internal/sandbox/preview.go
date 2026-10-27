@@ -72,6 +72,11 @@ func PreviewHandler(upstream string, port int, token string, allowOriginCheck fu
 	if err != nil {
 		return nil, err
 	}
+	if !strings.HasSuffix(host, PreviewDomainSuffix) {
+		// A preview is a provider host. Anything else would let this proxy carry
+		// the provider token to a destination the caller chose.
+		return nil, fmt.Errorf("sandbox preview proxy: upstream %q is not under %s", host, PreviewDomainSuffix)
+	}
 	if port <= 0 || port > 65535 {
 		return nil, fmt.Errorf("sandbox preview proxy: port %d outside [1, 65535]", port)
 	}

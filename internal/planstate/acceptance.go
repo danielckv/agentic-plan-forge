@@ -47,9 +47,21 @@ type AcceptanceEntry struct {
 	DeveloperSigned time.Time `json:"reviewed_at"`
 }
 
+// SignoffEntry records a product sign-off before the implementation is
+// accepted. It is separate from the acceptance because the two are decided at
+// different times and by different people, and the gate requires both.
+type SignoffEntry struct {
+	Repository string    `json:"repo_realpath"`
+	ApprovalID string    `json:"approval_id"`
+	HeadSHA    string    `json:"head_sha"`
+	Actor      string    `json:"actor"`
+	At         time.Time `json:"at"`
+}
+
 type acceptanceFile struct {
 	Version  int               `json:"version"`
 	Accepted []AcceptanceEntry `json:"entries"`
+	Signoffs []SignoffEntry    `json:"signoffs"`
 }
 
 func acceptancePath() (string, error) {
@@ -122,6 +134,12 @@ func RecordAcceptance(repo string, entry AcceptanceEntry) error {
 	if n := len(ledger.Accepted); n > maxAcceptances {
 		ledger.Accepted = ledger.Accepted[n-maxAcceptances:]
 	}
+	return writeAcceptances(path, ledger)
+}
+
+// writeAcceptances stores the ledger atomically and privately: it names people
+// and the revisions they decided on.
+func writeAcceptances(path string, ledger acceptanceFile) error {
 	raw, err := json.MarshalIndent(ledger, "", "  ")
 	if err != nil {
 		return err
@@ -158,6 +176,89 @@ func ImplementationAcceptance(repo, approvalID, headSHA string) (entry Acceptanc
 		return record, true, false, nil
 	}
 	return AcceptanceEntry{}, false, false, nil
+}
+
+// RecordProductSignoff records that the product owner signed off one revision of
+// one approval. Repeating it for the same revision updates the record rather
+// than adding another.
+func RecordProductSignoff(repo string, entry SignoffEntry) error {
+	repoPath, err := realRepo(repo)
+	if err != nil {
+		return err
+	}
+	switch {
+	case entry.ApprovalID == "":
+		return errors.New("product sign-off: approval id is required")
+	case entry.HeadSHA == "":
+		return errors.New("product sign-off: the reviewed commit is required")
+	case entry.Actor == "":
+		return errors.New("product sign-off: the actor is required")
+	}
+	if entry.At.IsZero() {
+		entry.At = time.Now().UTC()
+	}
+	entry.Repository = repoPath
+
+	path, err := acceptancePath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), ledgerLockTimeout)
+	defer cancel()
+	unlock, err := storage.LockFile(ctx, path+".lock")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	ledger, err := readAcceptances(path)
+	if err != nil {
+		return err
+	}
+	replaced := false
+	for i := range ledger.Signoffs {
+		prior := &ledger.Signoffs[i]
+		if prior.Repository == repoPath && prior.ApprovalID == entry.ApprovalID && prior.HeadSHA == entry.HeadSHA {
+			*prior = entry
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		ledger.Signoffs = append(ledger.Signoffs, entry)
+	}
+	if n := len(ledger.Signoffs); n > maxAcceptances {
+		ledger.Signoffs = ledger.Signoffs[n-maxAcceptances:]
+	}
+	return writeAcceptances(path, ledger)
+}
+
+// ProductSignoff returns the sign-off for one approval at one revision.
+func ProductSignoff(repo, approvalID, headSHA string) (SignoffEntry, bool, error) {
+	if approvalID == "" {
+		return SignoffEntry{}, false, nil
+	}
+	repoPath, err := realRepo(repo)
+	if err != nil {
+		return SignoffEntry{}, false, err
+	}
+	path, err := acceptancePath()
+	if err != nil {
+		return SignoffEntry{}, false, err
+	}
+	ledger, err := readAcceptances(path)
+	if err != nil {
+		return SignoffEntry{}, false, err
+	}
+	for _, entry := range ledger.Signoffs {
+		if entry.Repository == repoPath && entry.ApprovalID == approvalID && entry.HeadSHA == headSHA {
+			return entry, true, nil
+		}
+	}
+	return SignoffEntry{}, false, nil
 }
 
 // Acceptances returns every record for a repository, newest first.
