@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-27
+
+### Added
+
+- The window browses the repository's own planning work. A **Work** tab indexes the repository's plans, specifications, ADRs, epics, follow-ups and state file, and opens any of them at its real source line. Indexing is bounded (400 documents, 2 MB per file, depth 4, 2 seconds) and reports `partial` with reasons instead of guessing. Selecting **Use in brief** adds explicit source references; browsing alone never mutates a document and never starts a model call.
+- A deliberation survives a crash. Per-stage state (`queued`, `running`, `waiting_for_answer`, `retrying`, `failed`, `cancelled`, `completed`) is derived from real events and checkpoints, not browser timers. A malformed checkpoint is quarantined (bounded at 8 copies) with a visible warning, and the first save afterwards succeeds. A lost lease or ambiguous provider completion stops for owner action instead of restarting work on its own.
+- Questions and outcomes lead the interface. Ambiguities found in the brief are raised as classification questions with the excerpt and a plain-language explanation of each choice. Retry, Resume, Cancel and Edit brief sit next to the state that enables them.
+- An `ExecutionRecipe` records what the project actually builds with: toolchain versions, script paths and hashes, lockfile hashes, argv arrays per build/test/run step, timeouts, environment variable names, readiness probe and artifact paths. Unchanged inputs reuse it with no model call. A changed lockfile, script or instruction hash invalidates earlier receipts.
+- A **documents-only** view renders the plan with ordered epics, a specification with acceptance criteria, and ADRs only for decisions that were actually made, then lists every path it would write. It needs no sandbox, no provider key and no network. The list is a **preview**: `storage.CommitBundle` implements the journal-and-marker commit and is tested, but no route calls it, so no file is written to your repository yet. Output paths follow existing conventions and an existing ADR is never overwritten. See [ADR 0017](docs/adrs/0017-prepared-vm-from-recorded-scripts.md).
+- A prepared VM can be leased and driven, with the source-transfer step still missing. `POST /api/sandbox/launch` creates a private E2B sandbox (`allowPublicTraffic: false`, 3600-second cap, 2 vCPU / 4 GiB default) and `POST /api/sandbox/run` executes the recorded build, test and readiness commands inside it, recording an exit code and bounded log per command. **The source bundle is not packaged or uploaded yet**, so a real launch has no project files to build. Runner-level pieces exist (`sandbox.Executor.Upload` takes a bounded archive), but no route calls it. Readiness requires the declared probe, never an open port, and a failed build or test prevents a ready state. An ambiguous create is reconciled by operation id before any retry, so a paid VM is never created twice. The preview proxy serves a fixed upstream on a separate origin with a single-use nonce exchanged for an HttpOnly cookie.
+- Implementation acceptance is separate from plan approval. It needs the authenticated PM's sign-off and a non-dismissed GitHub approval on the current head from a developer with write access who is not the PR author. A new commit, changed recipe, revoked review or stale receipt invalidates it. An API failure reports `unknown`, never approved. No PR is ever merged automatically.
+- The composer reads the brief on a word budget instead of every keystroke: nothing until 100 words, then after 30, 60 and 120 more, always after typing stops. Four reads carry a brief to a plan. **Refresh plan** re-reads immediately and switches the automatic path off so the two never race.
+- The first window lists the generation hosts it found on this machine, with why one cannot serve a call.
+
+### Changed
+
+- The screenshots in this README are committed from the `promo-shots` CI job again, after the README had claimed CI rebuilt them while the job only uploaded an artifact.
+- `docs/usage.md` and `docs/configuration.md` document the Work view, checkpoint recovery, the execution recipe, prepared sandboxes and implementation acceptance.
+
+### Fixed
+
+- `markdownlint` failed on `.github/copilot-instructions.md` on every regeneration: the generator emitted headings and lists without their blank lines and never collapsed a run of them.
+
 ## [0.7.2] - 2026-10-27
 
 ### Changed
@@ -259,7 +282,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.6.0...v0.7.0
