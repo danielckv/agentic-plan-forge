@@ -1053,6 +1053,22 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 	}
 }
 
+// approvedInput is the settled synthesis input and the approval metadata of the
+// most recent run, for the document export. ok is false until a plan has been
+// synthesized.
+func (e *executor) approvedInput() (contracts.SynthesisInput, contracts.ApprovalMeta, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.synthesized == nil {
+		return contracts.SynthesisInput{}, contracts.ApprovalMeta{}, false
+	}
+	meta := contracts.ApprovalMeta{ApprovalID: e.approvalID}
+	if !e.createdAt.IsZero() {
+		meta.CreatedAt = e.createdAt
+	}
+	return *e.synthesized, meta, true
+}
+
 // --- synthesis ------------------------------------------------------------------------------------------
 
 func (e *executor) startSynthesis(runID string) {

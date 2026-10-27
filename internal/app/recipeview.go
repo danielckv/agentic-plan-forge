@@ -6,11 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/recipe"
+	"github.com/danielckv/agentic-plan-forge/internal/synthesizer"
 )
 
 // The execution recipe is the project's own build knowledge, captured once.
@@ -158,6 +161,36 @@ func (s *appSession) CurrentRecipe(ctx context.Context) RecipeView {
 	return view
 }
 
+// bundleView is what a documents-only export would write, before anything is
+// written. The window shows this list so the owner sees every path it would
+// touch.
+type BundleView struct {
+	Available bool             `json:"available"`
+	Problem   string           `json:"problem,omitempty"`
+	Files     []bundleFileView `json:"files"`
+}
+
+type bundleFileView struct {
+	Path  string `json:"path"`
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+}
+
+// DocumentBundle builds the plan, specification and decision records for an
+// approved SynthesisInput without touching disk. It is the "documents only" path:
+// it needs no sandbox, no provider key and no network.
+func DocumentBundle(input contracts.SynthesisInput, meta contracts.ApprovalMeta, opts synthesizer.BundleOptions) (BundleView, error) {
+	bundle, err := synthesizer.BuildBundle(input, meta, opts)
+	if err != nil {
+		return BundleView{Available: false, Problem: err.Error(), Files: []bundleFileView{}}, err
+	}
+	files := make([]bundleFileView, 0, len(bundle.Entries))
+	for _, entry := range bundle.Entries {
+		files = append(files, bundleFileView{Path: entry.Path, Kind: string(entry.Kind), Title: entry.Title})
+	}
+	return BundleView{Available: true, Files: files}, nil
+}
+
 // GET /api/recipe — the build, test and run commands Plan Forge would execute
 // in a prepared sandbox, and where each came from. A project with no command
 // reports that instead of a fabricated pass.
@@ -167,6 +200,57 @@ func (s *appSession) handleRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.CurrentRecipe(r.Context()))
+}
+
+// GET /api/documents — the plan, specification and decision records the export
+// would write, and where. A project with nothing to export says why.
+func (s *appSession) handleDocuments(w http.ResponseWriter, r *http.Request) {
+	if s.exec == nil {
+		writeJSON(w, http.StatusOK, BundleView{Available: false,
+			Problem: "this session has no deliberation to export", Files: []bundleFileView{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.DocumentsView(r.Context()))
+}
+
+// DocumentsView is the approved plan as repository documents. It needs no
+// provider and no sandbox: the documents-only path is the default, and a launch
+// is an extra step the owner confirms separately.
+func (s *appSession) DocumentsView(ctx context.Context) BundleView {
+	if s.exec == nil {
+		return BundleView{Available: false, Problem: "this session has no deliberation to export", Files: []bundleFileView{}}
+	}
+	input, meta, ok := s.exec.approvedInput()
+	if !ok {
+		return BundleView{Available: false,
+			Problem: "Nothing to export yet: the plan has to be approved first.", Files: []bundleFileView{}}
+	}
+	view, err := DocumentBundle(input, meta, synthesizer.BundleOptions{NextADRNumber: s.nextADRNumber()})
+	if err != nil {
+		return BundleView{Available: false, Problem: err.Error(), Files: []bundleFileView{}}
+	}
+	return view
+}
+
+// nextADRNumber is one past the highest decision-record number the repository
+// already uses, so an export never reuses or renumbers one.
+func (s *appSession) nextADRNumber() int {
+	entries, err := os.ReadDir(filepath.Join(s.repo, "docs", "adrs"))
+	if err != nil {
+		return 1
+	}
+	highest := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if len(name) < 4 {
+			continue
+		}
+		var n int
+		if _, err := fmt.Sscanf(name[:4], "%04d", &n); err == nil && n > highest {
+			highest = n
+		}
+	}
+	return highest + 1
 }
 
 // revision is the revision the recipe is derived for. A changed tree therefore

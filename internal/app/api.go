@@ -42,6 +42,7 @@ func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/repository-work", s.handleRepositoryWork)
 	s.bridge.Handle("GET /api/repository-work/document", s.handleRepositoryWorkDocument)
 	s.bridge.Handle("GET /api/recipe", s.handleRecipe)
+	s.bridge.Handle("GET /api/documents", s.handleDocuments)
 	s.bridge.Handle("GET /api/acceptance", s.handleAcceptance)
 	s.bridge.Handle("POST /api/acceptance", s.handleAcceptanceRecord)
 	s.bridge.Handle("POST /api/acceptance/signoff", s.handleAcceptanceSignoff)
