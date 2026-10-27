@@ -161,6 +161,10 @@ type appSession struct {
 	// request context.
 	buildCtx    context.Context
 	buildCancel context.CancelFunc
+	// sandboxMgr owns the one prepared-VM lease. It is created on first use, so
+	// a session that never opens the Build page pays nothing for the feature.
+	sandboxMgr  *sandboxManager
+	sandboxOnce sync.Once
 }
 
 // buildContext is the context every background build action runs under.

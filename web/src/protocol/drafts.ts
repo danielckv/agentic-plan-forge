@@ -64,6 +64,40 @@ export function parseCritique(payload: unknown): { cycle: number; findings: Find
   return { cycle: typeof p.cycle === "number" ? p.cycle : 0, findings: findings.filter((f) => f.issueId !== "") };
 }
 
+/** One ambiguity the normalizer raised (`contracts.Ambiguity`). */
+export interface Ambiguity {
+  id: string;
+  text: string;
+  question: string;
+  guess: string;
+}
+
+/** The most questions one document may show at once. */
+export const MAX_AMBIGUITIES = 50;
+
+/**
+ * The classification questions from an `ingestion` draft (`normalized_prd.v1`).
+ *
+ * A question without an id or without text cannot be answered, and an entry the
+ * model made up in the wrong shape must not break Page 1: unrecognised entries
+ * are dropped, never thrown.
+ */
+export function parseNormalizedPRD(content: unknown): Ambiguity[] {
+  const o = asObject(content);
+  if (o === null) return [];
+  const seen = new Set<string>();
+  const out: Ambiguity[] = [];
+  for (const a of list(o.ambiguities)) {
+    if (out.length >= MAX_AMBIGUITIES) break;
+    const id = str(a.id).trim();
+    const question = str(a.question).trim();
+    if (id === "" || question === "" || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, text: str(a.text).trim(), question, guess: str(a.guess).trim() });
+  }
+  return out;
+}
+
 /** The Product Manager's draft (`synthesizer.PMDoc`). */
 export interface PMDraft {
   epics: Array<{ id: string; title: string; goal: string }>;

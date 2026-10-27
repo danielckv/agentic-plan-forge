@@ -55,9 +55,17 @@ export async function startFakeSession({ port, dist, brief = S.BRIEF, interprete
         ...S.STATUS,
         interpretation: state.interpretation,
         impactRevision: state.interpretation > 0 ? S.IMPACT.revision : 0,
+        // The auto path has already done its work in a seeded session: the
+        // plan files are present, so the note says the reads are spent and
+        // points at the button.
+        refresh: { automatic: false, automaticOff: false, refreshes: 4, maxRefreshes: 4, wordsRemaining: 0 },
       });
     }
     if (p === "/api/context") return json(res, S.CONTEXT);
+    // The composer's manual refresh. The harness has no executor, so it
+    // answers accepted and leaves the document alone: the screenshot run is
+    // about what the window shows, not about re-reading a brief.
+    if (p === "/api/refresh") return json(res, { accepted: false });
     if (p === "/api/impact") return json(res, S.IMPACT);
     if (p === "/api/plan-files") {
       return json(res, { revision: state.interpretation, files: state.interpretation > 0 ? S.PLAN_FILES : [] });

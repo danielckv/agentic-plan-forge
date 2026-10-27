@@ -4,33 +4,78 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/danielckv/agentic-plan-forge?sort=semver)](https://github.com/danielckv/agentic-plan-forge/releases/latest)
 
-**A blocking pre-planning gate for coding agents.** Instead of letting an agent jump from a brief straight to a linear
-plan, Plan Forge deliberates first. You write what you want in a Markdown composer. Plan Forge reads the repository's
-real code and the decisions your team already wrote down, runs a staged review by a team of avatars that argue with each
-other, and returns a verified specification. From there the agent executes it — and, if you want, Plan Forge builds it
-in an isolated worktree, runs it in a container and deploys it.
+**A deliberate planning gate for coding agents.** A coding agent asked to "add invoice export" will produce a plan
+within seconds. That plan is plausible, and it is usually wrong: it trusts documentation that no longer matches the
+code, forgets what the team decided last month, and lets a technical constraint decide a product question.
 
-It ships as one Go binary with an embedded web UI, plus an optional relay server for team planning sessions.
+Plan Forge reads the repository first, then argues with itself about the plan, then gives you something you can approve.
 
-![Agentic Plan Forge: your requirements, the real code and the team's recorded decisions go into a deliberation by four avatars and a red-team critic, and a verified specification comes out into Plan Mode](docs/images/overview.png)
+It ships as one Go binary with an embedded web UI, and an optional relay for team sessions.
+
+![Requirements, the real code and the team's recorded decisions go into a deliberation, and a specification comes out](docs/images/overview.png)
 
 ## Quickstart
 
 ```sh
-curl -fsSL https://github.com/danielckv/agentic-plan-forge/releases/latest/download/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/danielckv/agentic-plan-forge/main/scripts/install.sh | sh
 ```
 
-Restart your agent, then type `/plan-forge`. You need Git, a browser, and Claude Code or OMP signed in. The planning
-window opens as a tab in your default browser when you run `/plan-forge`, and only then. Plan Forge never asks for or
-stores provider API keys: it uses the credentials your host agent already has.
+Restart your agent, then type `/plan-forge`. You need Git, a browser, and Claude Code or OMP signed in. Plan Forge
+never asks for or stores provider API keys: it uses the credentials your host agent already has.
 
-Re-run the same command to update; it replaces the binary and re-registers the skills, so there is nothing to force.
-Windows, pinning a version, `plan-forge uninstall` and the full host matrix are in [docs/install.md](docs/install.md).
+Re-running the command updates the binary and re-registers the skills. Windows, version pinning,
+`plan-forge uninstall` and the full host matrix are in [docs/install.md](docs/install.md).
+
+## How the parts connect
+
+One process. No service to run unless you want a team relay.
+
+```mermaid
+flowchart LR
+    subgraph host["Your agent session"]
+        SKILL["/plan-forge skill<br/>installs, then invokes"]
+        CLI["plan-forge binary<br/>localhost bridge"]
+    end
+
+    subgraph app["Embedded web UI · one origin"]
+        P1["Composer<br/>brief and plan rail"]
+        P2["Deliberation<br/>avatars and decisions"]
+        P3["Specification<br/>approve or reject"]
+        P4["Build<br/>diff, preview, deploy"]
+    end
+
+    subgraph core["Go core, in the binary"]
+        GROUND["Grounding<br/>Tree-sitter · docs drift · memory"]
+        EXEC["Executor<br/>owns the lease and every call"]
+        ROUTER["Host router<br/>role to host and model"]
+        STORE["Artifact store<br/>atomic writes under .plan/"]
+    end
+
+    HOSTS["Host CLIs you already have<br/>Claude Code · OMP · agy"]
+    RELAY["Relay (optional)<br/>team sessions and followers"]
+    REPO["Your repository<br/>read, never written without approval"]
+
+    SKILL --> CLI
+    CLI --> app
+    P1 -->|"brief, versioned edits"| EXEC
+    P2 -->|"answers and cancels"| EXEC
+    P3 -->|"approval"| STORE
+    P4 -->|"build, preview"| REPO
+    EXEC --> GROUND
+    EXEC --> ROUTER
+    ROUTER --> HOSTS
+    GROUND --> REPO
+    STORE --> REPO
+    app -.->|"only when two people plan together"| RELAY
+```
+
+Everything the window does reaches the same executor over one loopback bridge. The browser never holds provider
+credentials and never calls a model itself.
 
 ## The flow
 
-One brief goes in. Grounding is deterministic and happens before any model runs. The avatars then argue in cycles until
-the critic has nothing left that is CRITICAL or HIGH, and only then is a specification compiled for you to approve.
+One brief goes in. Grounding is deterministic and finishes before any model runs. The avatars argue in cycles until the
+critic has nothing left that is CRITICAL or HIGH. Only then is a specification compiled, for you to approve.
 
 ```mermaid
 flowchart TD
@@ -67,132 +112,110 @@ A run that stops gives every avatar a terminal state rather than leaving a card 
 
 ## The avatars
 
-Each avatar is a **fresh, tool-free model invocation** through the host agent CLI you already have installed. No
-repository access, no skills, no MCP servers, no inherited conversation — the evidence it is allowed to see is assembled
-by Plan Forge and passed in as data. A tripwire aborts the run if a tool call appears anyway.
+Each avatar is a **fresh, tool-free model invocation** through the host agent CLI you already installed. No repository
+access, no skills, no MCP servers, no inherited conversation. The evidence it may see is assembled by Plan Forge and
+passed in as data, and a tripwire aborts the run if a tool call appears anyway.
 
 They do not all see the same thing, and that is the point.
 
-| Avatar | What it is given | What it produces | Model slot |
-| :--- | :--- | :--- | :--- |
-| **Product Manager** | Product requirements **only** — no file tree, no symbols, no code, no project notes | Epics and user stories, each an actor with a need, traced to a requirement | Main |
-| **Technical Architect** | The PM's stories, the AST symbol graph, the documentation drift report | Interface contracts, Mermaid architecture and sequence diagrams, a workstream DAG, documentation-sync tasks | Main |
-| **Domain Specialists** | The architect's contracts, plus its **own** workstream's module paths | Real file paths, function signatures and step-by-step execution logic for one subsystem | Main |
-| **Red-Team Critic** | Every draft the architect and specialists wrote, and the AST to check them against | Severity-ranked critiques — `CRITICAL`, `HIGH`, `MEDIUM` — that force another cycle until resolved | **Judge** |
-| **Lead Synthesizer** | Every resolved cycle | The final specification: Jira-style epics and subtasks, locked contracts, verification commands, dual effort estimates | Main |
-| **Run Narrator** | Only the step reports the others emit | A plain-language account of what the run is doing right now. Gates nothing, and a failed narration costs a line and nothing else | Main |
+| Avatar | What it is given | What it produces |
+| :--- | :--- | :--- |
+| Product Manager | Nine product fields and nothing else | Epics, stories, acceptance criteria |
+| Technical Architect | The code graph, contracts, recorded decisions | Interfaces, diagrams, a workstream DAG |
+| Domain Specialists | Their own workstream and its evidence | Tasks with checks, in parallel |
+| Red-Team Critic | Every draft, plus the evidence behind it | Findings, each with a severity |
+| Lead Synthesizer | The resolved drafts | One specification and manifest |
 
 Three deliberate asymmetries:
 
-- **The Product Manager cannot see the code.** It receives nine product fields and nothing else, so product decisions
-  are never made by code-level accident. A test enforces the exact payload shape.
-- **The critic runs on a different model slot** than the authors, so a draft is not reviewed by the model that wrote it.
-- **A specialist reads its own workstream first**, inside its own budget, rather than the whole repository — so the
-  specialist planning billing is not paying for the reporting module's symbols.
+- **The Product Manager cannot see the code.** Product decisions stay product decisions instead of becoming
+  consequences of an interface.
+- **A specialist sees only its own workstream.** It cannot quietly re-plan the whole system.
+- **The critic sees everything and owns nothing.** It has no draft to protect.
 
-![The avatar room: four avatars with their status, a discussion timeline with a pinned decision, and the Product Manager's epics forming on the right](docs/images/avatars.png)
+![The avatar room: avatars with their status, a discussion timeline, and the Product Manager's epics forming](docs/images/avatars.png)
 
 ## A look inside
 
-**Write the requirements.** One large editor with headings, checklists and tables. Type `/` for blocks such as an epic
-or a diagram, and `@` to use the exact name of a component in your code. On the right, the requirements become epic files
-as you write, each linked to the code it touches.
+**Write the requirements.** One editor with headings, checklists and tables. Type `/` for a block, `@` to use the exact
+name of a component in your code. The plan rail turns the text into epics as you write, each linked to the code it
+touches.
 
-**Know what the deliberation wants.** The Brief tab lists the five topics the avatars work from — who it is for, what
-done looks like, why now, what is out of scope, what already exists — ticks each one your document mentions, and inserts
-the heading for one it does not. It is an outline, not a gate: it never blocks Confirm, and it is a local word search
-with no model call, so a tick means the topic is mentioned, not that it is answered.
+**The plan refreshes itself while you write.** Not on every keystroke: nothing is read until the brief passes 100 words,
+then at 30, 60 and 120 more words, always after you stop typing. Four reads carry a brief to a plan, and then it stops.
+**Refresh plan** reads the document once, immediately, and switches the automatic path off so the two never race.
 
 **See what it touches.** The Impact tab names the parts of your project the work affects and what happens to each:
-changes, new, already there, or clashes with a decision the team already recorded. One sentence apiece, in language that
-does not assume you read code.
+changes, new, already there, or clashes with a decision the team recorded.
 
-![The composer: a Markdown editor with the requirements on the left and three epic files on the right, each listing the components it touches](docs/images/composer.png)
+![The composer: a Markdown editor with the requirements on the left and epic files on the right](docs/images/composer.png)
 
 | Open an epic as a document | Browse the codebase while you write |
 | :---: | :---: |
-| ![An epic file open in a modal: goal, requirements, acceptance criteria and a table of related code](docs/images/epic-modal.png) | ![The Codebase tab lists the repository's blocks and components, and @ completion suggests QueryInvoices in the editor](docs/images/codebase-palette.png) |
+| ![An epic opened as a document](docs/images/epic-modal.png) | ![Searching the codebase for a component](docs/images/codebase-palette.png) |
 
-**Watch the avatars plan.** After you confirm, they work in the open: every status, draft, finding and decision lands in
-one discussion, and the plan takes shape beside it. Each card names the host and model serving it, the part of the stage
-in flight, and the evidence that call can see.
+**Watch them plan.** Every status, draft, finding and decision lands in one discussion, and the plan takes shape beside
+it. Each card names the host and model serving it, the part of the stage in flight, and the evidence that call can see.
 
 | Review the specification | Light or dark |
 | :---: | :---: |
-| ![The master specification with an executive summary and the architecture diagram](docs/images/synthesis.png) | ![The composer in the dark theme with the project notes tab open](docs/images/composer-dark.png) |
+| ![The compiled specification with its table of contents](docs/images/synthesis.png) | ![The composer in dark mode](docs/images/composer-dark.png) |
 
-The screenshots come from the UI driving a seeded sample session (`web/scripts/promo.mjs`), not from a live model run.
+The screenshots are captured from the real UI driving a seeded sample session, not from a live model run. CI rebuilds
+them on every change (`promo-shots` job in [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 ## Why
 
-Agent plans often fail before implementation starts. A single-pass planner converges on the first plausible design,
-trusts documentation that no longer matches the code, forgets what the team decided last month, and mixes product
-requirements with low-level technical constraints. Plan Forge inserts a deliberation step that is slower and more
+Agent plans tend to fail before implementation starts. A single-pass planner converges on the first plausible design,
+trusts stale documentation, and mixes product requirements with low-level constraints. Plan Forge is slower and more
 sceptical on purpose:
 
-- Requirements are separated from technical constraints, so product decisions are not made by code-level accident.
-- Proposals are grounded in the repository's real structure, and documentation drift is reported instead of trusted.
-- The avatars read the team's decision records, specs and notes, so a plan builds on earlier decisions instead of
-  reopening them.
-- Drafts are attacked by a dedicated critic that runs on a different model slot than the authors.
-- The result is a contract-verified specification with explicit targets, verification commands and effort estimates.
+- **Requirements are separated from technical constraints,** so a product decision is not made by accident at the
+  interface layer.
+- **Grounding is deterministic and happens first.** Files are parsed into exported symbols, signatures and routes;
+  documentation is checked against that graph, so a stale reference becomes a task instead of an assumption.
+- **The team's own memory is read before anything is invented.** Decision records, specs, notes and recent commit
+  subjects are matched against your requirements, bounded to 12 excerpts.
+- **Every piece of evidence is bounded by count as well as size.** One measured run spent 13 of the architect's 15 calls
+  writing a documentation chore per stale file. Lists are now cut, and the cut is stated in the payload, so a gap reads
+  as unchecked rather than as nothing to do.
 
-## How it works
+## After approval
 
-**Grounding is deterministic.** Files are parsed with Tree-sitter and reduced to exported symbols, signatures and route
-registrations; documentation is cross-referenced against that graph so stale references become explicit documentation-sync
-tasks instead of silent assumptions. Parse coverage gaps are reported as gaps, and structural matches are never treated
-as proof that behaviour is complete.
+**Build it in a worktree.** The agent implements the plan on its own branch under the Plan Forge cache, never in the
+repository you are working in and never pushed to a remote. A Code tab shows the diff and what the agent did, step by
+step. A Preview tab builds the worktree's Dockerfile and runs it on loopback.
 
-**Every piece of evidence is bounded, by count as well as by size.** A byte budget alone does not bound the work a long
-list causes: one measured run spent 13 of the architect's 15 calls writing a documentation chore per stale file. The
-drift list is now cut to the 60 most useful items, and what was cut is always stated in the payload, so the model treats
-a gap as unchecked rather than as nothing to do.
+**Or let a prepared VM do it.** With a sandbox provider configured, Plan Forge packages the exact revision in CI and runs
+the project's own recorded build, test and run commands inside a managed VM, then serves an authenticated preview on
+its own origin. The commands come from the repository's Makefile, package scripts and CI, not from a model at launch
+time. A launch states the revision, the commands, the resources, the expiry and the cost before it happens. With no
+provider configured, everything else still works and nothing is charged.
 
-**The repository's own memory is read first.** Before the avatars start, Plan Forge gathers decision records, specs,
-notes and recent commit subjects, matched against your requirements and bounded to 12 excerpts. The Impact tab then asks
-the model which of those parts the requirements actually affect — it answers by picking from a numbered shortlist rather
-than writing paths, so every file it names exists. That map is for you; the avatars never receive it.
-
-**Effort is estimated twice** from the same task graph: a human schedule based on a 9-hour productive day, and an agent
-schedule based on declared parallelism. Estimates are labelled as estimates unless they come from recorded runs.
-
-**After approval, Plan Forge can build it.** The agent implements the plan in a git worktree under the Plan Forge cache,
-on its own branch — never in the repository you are working in, and never to a remote, so you merge it yourself. A Code
-tab shows the diff and what the agent did step by step; a Preview tab builds the worktree's Dockerfile and runs it on
-loopback, sandboxed. Deploy publishes that same image to an Agent Box sandbox or your local Docker daemon. Choosing
-"Don't deploy" keeps the original behaviour, where the tab closes shortly after approval.
-
-**Setup says what your installation can actually do.** Hosts are listed with whether they can serve a call — not merely
-whether they are signed in, which is a different question and has silently cost whole runs — alongside the tools each
-feature needs, the installed skills and the managed hooks.
-
-The whole flow, page by page, is in [docs/usage.md](docs/usage.md).
+**Accept the exact implementation.** Approval of a plan and acceptance of its implementation are separate records. An
+acceptance binds one head commit, one recipe and one bundle of evidence, and needs your sign-off plus a developer's
+approval of that same commit from GitHub. A bot, the pull request's own author, a stale review or a degraded API never
+counts.
 
 ## Documentation
 
 | Guide | What it covers |
 | :--- | :--- |
-| [Install](docs/install.md) | Requirements, one-command and manual install, what gets written per host, hooks, update and uninstall |
-| [Usage](docs/usage.md) | The composer, the Brief outline, the avatar room, the specification, build and deploy, Plan Mode handoff |
-| [Configuration](docs/configuration.md) | Hosts, models, workday baseline, deploy targets and self-hosting the relay |
-| [Decision records](docs/adrs/) | Why each design choice was made, what it cost, and what is still unmeasured |
-| [Requirements catalogue](docs/requirements/) | Owners, acceptance criteria and traceability for every requirement |
-| [Follow-ups](FOLLOW_UPS.md) | Known gaps, with their causes and what "done" would mean |
-| [Contributing](CONTRIBUTING.md) | Repository layout, development workflow and the full local check suite |
+| [docs/install.md](docs/install.md) | Every host, Windows, version pinning, uninstall |
+| [docs/usage.md](docs/usage.md) | The window, page by page |
+| [docs/configuration.md](docs/configuration.md) | Hosts, models, storage, sandbox and repository settings |
+| [docs/adrs/](docs/adrs/) | Why each boundary sits where it does |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test and pull request workflow |
 
 ## Privacy and security
 
-- Requirements documents, repository contents, project notes and absolute paths stay on your machine unless you
-  explicitly start a remote session. The relay receives session state: the shared document, avatar summaries and drafts,
-  critiques, decisions and the approved plan.
-- Plan Forge does not scan, redact or block what you write. Your text goes to your own agent CLI, exactly as it would in
-  a chat with that agent. See [ADR 0003](docs/adrs/0003-no-text-scanning-in-composer.md).
-- Avatar invocations are tool-free. Every generation runs with repository access, skills and MCP servers disabled, and a
-  tripwire aborts a run if a tool call appears anyway. The coding run after approval is the one exception, and it is
-  confined to a worktree outside your repository.
-- A relay never accepts requests from a browser, requires TLS off loopback, and stores only hashes of credentials.
-- Security reports are welcome, and should not be filed as public issues. See [SECURITY.md](SECURITY.md).
+- Requirements, repository contents, project notes and absolute paths stay on your machine. There is no telemetry and
+  no account.
+- The window talks to a loopback bridge in the same process. Provider credentials never reach the browser.
+- Nothing is written to your repository without an approval. Generated files never overwrite an existing document, and
+  a decision-record number is never reused.
+- A prepared VM receives a packaged archive, never a clone, and never your GitHub write token. The preview runs on a
+  separate origin from the control UI.
 
 ## Project status
 
@@ -201,13 +224,13 @@ Plan Forge is **pre-1.0**. Releases are published on
 Windows, relay archives for Linux, and a multi-architecture relay image at `ghcr.io/danielckv/plan-forge-relay`.
 Interfaces can still change between minor versions; see [CHANGELOG.md](CHANGELOG.md).
 
-Next on the roadmap: signing and notarisation for macOS and Windows builds, a verification gate that runs the plan's own
-commands after a coding run, and Antigravity as a generation host once its CLI exposes an isolated-settings selector.
+Next: signing and notarisation for macOS and Windows builds, a backlog so a second plan can start while the first is
+being implemented, and Antigravity as a generation host once its CLI exposes an isolated-settings selector.
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, local checks and
-pull request expectations. This project follows the
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow, local checks and what a pull request
+is expected to contain. This project follows the
 [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). For help, see [SUPPORT.md](SUPPORT.md).
 
 ## License

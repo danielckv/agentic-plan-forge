@@ -49,13 +49,67 @@ export interface HookStatus {
   remedy?: string;
 }
 
+/** One coding agent found by the first-run scan (`host.DetectedCLI`). */
+export interface DetectedCLI {
+  name: string;
+  binaries: string[];
+  found: boolean;
+  /** A path on the owner's machine; shown only through the loopback bridge. */
+  path?: string;
+  /** The adapter kind, when Plan Forge can use this CLI as a host. */
+  kind?: string;
+  purpose: string;
+  /** How the CLI is integrated when it has no adapter yet. */
+  supports?: string;
+  /** True only for a host whose preflight passes. */
+  usable: boolean;
+  blocks?: string;
+}
+
 export interface CapabilitiesView {
   hosts: CapabilityHost[];
   tools: CapabilityTool[];
   skills: SkillRootView[];
   hooks: HookStatus[];
+  /**
+   * Coding agents installed on this machine, found at start-up. Optional so a
+   * payload from an older bridge still type-checks; the helpers read `?? []`.
+   */
+  clis?: DetectedCLI[];
   /** `main_host = agy` and friends, when the pin names a host that cannot serve. */
   pinned: string[];
+}
+
+/** The detected agents that can actually take a call. */
+export function usableCLIs(view: CapabilitiesView | null): DetectedCLI[] {
+  return (view?.clis ?? []).filter((c) => c.usable);
+}
+
+/**
+ * Detected agents Plan Forge cannot use yet. They are worth showing: the owner
+ * has the tool installed, and the row says why a plan will not run on it.
+ */
+export function unsupportedCLIs(view: CapabilitiesView | null): DetectedCLI[] {
+  return (view?.clis ?? []).filter((c) => c.found && !c.usable);
+}
+
+/**
+ * The one-line answer for the first run: which agent will run the stages, or
+ * what to install. Empty when the list has not loaded.
+ */
+export function cliSummary(view: CapabilitiesView | null): string {
+  if (view === null) return "";
+  const usable = usableCLIs(view);
+  if (usable.length > 0) {
+    return usable.length === 1
+      ? `Plans will run on ${usable[0]!.name}.`
+      : `Plans can run on ${usable.map((c) => c.name).join(", ")}.`;
+  }
+  const installed = unsupportedCLIs(view);
+  if (installed.length > 0) {
+    return `No coding agent Plan Forge can call yet. ${installed.length} installed tool${installed.length === 1 ? " is" : "s are"} not supported.`;
+  }
+  return "No coding agent found. Install Claude Code, oh-my-pi, or agy to run a plan.";
 }
 
 export type HostTone = "serves" | "blocked" | "signed-out" | "absent";

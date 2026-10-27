@@ -130,6 +130,47 @@ what you ship.
 which owns its own provider choice — local Docker, your own hardware over SSH, Hetzner, DigitalOcean, Daytona or
 Vercel. The window greys out a target whose CLI is missing instead of failing after a build you waited for.
 
+## What runs the build, and where
+
+The window's **Work** tab reads the repository's own planning files — `.agents/STATE.md`, `docs/plans`, `docs/specs`,
+`docs/adrs`, `specs`, root `PLAN*`/`FOLLOW*`/`EPIC*`/`TASK*`/`STATE*` files — and shows the next items exactly as the
+state file orders them. Browsing is read-only: it starts no model call and changes no file.
+
+| Key | Default | Effect |
+| :--- | :--- | :--- |
+| `repository_work_roots` | unset | Extra repository-relative directories to index, for a project that keeps its plans outside the usual hierarchy. Absolute paths and `..` are refused. |
+
+Implementation does not guess how a repository builds itself. Plan Forge derives a versioned `execution_recipe.v1`
+from the project's real assets — manifests, lockfiles, CI, `Makefile`, package scripts, task runners and containers —
+and stores it beside the approved plan as `execution_recipe.json`. Existing commands are reused unchanged. A missing
+build or test command is reported as **not configured**, never as passed.
+
+A prepared sandbox runs that recorded recipe. Plan Forge packages the exact revision in CI, transfers the archive into
+the sandbox and executes the recorded commands there. No repository is cloned onto the provider, and the model writes
+no shell command at launch time. Running a preview also requires a recorded run command; a project without one can
+still be built and tested.
+
+| Key | Default | Effect |
+| :--- | :--- | :--- |
+| `sandbox.provider` | unset | `e2b` enables the prepared-VM path. Unset keeps every document, implementation and acceptance feature and disables only launching. |
+| `sandbox.api_key_env` | `E2B_API_KEY` | The environment variable holding the provider key. A name, never a value; the key stays server-side and outside the guest. |
+| `sandbox.template` | `base` | The toolchain image inside the provider. A project whose toolchain differs must name its own template before a launch is allowed. |
+| `sandbox.timeout_seconds` | `3600` | The provider's own lifetime. Bounded to 60–3600: an idle sandbox must not outlive the session that paid for it. |
+| `sandbox.vcpu`, `sandbox.memory_mb` | `2`, `4096` | Resources for one launch. A workload that needs more says so before money is spent. |
+| `sandbox.domain_suffix` | `.e2b.app` | Bounds which hosts the preview proxy can reach. Any other upstream is refused. |
+| `sandbox.hourly_cpu_cents`, `sandbox.hourly_memory_cents` | unset | Rates the window quotes before a launch. Without both, it says the estimate is unavailable instead of inventing a price. |
+
+A launch is confirmed before it happens: revision, commands, resources, expiry and the cost estimate. Deleting the
+sandbox is attempted on stop, failure and expiry; an unconfirmed deletion is shown as pending, and the provider's own
+timeout is the backstop. Reasoning: [ADR 0017](adrs/0017-prepared-vm-from-recorded-scripts.md).
+
+The preview is served by a local proxy on its own origin, not by the provider URL. Browser navigation cannot set the
+provider's traffic header, so the proxy injects it server-side behind a single-use link exchanged for an `HttpOnly`
+cookie. The control session's cookie and the provider key never reach the previewed application.
+
+**Documents only** needs no sandbox at all: the same plan, specification, ADRs and recipe are generated and exported
+without a provider account, and generated scripts stay marked unverified until something runs them.
+
 ## Self-host the relay on Cloud Run
 
 Run your own relay as a Cloud Run service instead of the public one. The deploy script builds the image with Cloud

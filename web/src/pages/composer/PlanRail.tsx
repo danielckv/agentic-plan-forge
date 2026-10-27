@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Boxes, ClipboardList, Layers, LoaderCircle, Waypoints } from "lucide-react";
+import { BookOpen, Boxes, ClipboardList, FolderTree, Layers, LoaderCircle, Waypoints } from "lucide-react";
 
 import { EpicCard } from "../../components/epics/EpicCard";
 import { EpicModal } from "../../components/epics/EpicModal";
@@ -9,8 +9,10 @@ import { BriefTab } from "./BriefTab";
 import { ComponentBrowser } from "./ComponentBrowser";
 import { ImpactPanel, VERDICT_TONE } from "./ImpactPanel";
 import { NotesList } from "./NotesList";
+import { QuestionInbox } from "./QuestionInbox";
+import { RepositoryWork } from "./RepositoryWork";
 
-type RailTab = "brief" | "impact" | "epics" | "code" | "notes";
+type RailTab = "brief" | "work" | "impact" | "epics" | "code" | "notes";
 
 /**
  * The right side of Page 1: the plan as it forms. Impact says which parts of
@@ -44,13 +46,20 @@ export function PlanRail(props: {
     <aside className="pf-rail" aria-label="Plan">
       <div className="pf-rail-tabs" role="tablist" aria-label="Plan views">
         <RailTabButton id="brief" current={tab} onSelect={setTab} icon={ClipboardList} label="Brief" />
+        <RailTabButton id="work" current={tab} onSelect={setTab} icon={FolderTree} label="Work" />
         <RailTabButton id="impact" current={tab} onSelect={setTab} icon={Waypoints} label="Impact" count={touchCount} />
         <RailTabButton id="epics" current={tab} onSelect={setTab} icon={Layers} label="Epics" count={files.length} />
         <RailTabButton id="code" current={tab} onSelect={setTab} icon={Boxes} label="Codebase" />
         <RailTabButton id="notes" current={tab} onSelect={setTab} icon={BookOpen} label="Notes" count={noteCount} />
       </div>
       <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
-        {tab === "brief" && <BriefTab text={text} onInsert={onInsert} />}
+        {tab === "brief" && (
+          <>
+            <QuestionInbox />
+            <BriefTab text={text} onInsert={onInsert} />
+          </>
+        )}
+        {tab === "work" && <RepositoryWork onInsert={onInsert} />}
         {tab === "impact" && <ImpactPanel map={impact} />}
         {tab === "epics" && (
           <EpicsTab files={files} interpreting={interpreting} hasText={hasText} onOpen={setOpen} />

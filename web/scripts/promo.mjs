@@ -33,6 +33,24 @@ setTimeout(() => {
 }, 120_000).unref();
 
 const shots = [];
+/**
+ * Wait for a selector, and on failure report what the page actually holds. A
+ * bare 15-second timeout hides whether the rail was empty, on another tab, or
+ * never rendered at all.
+ */
+async function need(page, selector, what) {
+  try {
+    await page.waitForSelector(selector, { state: "visible" });
+  } catch {
+    const tabs = await page.locator(".pf-rail-tab").allTextContents();
+    const rail = await page.locator(".pf-rail-body").innerText().catch(() => "(no rail body)");
+    throw new Error(
+      `${what}: ${selector} never appeared.\n  rail tabs: ${tabs.join(" | ") || "(none)"}\n` +
+        `  rail body: ${rail.slice(0, 300).replaceAll("\n", " / ")}`,
+    );
+  }
+}
+
 async function shot(page, name) {
   if (args.only !== undefined && !args.only.split(",").includes(name)) return;
   const file = `${outDir}/${name}.png`;
@@ -68,8 +86,12 @@ try {
   // Page 1: the composer with the brief and its epic files.
   await page.goto(`${session.origin}/`);
   await page.waitForSelector(".pf-composer .cm-content", { state: "visible" });
-  await page.waitForSelector(".pf-epic-card", { state: "visible" });
-  await page.waitForSelector("text=Project notes found", { state: "visible" });
+  // The rail opens on the Brief tab: an outline of the deliberation's topics.
+  // The epic files are one tab over, so the composer shot shows the rail the
+  // way a writer finds it after writing.
+  await page.getByRole("tab", { name: /Epics/ }).click();
+  await need(page, ".pf-epic-card", "the composer");
+  await need(page, "text=Project notes found", "the composer footer");
   await page.waitForTimeout(400);
   await shot(page, "composer");
 
@@ -98,16 +120,21 @@ try {
     globalThis.localStorage.setItem("plan-forge:ui:theme", "dark");
   });
   await page.reload();
-  await page.waitForSelector(".pf-epic-card", { state: "visible" });
+  // A reload puts the rail back on Brief, so the epic cards need the tab again
+  // before the dark shot can show them beside the notes.
+  await page.getByRole("tab", { name: /Epics/ }).click();
+  await need(page, ".pf-epic-card", "the dark composer");
   await page.getByRole("tab", { name: /Notes/ }).click();
-  await page.waitForSelector(".pf-note", { state: "visible" });
+  await need(page, ".pf-note", "the notes tab");
   await page.waitForTimeout(400);
   await shot(page, "composer-dark");
   await page.evaluate(() => {
     globalThis.localStorage.setItem("plan-forge:ui:theme", "light");
   });
   await page.reload();
-  await page.waitForSelector(".pf-epic-card", { state: "visible" });
+  // A reload puts the rail back on Brief. Page 2 is reached from the footer,
+  // so nothing on this page needs the cards; wait for the editor instead.
+  await page.waitForSelector(".pf-composer .cm-content", { state: "visible" });
 
   // Page 2: the avatars deliberate.
   await page.getByRole("button", { name: /Confirm Context/ }).click();

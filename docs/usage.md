@@ -117,6 +117,34 @@ The footer shows whether the code is indexed, whether any documentation is stale
 related notes were found. **Confirm Context & Launch Avatars** freezes the document and starts the run. Plan Forge does
 not scan or block what you write.
 
+#### The Work tab
+
+**Work** reads the repository's own planning files — `.agents/STATE.md`, `docs/plans`, `docs/specs`, `docs/adrs`,
+`specs`, and root files named like a plan, a follow-up, an epic, a task or a state file — and shows what is next, which
+epics and tasks exist, and which decision records apply. The next list is exactly the order the active state file
+gives; everything else is shown by kind with the file and line it came from.
+
+Browsing is read-only. It starts no model call and changes no file. **Use in brief** inserts the source path and line
+into your requirements, so the plan can say where a requirement came from. A project that keeps its plans elsewhere
+can name extra directories with `repository_work_roots`.
+
+#### When the plan refreshes itself
+
+Writing a brief does not require a button press: the plan rail and the impact map follow the document on their own, four times.
+
+- Nothing is read until the brief passes **100 words**. Below that you are still sketching, and an interpretation would describe text you are about to replace.
+- After that a re-read happens after **30**, then **60**, then **120** more words. It waits until you stop typing. Four reads carry a brief to 310 words.
+- Then the automatic path stops. **Refresh plan** in the footer re-reads the document once, immediately.
+
+Pressing **Refresh plan** also switches the automatic path off for the session, and the note beside the button says so. Two mechanisms reading one document would bill twice and race each other. A press means you control when it happens. The button keeps working afterwards.
+
+#### Questions about the brief
+
+When a sentence in the brief is genuinely unclear, the normalizer raises it as a classification question rather than
+guessing. Each one shows the question, the sentence it came from, and three answers: it changes **what** we build, it
+changes **how** we build it, or it is **not** a real ambiguity. Only the session owner can answer, and only while the
+brief is still being read. Answering applies in memory: it makes no new model call.
+
 #### What this touches
 
 Each epic names the parts of your project it affects, and says what happens to each:
@@ -218,6 +246,12 @@ authenticated and still unable to take a call — Antigravity is exactly this ca
 host's own refusal text, and says so explicitly when a configured `main_host` or `judge_host` is being
 ignored because of it. The same facts are on the terminal in `plan-forge doctor`.
 
+On first use, Setup also lists the coding agents it found installed: Claude Code, oh-my-pi, agy, Codex,
+pi, OpenCode, Gemini and Cursor Agent. Presence is not capability. A tool Plan Forge has no adapter for
+is reported as detected and **not usable**, with a line saying so, because reporting it as available
+would repeat the "signed in but cannot serve" confusion above. The scan only checks `PATH`; it runs
+nothing.
+
 ## Project context
 
 Before planning, Plan Forge collects excerpts from the project's own notes, specs, plans and decision records that match
@@ -256,6 +290,34 @@ window asks which; after that it is a toggle on the page and a `deploy_target` k
 
 **Discard worktree** removes the worktree, its branch and the preview container. **Finish** ends the session and
 leaves everything in place.
+
+### 5. Prepared VM: build, test and preview elsewhere
+
+Approving a plan does not require a machine to stay on. The **Build** page carries a prepared-VM panel that builds and
+tests a revision in a managed sandbox and serves a live preview you can click through. It is optional: with no sandbox
+configured, everything above still works, and a plan, its specification, its decision records and its recorded commands
+are still produced.
+
+The commands come from the repository, not from a model at launch time. Plan Forge reads the project's own manifests,
+lockfiles, CI configuration, `Makefile`, package scripts and containers, then records the build, test and run commands
+it found in `execution_recipe.json` beside the approved plan. It reuses an existing command rather than wrapping it, and
+it says **not configured** when a step has no command instead of reporting a pass. Review those commands before you
+launch: the sandbox runs exactly them.
+
+A launch asks you to confirm the revision, the commands, the resources, the expiry and the cost estimate. The default
+lifetime is one hour, and the provider enforces it. **Stop** deletes the sandbox; if the deletion cannot be confirmed,
+the page says so and the provider's expiry is the backstop. **Open preview** appears only once the sandbox has passed
+its recorded readiness check, so a page that merely opened a port does not count as running.
+
+Changing the revision, the scripts, a lockfile or the instructions the recipe cites invalidates earlier results: a
+green preview can never outlive the code it described. Settings and the full reasoning:
+[configuration.md](configuration.md#what-runs-the-build-and-where) and
+[ADR 0017](adrs/0017-prepared-vm-from-recorded-scripts.md).
+
+**Accepting an implementation** is a separate decision from approving the plan. Both your own sign-off and a developer
+review on GitHub must cover the same commit, and the review must come from someone with write access who is not the
+author. A new commit, a dismissed review or a changed recipe takes the acceptance back. Plan Forge never merges the
+pull request.
 
 ## Plan Mode handoff and validation
 

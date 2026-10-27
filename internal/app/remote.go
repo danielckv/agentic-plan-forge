@@ -160,6 +160,16 @@ func (l *remoteLink) Events() *pump { return l.events }
 
 func (l *remoteLink) close() { l.events.close() }
 
+// noteRejected records an event the executor queue refused. The relay stream
+// cannot be replayed from this side, so the window refreshes its snapshot; the
+// log names the event so the gap is diagnosable rather than invisible.
+func (l *remoteLink) noteRejected(kept bool, t relay.WSEventType) {
+	if kept {
+		return
+	}
+	l.log.Warn("the executor queue could not take an event; the window must resynchronise", "event", string(t))
+}
+
 // --- frames from the relay -----------------------------------------------------------------
 
 func remember(set map[string]bool, order *[]string, id string) {
@@ -243,9 +253,9 @@ func (l *remoteLink) onEnvelope(env relay.WSEnvelope) {
 	}
 	if env.Seq > 0 {
 		l.mirror.note(env, raw)
-		l.events.push(env)
+		l.noteRejected(l.events.push(env), env.EventType)
 	} else if env.EventType == relay.EventPresence {
-		l.events.push(env)
+		l.noteRejected(l.events.push(env), env.EventType)
 	}
 	if l.live {
 		l.sendLocked(raw)
@@ -258,7 +268,7 @@ func (l *remoteLink) refusedLocked(env relay.WSEnvelope) {
 	switch env.EventType {
 	case relay.EventFenced:
 		l.emitErr = errors.New("FENCED: the executor lease is no longer held")
-		l.events.push(env)
+		l.noteRejected(l.events.push(env), env.EventType)
 	default:
 		var p relay.ErrorPayload
 		_ = json.Unmarshal(env.Payload, &p)

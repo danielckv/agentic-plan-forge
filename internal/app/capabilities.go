@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/host"
@@ -52,6 +53,10 @@ type CapabilitiesView struct {
 	Tools  []CapabilityTool     `json:"tools"`
 	Skills []host.SkillRootView `json:"skills"`
 	Hooks  []host.HookStatus    `json:"hooks"`
+	// CLIs is the first-run scan of installed coding agents. A tool that is
+	// found but has no adapter says so; only a host whose preflight passes is
+	// reported usable.
+	CLIs []host.DetectedCLI `json:"clis"`
 	// Pinned names a configured main_host or judge_host that cannot serve, so
 	// the window can say the choice is being ignored rather than leaving the
 	// owner to infer it from the placements.
@@ -113,6 +118,26 @@ func Capabilities(ctx context.Context, cfg config.Config, repo, version string) 
 	}
 
 	view.Tools = probeTools()
+	// Rediscovery on every call is deliberate: a person installs a CLI and
+	// reloads the window, and a cached first-run result would keep saying it is
+	// missing until the process restarted.
+	view.CLIs = host.ScanKnownCLIs(ctx)
+	for i := range view.CLIs {
+		entry, ok := serves[view.CLIs[i].Kind]
+		switch {
+		case strings.TrimSpace(view.CLIs[i].Kind) == "":
+			// No adapter: presence is all this scan can honestly report.
+		case !view.CLIs[i].Found:
+			view.CLIs[i].Blocks = "not installed"
+		case !ok || !entry.Serves:
+			// A host can be signed in and still refuse a call; Blocks carries
+			// that reason when the adapter gave one.
+			view.CLIs[i].Blocks = blockedReason(entry)
+		default:
+			view.CLIs[i].Usable = true
+		}
+	}
+
 	// Both inspectors return a nil slice when there is nothing to report, and
 	// assigning that over the empty one puts `null` on the wire for the
 	// window's `.map` to throw on. A machine with no host installed is the
@@ -129,6 +154,20 @@ func Capabilities(ctx context.Context, cfg config.Config, repo, version string) 
 	return view.withoutNilLists()
 }
 
+// blockedReason explains an installed host that cannot serve a call. The
+// adapter's own reason wins: it is specific ("preflight failed", "no isolated
+// settings") where a generic sentence would hide the fix.
+func blockedReason(entry CapabilityHost) string {
+	switch {
+	case entry.Blocks != "":
+		return entry.Blocks
+	case entry.SignIn != "":
+		return entry.SignIn
+	default:
+		return "installed but cannot serve a call"
+	}
+}
+
 // withoutNilLists is the last word on the no-null rule, so a future assignment
 // cannot reintroduce the fault the guards above fix one call site at a time.
 func (v CapabilitiesView) withoutNilLists() CapabilitiesView {
@@ -143,6 +182,9 @@ func (v CapabilitiesView) withoutNilLists() CapabilitiesView {
 	}
 	if v.Hooks == nil {
 		v.Hooks = []host.HookStatus{}
+	}
+	if v.CLIs == nil {
+		v.CLIs = []host.DetectedCLI{}
 	}
 	if v.Pinned == nil {
 		v.Pinned = []string{}

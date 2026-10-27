@@ -174,3 +174,71 @@ export function fetchComponents(query: { module?: string; q?: string } = {}): Pr
   const suffix = params.toString();
   return getJSON<ComponentsView>(suffix === "" ? "/api/components" : `/api/components?${suffix}`);
 }
+
+/** One heading of a planning document (`repowork.Heading`). */
+export interface RepositoryHeading {
+  level: number;
+  text: string;
+  line: number;
+}
+
+/** One work item with its source (`repowork.Item`). */
+export interface RepositoryItem {
+  id: string;
+  text: string;
+  /** `open`, `done` or `unknown`: never inferred from prose. */
+  status: string;
+  line: number;
+  /** `repowork.Item` uses snake_case on the wire. */
+  end_line: number;
+  source: string;
+  depends_on: string[];
+}
+
+/** One planning document of the repository (`repowork.Document`). */
+export interface RepositoryDocument {
+  id: string;
+  path: string;
+  kind: "state" | "plan" | "spec" | "adr" | "follow-up" | "epic" | "task" | "document";
+  sha256: string;
+  bytes: number;
+  headings: RepositoryHeading[];
+  items: RepositoryItem[];
+}
+
+/** One file the index left out, with the reason (`repowork.Skipped`). */
+export interface RepositorySkipped {
+  path: string;
+  reason: string;
+}
+
+/** GET /api/repository-work (`repowork.Inventory`). */
+export interface RepositoryWorkView {
+  revision: string;
+  partial: boolean;
+  skipped: RepositorySkipped[] | null;
+  documents: RepositoryDocument[] | null;
+  /** The explicit order of the active state file's Next section. */
+  next: RepositoryItem[] | null;
+  generated_at: string;
+}
+
+/** GET /api/repository-work/document (`app.repositoryWorkDocumentView`). */
+export interface RepositoryWorkDocument {
+  id: string;
+  path: string;
+  kind: RepositoryDocument["kind"];
+  sha256: string;
+  bytes: number;
+  headings: RepositoryHeading[];
+  items: RepositoryItem[];
+  markdown: string;
+}
+
+export function fetchRepositoryWork(): Promise<RepositoryWorkView> {
+  return getJSON<RepositoryWorkView>("/api/repository-work");
+}
+
+export function fetchRepositoryDocument(id: string): Promise<RepositoryWorkDocument> {
+  return getJSON<RepositoryWorkDocument>(`/api/repository-work/document?id=${encodeURIComponent(id)}`);
+}

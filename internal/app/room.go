@@ -50,22 +50,66 @@ var memberSent = map[relay.WSEventType]bool{
 	relay.EventDecisionResolve: true, relay.EventLeaseGranted: true, relay.EventCycleStart: true,
 }
 
-// pump is an unbounded, ordered hand-off from the authority to the executor.
-// Authority events must never be dropped or block the authority, so it grows.
+// pump is an ordered hand-off from the authority to the executor.
+//
+// It is bounded. Authority events must never block the authority, so a full
+// pump drops disposable progress first: a heartbeat or a status thought whose
+// payload carries no draft, decision or terminal outcome. If nothing
+// disposable is left, the pump stops and reports resync: silently dropping a
+// decision, a draft or a terminal failure would leave the run in a state no
+// snapshot could repair, and pretending to have kept up is worse than saying
+// the window must resynchronise.
 type pump struct {
 	mu     sync.Mutex
 	q      []relay.WSEnvelope
 	wake   chan struct{}
 	closed bool
+	// resync is set when an essential event could not be kept, or when so many
+	// disposable events were dropped in a row that the consumer is evidently
+	// not draining. The room reads it to publish a snapshot instead of
+	// pretending the stream was complete.
+	resync bool
+	// dropped counts consecutive disposals since the consumer last took an
+	// event. A few are normal coalescing; an unbroken run means the reader is
+	// stuck, and the window has to resynchronise.
+	dropped int
 }
+
+// maxPumped bounds the queue. It is generous next to the window's own 256-deep
+// write queue: the executor drains continuously, so this only fills when it is
+// blocked on a model call or a human answer.
+const maxPumpEvents = 1024
+
+// maxDroppedInARow bounds how many disposable events may be discarded in a row
+// before the pump assumes the consumer is not draining. Coalescing a handful of
+// heartbeats is the point of the bound; discarding an endless stream is a
+// symptom, and the window needs a snapshot to recover from it.
+const maxDroppedInARow = 32
 
 func newPump() *pump { return &pump{wake: make(chan struct{}, 1)} }
 
-func (p *pump) push(env relay.WSEnvelope) {
+// push queues one event and reports whether it was kept. A rejected event is
+// never a silent loss: the caller logs it, the pump raises resync, and the
+// window refreshes its snapshot (the status poll already carries stages and
+// recovery). Dropping the essential event instead would leave both sides
+// disagreeing about a decision or an approval.
+func (p *pump) push(env relay.WSEnvelope) bool {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
-		return
+		return false
+	}
+	if len(p.q) >= maxPumpEvents {
+		switch {
+		case !p.dropOldestDisposableLocked():
+			p.resync = true
+			p.mu.Unlock()
+			return false
+		case p.dropped >= maxDroppedInARow:
+			p.resync = true
+			p.mu.Unlock()
+			return false
+		}
 	}
 	p.q = append(p.q, env)
 	p.mu.Unlock()
@@ -73,6 +117,44 @@ func (p *pump) push(env relay.WSEnvelope) {
 	case p.wake <- struct{}{}:
 	default:
 	}
+	return true
+}
+
+// dropCoalescible reports whether an event can be discarded without losing a
+// decision, a draft, an approval or a terminal failure. Only progress chatter
+// qualifies: the window can re-render the current state from the next status
+// poll or thought.
+func dropCoalescible(env relay.WSEnvelope) bool {
+	switch relay.WSEventType(env.EventType) {
+	case relay.EventAvatarThought:
+		// A grounded thought carries the host, model and step the window shows;
+		// an ungrounded one is a plain status heartbeat.
+		var p relay.AvatarThoughtPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return true
+		}
+		switch p.Status {
+		case "Synced", "Failed", "Cancelled", "Stale":
+			return false
+		}
+		return p.Host == "" && p.Step == "" && p.OutputBytes == 0
+	}
+	return false
+}
+
+// dropOldestDisposableLocked removes the oldest disposable event still queued.
+// It reports false when every queued event is essential.
+func (p *pump) dropOldestDisposableLocked() bool {
+	for i := range p.q {
+		if dropCoalescible(p.q[i]) {
+			copy(p.q[i:], p.q[i+1:])
+			p.q[len(p.q)-1] = relay.WSEnvelope{}
+			p.q = p.q[:len(p.q)-1]
+			p.dropped++
+			return true
+		}
+	}
+	return false
 }
 
 // next blocks for the next event, or reports false when ctx ends or the pump is
@@ -84,6 +166,8 @@ func (p *pump) next(ctx context.Context) (relay.WSEnvelope, bool) {
 			env := p.q[0]
 			p.q[0] = relay.WSEnvelope{}
 			p.q = p.q[1:]
+			// The consumer is draining again, so the run of drops ends here.
+			p.dropped = 0
 			p.mu.Unlock()
 			return env, true
 		}
@@ -98,6 +182,14 @@ func (p *pump) next(ctx context.Context) (relay.WSEnvelope, bool) {
 		case <-p.wake:
 		}
 	}
+}
+
+// resyncNeeded reports whether the window must resynchronize from a snapshot
+// because an event could not be queued.
+func (p *pump) resyncNeeded() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.resync
 }
 
 func (p *pump) close() {
@@ -209,7 +301,29 @@ func (r *room) broadcastLocked(t relay.WSEventType, sender string, payload json.
 	if r.live {
 		r.sendLocked(raw)
 	}
-	r.events.push(env)
+	if !r.events.push(env) {
+		// The executor queue is full of essential events. The event is not lost:
+		// the authority keeps it in the replay log and the window refreshes its
+		// snapshot, which carries the stages, the pending decisions and the
+		// recovery line. What must not happen is a silent gap, so this is loud.
+		r.logger.Warn("the executor queue could not take an event; the window must resynchronise",
+			"event", string(env.EventType), "resync", r.events.resyncNeeded())
+		r.publishResyncHintLocked()
+	}
+}
+
+// publishResyncHintLocked tells the window its stream has a gap. It is a
+// local frame, so it reaches the page without waiting for a replay.
+func (r *room) publishResyncHintLocked() {
+	payload, err := json.Marshal(map[string]string{
+		"code":    "RESYNC_REQUIRED",
+		"message": "the window missed one or more events; refresh to resynchronise",
+	})
+	if err != nil {
+		return
+	}
+	_, raw := r.frameLocked(relay.EventError, authorityID, "", 0, payload)
+	r.sendLocked(raw)
 }
 
 // unicastLocked answers the window directly with seq 0, echoing the command's

@@ -25,6 +25,7 @@ const buildStartGrace = 150 * time.Millisecond
 
 // buildRoutes registers the post-approval build and deploy API.
 func (s *appSession) buildRoutes() {
+	s.sandboxRoutes()
 	s.bridge.Handle("GET /api/build", s.handleBuild)
 	s.bridge.Handle("POST /api/build/code", s.handleBuildCode)
 	s.bridge.Handle("POST /api/build/preview", s.handleBuildPreview)

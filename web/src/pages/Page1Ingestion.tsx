@@ -16,6 +16,7 @@ import { apiFetch } from "../protocol/bridge";
 import { exportRecovery, freezeRequest, useSync } from "../store/syncStore";
 import type { RecoveryItem, StatusView } from "../store/syncStore";
 import { MarkdownEditor, type EditorApi } from "../ui/editor/MarkdownEditor";
+import { refreshLabel, refreshNote } from "./composer/refreshButton";
 import { SkeletonChip, SkeletonLines } from "../ui/Skeleton";
 import { PlanRail } from "./composer/PlanRail";
 import { useComponentBlocks, useImpact, usePlanFiles, useProjectContext } from "./composer/usePlanData";
@@ -145,6 +146,25 @@ export function Page1Ingestion(): React.ReactElement {
     [isOwner],
   );
 
+  // The manual refresh re-reads the document once and switches the automatic
+  // path off, so a writer who has just replaced a page does not wait for a
+  // threshold that may never come.
+  const refresh = sync.status.refresh;
+  const refreshAction = refreshLabel(refresh, hasText);
+  const [refreshing, setRefreshing] = useState(false);
+  const requestRefresh = useCallback(async (): Promise<void> => {
+    if (!isOwner || refreshing) return;
+    setRefreshing(true);
+    try {
+      await apiFetch("/api/refresh", { method: "POST" });
+    } catch {
+      // The status poll reports the outcome; a failure here must not look like
+      // a document change the writer did not make.
+    } finally {
+      setRefreshing(false);
+    }
+  }, [isOwner, refreshing]);
+
   const confirmEnabled = isOwner && hasText && uploading === null && !sync.pendingEdits;
   const host = status.mainHost !== undefined && status.mainHost !== "" ? status.mainHost : (status.requestedHost ?? "your agent");
 
@@ -264,6 +284,21 @@ export function Page1Ingestion(): React.ReactElement {
               <SkeletonChip width={96} />
               <SkeletonChip width={120} />
             </>
+          )}
+        </div>
+        <div className="pf-footer-refresh">
+          <button
+            type="button"
+            className="pf-btn pf-btn-secondary pf-btn-sm"
+            disabled={!isOwner || refreshAction.disabled || refreshing}
+            onClick={() => void requestRefresh()}
+            title={refreshAction.hint}
+          >
+            {refreshing ? <LoaderCircle size={13} className="animate-spin" /> : <ScanText size={13} />}
+            {refreshAction.text}
+          </button>
+          {isOwner && refreshNote(refresh) !== null && (
+            <span className="pf-footer-note pf-caption">{refreshNote(refresh)}</span>
           )}
         </div>
         <span className="pf-footer-note pf-caption">
