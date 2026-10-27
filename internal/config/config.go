@@ -128,6 +128,9 @@ type Config struct {
 	// preview. An empty provider disables launching and leaves every document
 	// and implementation path available.
 	Sandbox SandboxConfig `json:"sandbox,omitempty"`
+	// GitHubAPIURL is the review API root. Empty selects the public API; a
+	// GitHub Enterprise install sets its own.
+	GitHubAPIURL string `json:"github_api_url,omitempty"`
 
 	// unknown preserves keys written by another build.
 	unknown map[string]json.RawMessage
@@ -217,7 +220,7 @@ var knownKeys = map[string]bool{
 	"browser_path": true, "ocr_language": true, "host_env_allow": true,
 	"stage_timeout_seconds": true, "role_models": true, "disable_narrator": true,
 	"deploy_target": true, "agent_box_url": true,
-	"repository_work_roots": true, "sandbox": true,
+	"repository_work_roots": true, "sandbox": true, "github_api_url": true,
 }
 
 // Save writes the configuration atomically: same-directory temporary file,
@@ -343,6 +346,11 @@ func Validate(cfg Config) error {
 	}
 	if err := ValidateSandbox(cfg.Sandbox); err != nil {
 		return err
+	}
+	if cfg.GitHubAPIURL != "" {
+		if !strings.HasPrefix(cfg.GitHubAPIURL, "https://") {
+			return fmt.Errorf("github_api_url %q must be an https URL", cfg.GitHubAPIURL)
+		}
 	}
 	return nil
 }
