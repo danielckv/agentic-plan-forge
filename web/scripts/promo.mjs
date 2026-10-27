@@ -132,7 +132,9 @@ try {
     globalThis.localStorage.setItem("plan-forge:ui:theme", "light");
   });
   await page.reload();
-  await page.waitForSelector(".pf-epic-card", { state: "visible" });
+  // A reload puts the rail back on Brief. Page 2 is reached from the footer,
+  // so nothing on this page needs the cards; wait for the editor instead.
+  await page.waitForSelector(".pf-composer .cm-content", { state: "visible" });
 
   // Page 2: the avatars deliberate.
   await page.getByRole("button", { name: /Confirm Context/ }).click();
