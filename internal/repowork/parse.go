@@ -72,8 +72,7 @@ func rootFileMatch(name string) bool {
 // document that changed after the inventory was taken — with the path alone the
 // ID would still match and the stale content would be served as current.
 func docID(rel, contentSHA string) string {
-	pathSum := sha256.Sum256([]byte(rel))
-	return hex.EncodeToString(pathSum[:])[:idHexLen/2] + contentSHA[:idHexLen/2]
+	return pathPrefix(rel) + contentSHA[:idHexLen/2]
 }
 
 // pathPrefix is the part of an ID that identifies the document's path.
