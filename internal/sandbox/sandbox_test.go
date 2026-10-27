@@ -325,6 +325,35 @@ func TestAmbiguousTransportFailureReturnsErrAmbiguous(t *testing.T) {
 	}
 }
 
+// Only a context that was already finished can prove nothing was sent. A
+// deadline that fires while the request is in flight may have created a paid
+// sandbox, so it stays ambiguous and the caller reconciles by operation id.
+func TestDeadlineInFlightIsAmbiguousButDeadBeforeSendIsNot(t *testing.T) {
+	ps := newProviderServer(t)
+	p := ps.provider()
+
+	// Already finished: no request leaves, so nothing can have been created.
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := p.Create(dead, validRequest()); err == nil || errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("error = %v, want a plain cancellation", err)
+	}
+	ps.mu.Lock()
+	sent := ps.createCount
+	ps.mu.Unlock()
+	if sent != 0 {
+		t.Fatalf("%d requests reached the provider after a dead context", sent)
+	}
+
+	// Hangs until the deadline: the request did leave, so this is ambiguous.
+	ps.hangCreate = true
+	ctx, cancel2 := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel2()
+	if _, err := p.Create(ctx, validRequest()); !errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("error = %v, want ErrAmbiguous", err)
+	}
+}
+
 // A truncated 200 body is ambiguous too: the sandbox may exist while the
 // answer is unreadable.
 func TestTruncatedCreateResponseIsAmbiguous(t *testing.T) {

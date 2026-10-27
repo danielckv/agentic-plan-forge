@@ -231,6 +231,14 @@ func (p HTTPProvider) createOnce(ctx context.Context, req CreateRequest, body ma
 	if err != nil {
 		return Lease{}, fmt.Errorf("sandbox create: build request: %w", err)
 	}
+	// A context already finished before the request leaves buys nothing: no
+	// byte was sent, so no sandbox was created, and reporting ambiguity would
+	// send the caller to reconcile a VM that cannot exist. A deadline that
+	// fires later is different — the request was on the wire and may have
+	// landed — so it stays ambiguous below.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return Lease{}, fmt.Errorf("sandbox create: %w", ctxErr)
+	}
 	p.authorize(httpReq)
 	httpReq.Header.Set("Content-Type", "application/json")
 	// Reconciliation identity travels with the request, so a duplicate click
@@ -242,13 +250,6 @@ func (p HTTPProvider) createOnce(ctx context.Context, req CreateRequest, body ma
 	// terminal. A terminal error here lets a retry buy a second VM.
 	resp, err := p.Client().Do(httpReq)
 	if err != nil {
-		// A context the caller cancelled or let expire before the request left
-		// buys nothing: nothing was sent, so nothing was created. Reporting it
-		// as ambiguous would send the caller to reconcile a sandbox that cannot
-		// exist. Every other transport failure may have landed.
-		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
-			return Lease{}, fmt.Errorf("sandbox create: %w", ctxErr)
-		}
 		return Lease{}, fmt.Errorf("%w: %s", ErrAmbiguous, errText(err))
 	}
 	defer drainClose(resp.Body)
