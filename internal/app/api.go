@@ -47,6 +47,7 @@ func (s *appSession) routes() {
 	s.bridge.Handle("POST /api/acceptance", s.handleAcceptanceRecord)
 	s.bridge.Handle("POST /api/acceptance/signoff", s.handleAcceptanceSignoff)
 	s.bridge.Handle("POST /api/reinterpret", s.handleReinterpret)
+	s.bridge.Handle("POST /api/refresh", s.handleManualRefresh)
 	s.bridge.Handle("GET /api/invite", s.handleInvite)
 	s.bridge.Handle("GET /api/approval", s.handleApproval)
 	s.bridge.Handle("GET /api/relay", s.handleRelay)
@@ -94,6 +95,16 @@ func (s *appSession) handleUsage(w http.ResponseWriter, _ *http.Request) {
 		report.Rows = []contracts.UsageRow{}
 	}
 	writeJSON(w, http.StatusOK, report)
+}
+
+// POST /api/refresh — the composer's manual refresh. It re-reads the document
+// once and switches the automatic path off for the session, so one press
+// replaces the automatic reads rather than racing them.
+func (s *appSession) handleManualRefresh(w http.ResponseWriter, _ *http.Request) {
+	if s.exec != nil {
+		s.exec.PressRefresh()
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"accepted": s.exec != nil})
 }
 
 // POST /api/reinterpret — the Page 1 "Re-interpret" button.

@@ -387,6 +387,41 @@ The workflow is dispatched on the branch with
 dispatch is not verification. Live provider verification is never claimed when it
 was not authorized and run.
 
+## Backlog
+
+Recorded here so the idea is not lost. None of it is built yet.
+
+**A backlog, so a second plan can start while the first is being implemented.**
+Today one session carries one deliberation and one plan. Implementation then
+blocks the window: the plan is approved, coded, built and accepted before
+anything else begins. A team usually has the next piece of work in mind while
+the current one is in review, and making them wait means the next brief is
+written somewhere else.
+
+The shape of it:
+
+- A session holds many plans, not one. A plan joins the backlog when it is
+  approved, and stays there while implementation runs.
+- The backlog is a list of approved plans with their own state: waiting,
+  implementing, in review, accepted. Each keeps its approval ID, manifest hash
+  and revision, the same binding acceptance already relies on.
+- Starting the next plan does not disturb the running one. The executor runs one
+  implementation at a time — a second coding run would race the first over the
+  worktree and the sandbox — so the queue advances as each one finishes, and a
+  queued plan shows what it is waiting for.
+- The Work tab already reads the repository's own planning files, which is the
+  same surface a backlog entry would appear on. A plan that lands in
+  `docs/plans/` becomes visible there whether or not this window wrote it.
+
+Open questions, to settle before building it:
+
+- Whether the backlog belongs to the session or to the repository. A repository
+  backlog survives the window; a session one does not.
+- Whether an unapproved brief may sit in the backlog, or only an approved plan.
+  The second is safer: the backlog then never holds text nobody approved.
+- What happens to a queued plan when main moves underneath it. The binding has
+  to say which revision it was approved against, and mark itself stale.
+
 ## Assumptions and contingencies
 
 - Linux prepared sandboxes are the first execution target. A requirement that

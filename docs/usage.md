@@ -128,6 +128,16 @@ Browsing is read-only. It starts no model call and changes no file. **Use in bri
 into your requirements, so the plan can say where a requirement came from. A project that keeps its plans elsewhere
 can name extra directories with `repository_work_roots`.
 
+#### When the plan refreshes itself
+
+Writing a brief does not require a button press: the plan rail and the impact map follow the document on their own, four times.
+
+- Nothing is read until the brief passes **100 words**. Below that you are still sketching, and an interpretation would describe text you are about to replace.
+- After that, a re-read happens once **30**, then **60**, then **120** more words have arrived, and only after you stop typing for a couple of seconds. Four reads carry a brief to 310 words, which is a plan.
+- Then the automatic path stops. **Refresh plan** in the footer re-reads the document once, immediately.
+
+Pressing **Refresh plan** also switches the automatic path off for the session, and the note beside the button says so. That is deliberate: two mechanisms re-reading one document would bill twice and race each other, and a press is you taking control of when it happens. The button keeps working after it has switched the automatic path off.
+
 #### Questions about the brief
 
 When a sentence in the brief is genuinely unclear, the normalizer raises it as a classification question rather than

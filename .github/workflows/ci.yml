@@ -187,6 +187,43 @@ jobs:
           name: playwright-report
           path: web/test-results
 
+  # The README's screenshots are captured from the real UI bundle driving a
+  # seeded fake session (web/scripts/promo.mjs). No model runs, and nothing
+  # leaves the origin. The job publishes them as an artifact rather than
+  # committing them, so a maintainer can refresh docs/images deliberately.
+  promo-shots:
+    needs: debounce
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web dependencies
+        run: npm --prefix web ci
+      - name: Install Chromium for Playwright
+        run: npm --prefix web exec -- playwright install --with-deps chromium
+      - name: Build web
+        run: npm --prefix web run build
+      - name: Capture the README screenshots
+        # Run from web/, which is where the script resolves ../dist and its
+        # lib/ helpers. --out keeps the run off the tracked docs/images.
+        working-directory: web
+        run: node scripts/promo.mjs --out "$RUNNER_TEMP/shots"
+      - name: Upload the screenshots
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: promo-shots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: error
+
   go-client:
     needs: web
     runs-on: ubuntu-24.04

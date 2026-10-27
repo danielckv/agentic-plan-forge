@@ -178,6 +178,28 @@ export interface StatusView {
   recovery?: string;
   /** Why a saved run was not resumed, when its record had to be preserved. */
   checkpointNotice?: string;
+  /**
+   * The composer's automatic re-read path. Absent on an older bridge, in which
+   * case the page keeps the button and says nothing about automatic reads.
+   */
+  refresh?: RefreshState;
+}
+
+/**
+ * The automatic re-read path of the composer (`app.RefreshState`).
+ *
+ * The executor reads the brief by itself four times: at 100 words, then at 30,
+ * 60 and 120 more. `automatic` is false once those are spent, and
+ * `automaticOff` is true when the owner pressed Refresh, which switches the
+ * automatic path off for the session.
+ */
+export interface RefreshState {
+  automatic: boolean;
+  automaticOff: boolean;
+  refreshes: number;
+  maxRefreshes: number;
+  /** How many more words earn the next automatic read; 0 when none is due. */
+  wordsRemaining: number;
 }
 
 /** One stage of the current run (`app.StageView`). */

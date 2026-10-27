@@ -154,6 +154,9 @@ type StatusView struct {
 	// CheckpointNotice explains a saved run that could not be restored, so a
 	// restart does not look like a forgotten run.
 	CheckpointNotice string `json:"checkpointNotice,omitempty"`
+	// Refresh reports the composer's automatic re-read path: how many automatic
+	// refreshes it has used, and whether a manual one switched it off.
+	Refresh RefreshState `json:"refresh"`
 	HostSummary
 }
 
@@ -203,6 +206,10 @@ type executor struct {
 	ctx context.Context
 
 	normTrigger chan bool // true = immediate (Re-interpret)
+
+	// gate decides whether a background edit earns an interpretation. It is
+	// read and written only under mu, next to the phase check below.
+	gate refreshGate
 
 	// checkpoints keeps the resumable drafts of the current run, in memory and
 	// in docs/plans/.plan/run.json. An unfinished run is adopted by the next
@@ -406,6 +413,7 @@ func (e *executor) Status() StatusView {
 	}
 	v.Stages = e.stages.views()
 	v.Recovery = e.stages.recoveryLine()
+	v.Refresh = e.gate.state(e.normText)
 	e.mu.Unlock()
 	if e.checkpointSink != nil {
 		v.CheckpointNotice = e.checkpointSink.Notice()
@@ -427,8 +435,21 @@ func (e *executor) Reinterpret() {
 }
 
 // DocChanged schedules re-interpretation after ingestion or an ambiguity
-// resolution, debounced.
+// resolution. The gate decides whether the edit earns a call: the first read
+// waits for a real brief, later ones for a word increase, and a manual refresh
+// switches the automatic path off. The debounce below supplies the pause that
+// keeps a refresh from landing mid-keystroke.
 func (e *executor) DocChanged() { e.trigger(false) }
+
+// PressRefresh is the composer's manual button. It switches the automatic path
+// off for the session, then does what the automatic path would have done: one
+// immediate re-read with the model-backed impact pass.
+func (e *executor) PressRefresh() {
+	e.mu.Lock()
+	e.gate.press()
+	e.mu.Unlock()
+	e.Reinterpret()
+}
 
 // scheduleInitialInterpretation interprets a document that already has text
 // when the session starts (a brief agreed before the window opened), so its
@@ -484,6 +505,23 @@ func (e *executor) normalizeLoop(ctx context.Context) {
 		e.mu.Unlock()
 		if !inIngestion {
 			continue
+		}
+		// An explicit request reads the document whatever the gate says: the
+		// writer asked for it. A background edit has to earn the call, and the
+		// word count comes from the document as it is now — the stored
+		// interpretation text is empty until the first read, so gating on it
+		// would never let that first read happen.
+		if !immediate {
+			text, _, err := e.cfg.Auth.Doc(ctx)
+			if err != nil {
+				continue
+			}
+			e.mu.Lock()
+			allowed := e.gate.due(text)
+			e.mu.Unlock()
+			if !allowed {
+				continue
+			}
 		}
 		if _, err := e.interpret(ctx); err != nil && ctx.Err() == nil {
 			e.cfg.Auth.Local(relay.EventError, relay.ErrorPayload{
