@@ -71,8 +71,11 @@ export interface CapabilitiesView {
   tools: CapabilityTool[];
   skills: SkillRootView[];
   hooks: HookStatus[];
-  /** Coding agents installed on this machine, found at start-up. */
-  clis: DetectedCLI[];
+  /**
+   * Coding agents installed on this machine, found at start-up. Optional so a
+   * payload from an older bridge still type-checks; the helpers read `?? []`.
+   */
+  clis?: DetectedCLI[];
   /** `main_host = agy` and friends, when the pin names a host that cannot serve. */
   pinned: string[];
 }

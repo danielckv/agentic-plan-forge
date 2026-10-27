@@ -194,7 +194,12 @@ func (s *RunStore) Load(ctx context.Context, repo string) (RunSnapshot, error) {
 		return RunSnapshot{}, s.quarantine(raw, "run.json is not valid JSON", err)
 	}
 	if snap.SchemaVersion != contracts.SchemaVersion {
-		return RunSnapshot{}, s.quarantine(raw, "run.json was written by another schema version", nil)
+		// The code is preserved: a caller that asked "is this file from another
+		// build?" still gets UNSUPPORTED_VERSION, and the bytes are preserved
+		// for inspection rather than deleted.
+		cause := contracts.Coded(contracts.CodeUnsupportedVer,
+			"%s/%s has schema_version %d", PlanDirName, RunStateFileName, snap.SchemaVersion)
+		return RunSnapshot{}, s.quarantine(raw, "run.json was written by another schema version", cause)
 	}
 	return snap, nil
 }

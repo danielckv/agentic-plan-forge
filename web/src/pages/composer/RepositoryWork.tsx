@@ -90,7 +90,7 @@ export function RepositoryWork(props: { onInsert?: (text: string) => void }): Re
     setOpening(doc.id);
     try {
       const full = await fetchRepositoryDocument(doc.id);
-      if (mounted.current) setOpen({ doc: full, item });
+      if (mounted.current) setOpen(item === undefined ? { doc: full } : { doc: full, item });
     } catch (err: unknown) {
       if (!mounted.current) return;
       setError(err instanceof Error ? err.message : "the document changed; refresh the view");
@@ -190,7 +190,7 @@ export function RepositoryWork(props: { onInsert?: (text: string) => void }): Re
                   <code className="pf-mono">{doc.path}</code>
                   <span className="pf-caption">{doc.kind}</span>
                 </span>
-                {doc.headings.length > 0 && <span className="pf-work-item-title">{doc.headings[0].text}</span>}
+                {doc.headings[0] !== undefined && <span className="pf-work-item-title">{doc.headings[0].text}</span>}
                 <span className="pf-work-item-meta pf-caption">
                   {doc.items.length} item{doc.items.length === 1 ? "" : "s"} · {doc.bytes} bytes
                 </span>

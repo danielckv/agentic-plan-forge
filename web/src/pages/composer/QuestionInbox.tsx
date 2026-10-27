@@ -1,7 +1,7 @@
 import { CircleHelp } from "lucide-react";
 
 import { parseNormalizedPRD, type Ambiguity } from "../../protocol/drafts";
-import { resolveAmbiguity, useSync } from "../../store/syncStore";
+import { resolveAmbiguity, useSync, type AmbiguityAnswer } from "../../store/syncStore";
 
 /** What each answer means, in words a product manager can act on. */
 const CHOICES: { id: "product" | "technical" | "dismiss"; label: string; explain: string }[] = [
@@ -61,7 +61,7 @@ function QuestionCard(props: {
   isOwner: boolean;
   connected: boolean;
   phase: string;
-  answer: { choice: "product" | "technical" | "dismiss"; note?: string; pending: boolean; superseded: boolean } | undefined;
+  answer: AmbiguityAnswer | undefined;
 }): React.ReactElement {
   const { question, isOwner, connected, phase, answer } = props;
   const settled = answer !== undefined && !answer.pending;

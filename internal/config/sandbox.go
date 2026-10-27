@@ -100,8 +100,8 @@ func (s SandboxConfig) EstimatedRuntimeCost() (time.Duration, float64, bool) {
 	}
 	lifetime := time.Duration(r.TimeoutSeconds) * time.Second
 	hours := lifetime.Hours()
-	cost := hours * (float64(r.VCPU*r.HourlyCPUCents) + float64(r.MemoryMB)*float64(r.HourlyMemoryCents)/1024)
-	return lifetime, cost, true
+	cents := hours * (float64(r.VCPU*r.HourlyCPUCents) + float64(r.MemoryMB)*float64(r.HourlyMemoryCents)/1024)
+	return lifetime, cents / 100, true
 }
 
 // ValidateRepositoryWorkRoots checks the extra roots of the work view. They are
@@ -139,10 +139,7 @@ func ValidateSandbox(s SandboxConfig) error {
 	default:
 		return fmt.Errorf("sandbox.provider %q is not supported; use %q or leave it empty", s.Provider, SandboxProviderE2B)
 	}
-	if s.APIKeyEnv == "" {
-		return nil
-	}
-	if strings.ContainsAny(s.APIKeyEnv, "= \t\n") {
+	if s.APIKeyEnv != "" && strings.ContainsAny(s.APIKeyEnv, "= \t\n") {
 		return fmt.Errorf("sandbox.api_key_env %q is not a bare environment variable name", s.APIKeyEnv)
 	}
 	if s.TimeoutSeconds != 0 &&

@@ -71,7 +71,7 @@ describe("outcome-first derivations", () => {
     const now = Date.parse(t0) + 60_000;
     const running = stage({ deadlineAt: "2026-10-27T10:10:00.000Z" });
     expect(remainingMS(running, now)).toBe(9 * 60_000);
-    expect(remainingMS(stage({ state: "completed", deadlineAt: undefined }), now)).toBeNull();
+    expect(remainingMS(stage({ state: "completed" }), now)).toBeNull();
   });
 
   it("never reports a negative remaining time", () => {
