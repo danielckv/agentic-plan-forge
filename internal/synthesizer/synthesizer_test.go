@@ -253,6 +253,31 @@ func TestCompareInterfacesDistinguishesBrokenFromConflict(t *testing.T) {
 	}
 }
 
+func TestCompareInterfacesAutoAlignsRestatedSchemaWithMatchingVersionHash(t *testing.T) {
+	f := synthtest.Sample()
+	k := f.Architect.Contracts[0]
+	// One specialist prepends the signature to input_schema while quoting the exact version_hash.
+	f.Specialists[0].Implements[0].InputSchema = k.Signature + ". " + k.InputSchema
+	// Another leaves output_schema blank while quoting the exact version_hash.
+	f.Specialists[1].Consumes[0].OutputSchema = ""
+	if issues := synthesizer.CompareInterfaces(f.Architect, f.Specialists); len(issues) != 0 {
+		t.Fatalf("restated or blank schema with matching version_hash produced issues: %+v", issues)
+	}
+}
+
+func TestArchitectValidateDesignCapsWorkstreamsAtFour(t *testing.T) {
+	f := synthtest.Sample()
+	for i := 1; i <= 3; i++ {
+		f.Architect.Workstreams = append(f.Architect.Workstreams, contracts.Workstream{
+			ID: fmt.Sprintf("ws-%d", i), Role: contracts.RoleBackend, ModulePaths: []string{"internal/billing"},
+		})
+	}
+	err := f.Architect.ValidateDesign(synthesizer.ContextOf(f.PM, f.Graph, f.DocDrift))
+	if err == nil || !strings.Contains(err.Error(), "at most 4 workstreams") {
+		t.Fatalf("ValidateDesign with 5 workstreams = %v, want at most 4 workstreams error", err)
+	}
+}
+
 func chain(likely float64) []contracts.TechnicalTask {
 	est := contracts.Estimate{Optimistic: likely, Likely: likely, Pessimistic: likely, Basis: "test basis"}
 	agent := contracts.Estimate{Optimistic: 10, Likely: 10, Pessimistic: 10, Basis: "test basis"}

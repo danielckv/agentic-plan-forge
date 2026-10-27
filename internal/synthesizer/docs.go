@@ -700,6 +700,10 @@ func (a ArchitectDoc) ValidateDocTasks(c DesignContext, drift []contracts.DocDri
 	return problemsToError("architect", docTaskProblems(a, c, drift))
 }
 
+// MaxWorkstreams caps the number of workstreams in one plan so all specialists
+// can run inside one parallel wave (MaxParallel <= 4).
+const MaxWorkstreams = 4
+
 func designProblems(a ArchitectDoc, c DesignContext) []string {
 	var p []string
 	if strings.TrimSpace(a.Summary) == "" {
@@ -707,6 +711,9 @@ func designProblems(a ArchitectDoc, c DesignContext) []string {
 	}
 	if len(a.Workstreams) == 0 {
 		p = append(p, "at least one workstream is required")
+	}
+	if len(a.Workstreams) > MaxWorkstreams {
+		p = append(p, fmt.Sprintf("at most %d workstreams are allowed (got %d); group related modules into cohesive workstreams", MaxWorkstreams, len(a.Workstreams)))
 	}
 	ws := map[string]contracts.Workstream{}
 	deps := map[string][]string{}
@@ -944,6 +951,63 @@ func sameStrings(a, b []string) bool {
 	return true
 }
 
+func normSchemaText(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+// alignSchemaField returns archSchema when the specialist claim is blank, copies
+// the contract signature into the schema field, or restates archSchema (for
+// example by prepending the endpoint signature). Genuine alternative schemas
+// that do not contain archSchema are returned unchanged so CompareInterfaces
+// still opens a human decision card.
+func alignSchemaField(claimSchema, archSchema, sig string) string {
+	want := normSchemaText(archSchema)
+	if want == "" {
+		return claimSchema
+	}
+	got := normSchemaText(claimSchema)
+	if got == "" || strings.Contains(got, want) {
+		return archSchema
+	}
+	if sigNorm := normSchemaText(sig); sigNorm != "" && got == sigNorm {
+		return archSchema
+	}
+	return claimSchema
+}
+
+func alignClaim(cl InterfaceClaim, k contracts.InterfaceContract) InterfaceClaim {
+	if cl.VersionHash != ContractHash(k) {
+		return cl
+	}
+	cl.InputSchema = alignSchemaField(cl.InputSchema, k.InputSchema, k.Signature)
+	cl.OutputSchema = alignSchemaField(cl.OutputSchema, k.OutputSchema, k.Signature)
+	return cl
+}
+
+// AlignSpecialistClaims normalizes specialist interface claims that quote the
+// architect's exact contract version_hash and restate or omit the architect's
+// schema text, preventing false-positive interface conflicts while preserving
+// genuine schema alternatives.
+func AlignSpecialistClaims(s *SpecialistDoc, a ArchitectDoc) {
+	if s == nil {
+		return
+	}
+	byID := make(map[string]contracts.InterfaceContract, len(a.Contracts))
+	for _, k := range a.Contracts {
+		byID[k.ID] = k
+	}
+	for i, cl := range s.Implements {
+		if k, ok := byID[cl.ContractID]; ok {
+			s.Implements[i] = alignClaim(cl, k)
+		}
+	}
+	for i, cl := range s.Consumes {
+		if k, ok := byID[cl.ContractID]; ok {
+			s.Consumes[i] = alignClaim(cl, k)
+		}
+	}
+}
+
 // CompareInterfaces compares every contract's producer and consumer claims with
 // the architect's frozen contract by ID, version hash, input and output schema
 // and declared error cases. It is pure and order-independent: issues come back
@@ -999,7 +1063,7 @@ func CompareInterfaces(a ArchitectDoc, specs []SpecialistDoc) []InterfaceIssue {
 				})
 				return
 			}
-			good = append(good, seen{ws, cl})
+			good = append(good, seen{ws, alignClaim(cl, k)})
 		}
 		check(k.OwnerWorkstream, true)
 		consumers := sortedCopy(k.ConsumerWorkstreams)

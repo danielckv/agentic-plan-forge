@@ -231,8 +231,11 @@ type executor struct {
 	lastScan     time.Time
 	pills        StatusView
 	norm         *contracts.NormalizedPRD
+	normBase     *contracts.NormalizedPRD
+	normText     string
 	normKey      string
 	normRev      uint64
+	modelImpact  bool
 	approvalID   string
 	createdAt    time.Time
 	failure      *approvalFailure
@@ -392,8 +395,14 @@ func (e *executor) Status() StatusView {
 
 // --- interpretation ---------------------------------------------------------------------------------
 
-// Reinterpret re-runs normalization now (the Page 1 "Re-interpret" button).
-func (e *executor) Reinterpret() { e.trigger(true) }
+// Reinterpret re-runs normalization now and triggers the model-backed impact
+// map (the Page 1 "Re-interpret" button).
+func (e *executor) Reinterpret() {
+	e.mu.Lock()
+	e.modelImpact = true
+	e.mu.Unlock()
+	e.trigger(true)
+}
 
 // DocChanged schedules re-interpretation after ingestion or an ambiguity
 // resolution, debounced.
@@ -480,8 +489,10 @@ func resolutionKey(text string, rs []contracts.AmbiguityResolution) string {
 }
 
 // interpret runs ingestion.Normalize over the current document and publishes the
-// result to the window. A cached result for the same text and resolutions is
-// returned without another model call.
+// result to the window. The raw normalization for a given document text is
+// cached, so owner ambiguity resolutions apply in memory without another model
+// call. Background triggers publish the deterministic lexical impact map; an
+// explicit Reinterpret triggers the model-backed impact pass.
 func (e *executor) interpret(ctx context.Context) (contracts.NormalizedPRD, error) {
 	text, _, err := e.cfg.Auth.Doc(ctx)
 	if err != nil {
@@ -490,23 +501,49 @@ func (e *executor) interpret(ctx context.Context) (contracts.NormalizedPRD, erro
 	rs := e.resolutionList()
 	key := resolutionKey(text, rs)
 	e.mu.Lock()
+	runModelImpact := e.modelImpact
+	e.modelImpact = false
 	if e.norm != nil && e.normKey == key {
 		n := *e.norm
 		e.mu.Unlock()
+		if runModelImpact {
+			go e.refreshGrounding(ctx, n)
+		}
 		return n, nil
 	}
+	var base *contracts.NormalizedPRD
+	if e.normBase != nil && e.normText == text {
+		cp := *e.normBase
+		base = &cp
+	}
 	e.mu.Unlock()
-	norm, err := ingestion.Normalize(ctx, e.cfg.Gen, text, rs)
+
+	if base == nil {
+		raw, err := ingestion.Normalize(ctx, e.cfg.Gen, text, nil)
+		if err != nil {
+			return contracts.NormalizedPRD{}, err
+		}
+		base = &raw
+	}
+	norm, err := ingestion.ApplyResolutions(*base, rs)
 	if err != nil {
 		return contracts.NormalizedPRD{}, err
 	}
 	e.mu.Lock()
+	if e.normBase == nil || e.normText != text {
+		cp := *base
+		e.normBase, e.normText = &cp, text
+	}
 	e.normRev++
 	norm.Revision = e.normRev
 	e.norm, e.normKey = &norm, key
 	e.mu.Unlock()
 	e.publishNormalized(norm)
-	go e.refreshGrounding(ctx, norm)
+	if runModelImpact {
+		go e.refreshGrounding(ctx, norm)
+	} else {
+		go e.refreshLexicalGrounding(ctx, norm)
+	}
 	return norm, nil
 }
 
@@ -579,7 +616,7 @@ func (e *executor) handle(env relay.WSEnvelope) {
 				AmbiguityID: p.AmbiguityID, Choice: p.Choice, Note: p.Note, ResolvedBy: env.SenderID,
 			}
 			e.mu.Unlock()
-			e.DocChanged()
+			e.trigger(true)
 		}
 	case relay.EventApprovalPrepared:
 		var p relay.ApprovalPreparedPayload

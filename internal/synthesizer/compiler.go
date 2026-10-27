@@ -132,6 +132,7 @@ func DecodeInput(in contracts.SynthesisInput) (Docs, error) {
 		if err != nil {
 			return d, err
 		}
+		AlignSpecialistClaims(&s, d.Architect)
 		d.Specialists = append(d.Specialists, s)
 	}
 	sort.SliceStable(d.Specialists, func(i, j int) bool { return d.Specialists[i].WorkstreamID < d.Specialists[j].WorkstreamID })

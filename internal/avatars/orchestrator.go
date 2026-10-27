@@ -162,6 +162,9 @@ func (o *orchestrator) adopt(cp *runState) bool {
 		if err != nil {
 			return false
 		}
+		synthesizer.AlignSpecialistClaims(&d, arch)
+		rec.Raw = mustJSON(d)
+		cp.Specs[ws] = rec
 		specs[ws] = d
 	}
 	o.st, o.pm, o.arch, o.specs = cp, pm, arch, specs
@@ -556,10 +559,7 @@ func (o *orchestrator) runSpecialists(ctx context.Context, c int) error {
 	sem := o.sem
 	errs := make([]error, len(run))
 	var failed atomic.Bool
-	var remaining atomic.Int32
-	remaining.Store(int32(len(run)))
 	var wg sync.WaitGroup
-	var earlyErr error
 
 launch:
 	for i, ws := range run {
@@ -576,43 +576,16 @@ launch:
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			defer remaining.Add(-1)
 			if err := o.runSpecialist(ctx, c, ws, nil); err != nil {
 				errs[i] = err
 				failed.Store(true)
 			}
 		}()
 	}
-
-	// The critic pass of this stage counts against the same limit. It reviews
-	// the frozen architect draft and whichever specialist drafts are complete
-	// when it gets its slot, and it is skipped when nothing is left to wait for:
-	// the mandatory barrier follows either way. Its findings are advisory.
-	if ctx.Err() == nil && !failed.Load() {
-		select {
-		case sem <- struct{}{}:
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				defer func() { <-sem }()
-				if remaining.Load() == 0 || failed.Load() {
-					return
-				}
-				earlyErr = o.earlyCritic(ctx, c)
-			}()
-		case <-ctx.Done():
-		}
-	}
 	wg.Wait()
 
 	if err := ctx.Err(); err != nil {
 		return err
-	}
-	if earlyErr != nil {
-		var stage *StageError
-		if !errors.As(earlyErr, &stage) {
-			return earlyErr
-		}
 	}
 	for _, err := range errs {
 		var emitErr *emitError
@@ -763,46 +736,6 @@ func (o *orchestrator) criticSpec(c int, barrier bool) stageSpec {
 		system: CriticSystemPrompt(), schema: synthesizer.SchemaCritic, cycle: c, status: statusCritiquing, summary: summary,
 		step: step,
 	}
-}
-
-// earlyCritic reviews the frozen architect draft and the specialist drafts
-// complete right now. It never certifies anything: the barrier re-reviews the
-// complete current set, and these findings only reach it as hints.
-func (o *orchestrator) earlyCritic(ctx context.Context, c int) error {
-	o.mu.Lock()
-	var done []synthesizer.SpecialistDoc
-	var pending []string
-	for _, id := range synthesizer.SpecialistWorkstreams(o.arch) {
-		if rec, ok := o.st.Specs[id]; ok && rec.present() && !rec.Stale {
-			if d, ok := o.specs[id]; ok {
-				done = append(done, d)
-				continue
-			}
-		}
-		pending = append(pending, id)
-	}
-	known := o.knownTargetsLocked()
-	p := &criticPayload{
-		Cycle: c, Barrier: false, Architect: o.arch, Specialists: done, NotYetDrafted: pending,
-		Stories: o.pm.Stories, Graph: o.graphForPrompt(), Context: o.contextForPrompt(),
-		EvidenceNotes: o.evidenceNotes(), KnownTargets: sortedKeys(known),
-		Prior: append([]contracts.Critique{}, o.st.Critiques...), Decisions: append([]contracts.Decision{}, o.st.Decisions...),
-	}
-	o.mu.Unlock()
-
-	sp := o.criticSpec(c, false)
-	payload, err := fitPayload(sp.avatar, p)
-	if err != nil {
-		return o.failStage(ctx, sp, err)
-	}
-	doc, _, err := runStage(o, ctx, sp, payload, parseCritic(known))
-	if err != nil {
-		return err
-	}
-	o.mu.Lock()
-	o.early = doc.Critiques
-	o.mu.Unlock()
-	return nil
 }
 
 func detID(parts ...string) string {

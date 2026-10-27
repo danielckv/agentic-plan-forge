@@ -254,6 +254,40 @@ func TestImpactRoute(t *testing.T) {
 	}
 }
 
+func TestBackgroundInterpretPublishesLexicalImpactWhileReinterpretRunsModel(t *testing.T) {
+	var modelImpactCalls atomic.Int32
+	rm := newRoom("session", nil, func([]byte) error { return nil }, quietLogger(), "Export invoices.")
+	defer rm.close()
+	exec := mappedExecutor(t, func(context.Context, impact.Input) (contracts.ImpactMap, error) {
+		modelImpactCalls.Add(1)
+		return readyMap("explicit reinterpret ran the model"), nil
+	})
+	exec.cfg.Auth = soloAuthority{rm}
+	exec.normKey = resolutionKey("Export invoices.", []contracts.AmbiguityResolution{})
+
+	exec.refreshLexicalGrounding(context.Background(), *exec.norm)
+	if got := exec.ImpactMap().State; got != contracts.ImpactLexical {
+		t.Fatalf("lexical grounding state = %q, want %q", got, contracts.ImpactLexical)
+	}
+	if got := modelImpactCalls.Load(); got != 0 {
+		t.Fatalf("model impact calls during lexical grounding = %d, want 0", got)
+	}
+
+	exec.Reinterpret()
+	select {
+	case <-exec.normTrigger:
+	default:
+		t.Fatal("Reinterpret did not trigger normalization")
+	}
+	if _, err := exec.interpret(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return exec.ImpactMap().State == contracts.ImpactReady })
+	if got := modelImpactCalls.Load(); got != 1 {
+		t.Errorf("model impact calls after Reinterpret = %d, want 1", got)
+	}
+}
+
 func waitFor(t *testing.T, ok func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

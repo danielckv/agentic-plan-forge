@@ -35,12 +35,53 @@ const (
 const rescanInterval = 10 * time.Second
 
 // refreshGrounding runs the two passes that ground one interpretation, in
-// order: the project context, which the map reads, and then the map itself.
-// The repository is re-read first when the last scan has gone stale.
+// order: the project context, which the map reads, and then the model-backed
+// map itself. The repository is re-read first when the last scan has gone stale.
 func (e *executor) refreshGrounding(ctx context.Context, norm contracts.NormalizedPRD) {
 	e.rescan(ctx)
 	e.refreshContext(ctx, normalizedText(norm))
 	e.refreshImpact(ctx, norm)
+}
+
+// refreshLexicalGrounding updates the repository scan, project context and
+// deterministic keyword impact map without calling the impact model. Background
+// edits and ambiguity resolutions run this path; explicit Re-interpret runs
+// refreshGrounding.
+func (e *executor) refreshLexicalGrounding(ctx context.Context, norm contracts.NormalizedPRD) {
+	e.rescan(ctx)
+	e.refreshContext(ctx, normalizedText(norm))
+	e.refreshLexicalImpact(ctx, norm)
+}
+
+// refreshLexicalImpact publishes the deterministic keyword map for norm without
+// invoking the impact model.
+func (e *executor) refreshLexicalImpact(ctx context.Context, norm contracts.NormalizedPRD) {
+	e.mu.Lock()
+	e.impactSeq++
+	seq := e.impactSeq
+	if e.impactCancel != nil {
+		e.impactCancel()
+		e.impactCancel = nil
+	}
+	e.mu.Unlock()
+
+	select {
+	case <-e.scanDone:
+	case <-ctx.Done():
+		return
+	}
+
+	e.mu.Lock()
+	in := impact.Input{
+		Repo: e.cfg.Repo, PRD: norm, Graph: e.graph, Gen: e.cfg.Gen,
+		Gather: e.cfg.Gather, ReadCache: true, WriteCache: true,
+	}
+	if e.projectCtx != nil {
+		in.Context = *e.projectCtx
+	}
+	e.mu.Unlock()
+
+	e.publishImpact(seq, impact.Lexical(in))
 }
 
 // rescan re-reads the repository when the last scan is older than

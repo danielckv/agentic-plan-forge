@@ -26,7 +26,8 @@ func overlaps(aStart, aEnd, bStart, bEnd int) bool {
 // over 15 calls, 13 of them documentation batches, and every one of those 13
 // blocked the specialists from starting.
 func TestDiagramsAndDocBatchesRunBesideTheSpecialists(t *testing.T) {
-	h := newHarness(t, bigFixture(3)) // five workstreams, so specialists queue
+	h := newHarness(t, bigFixture(2)) // four workstreams on MaxParallel=3, so specialists queue
+	h.in.MaxParallel = 3
 	h.stub.delay = 15 * time.Millisecond
 
 	if _, err := h.run(context.Background(), nil); err != nil {
@@ -81,7 +82,7 @@ func TestDiagramsAndDocBatchesRunBesideTheSpecialists(t *testing.T) {
 // would otherwise cause.
 func TestTheCycleNeverExceedsMaxParallelAcrossBothStages(t *testing.T) {
 	for _, maxParallel := range []int{1, 2, 3} {
-		h := newHarness(t, bigFixture(4))
+		h := newHarness(t, bigFixture(2))
 		h.in.MaxParallel = maxParallel
 		h.stub.delay = 12 * time.Millisecond
 
