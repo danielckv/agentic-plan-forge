@@ -131,6 +131,17 @@ func classify(rel string) string {
 		}
 		return kindDocument
 	}
+	// A file name that names its kind wins over the directory it sits in:
+	// docs/plans/epic-launch.md is an epic, not a plan, and a reader filtering
+	// by kind would otherwise never find it.
+	switch {
+	case strings.HasPrefix(base, "epic"):
+		return kindEpic
+	case strings.HasPrefix(base, "follow"):
+		return kindFollowUp
+	case strings.HasPrefix(base, "task"):
+		return kindTask
+	}
 	dir := strings.ToLower(parts[len(parts)-2])
 	switch dir {
 	case "plans":
@@ -142,15 +153,8 @@ func classify(rel string) string {
 	case "lanes", "sessions":
 		return kindDocument
 	}
-	switch {
-	case strings.HasPrefix(base, "plan"):
+	if strings.HasPrefix(base, "plan") {
 		return kindPlan
-	case strings.HasPrefix(base, "follow"):
-		return kindFollowUp
-	case strings.HasPrefix(base, "epic"):
-		return kindEpic
-	case strings.HasPrefix(base, "task"):
-		return kindTask
 	}
 	return kindDocument
 }

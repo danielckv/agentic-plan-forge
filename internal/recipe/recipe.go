@@ -417,8 +417,8 @@ func Derive(f Facts) (Recipe, error) {
 		return Recipe{}, err
 	}
 
-	r.RuntimePort = portFor(f)
-	r.ReadinessProbe = []string{"tcp", strconv.Itoa(r.RuntimePort)}
+	// A port and a readiness probe belong to a run stage. Recording them for a
+	// project that cannot be run would claim a preview that will never exist.
 	r.Template = "linux-2vcpu-4gib"
 
 	// Run: package start script, then compose service, then Dockerfile.
@@ -439,6 +439,9 @@ func Derive(f Facts) (Recipe, error) {
 		return r, ErrNoRunCommand
 	}
 
+	// A run command exists, so the port and probe it serves from are real.
+	r.RuntimePort = portFor(f)
+	r.ReadinessProbe = []string{"tcp", strconv.Itoa(r.RuntimePort)}
 	return r, nil
 }
 

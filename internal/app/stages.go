@@ -106,24 +106,37 @@ func (b *stageBook) touch(id string, at time.Time) {
 
 // wait records that the stage is blocked on a human answer.
 func (b *stageBook) wait(id, detail string) {
-	rec, ok := b.byID[id]
-	if !ok {
-		return
-	}
+	// A question can arrive before that stage's first heartbeat: the run asks
+	// for an answer as soon as it cannot proceed, which is what makes the wait
+	// visible. Creating the record here is what stops the window from showing
+	// nothing while the run is blocked on a person.
+	b.ensure(id)
+	rec := b.byID[id]
 	rec.view.State = StageWaitingForAnswer
 	rec.view.Detail = detail
 	rec.view.Recovery = "answer the question"
 }
 
+// ensure returns the record for id, creating an unstarted one when the stage
+// has not been seen yet.
+func (b *stageBook) ensure(id string) *stageRecord {
+	if b.byID == nil {
+		b.byID = map[string]*stageRecord{}
+	}
+	if rec, ok := b.byID[id]; ok {
+		return rec
+	}
+	rec := &stageRecord{}
+	rec.view.ID = id
+	rec.view.State = StageQueued
+	b.byID[id] = rec
+	b.order = append(b.order, id)
+	return rec
+}
+
 // finish records a terminal outcome for one stage.
 func (b *stageBook) finish(id, state, detail, recovery string, at time.Time) {
-	rec, ok := b.byID[id]
-	if !ok {
-		rec = &stageRecord{}
-		b.byID[id] = rec
-		b.order = append(b.order, id)
-		rec.view.ID = id
-	}
+	rec := b.ensure(id)
 	rec.view.State = state
 	rec.view.Detail = detail
 	rec.view.Recovery = recovery

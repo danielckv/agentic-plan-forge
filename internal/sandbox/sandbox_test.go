@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -259,6 +260,36 @@ func TestCreateRejectsNonHTTPSBaseURL(t *testing.T) {
 			t.Fatalf("BaseURL %q: error %q does not name the provider config", baseURL, err)
 		}
 	}
+}
+
+// Plain HTTP is tolerated only on the local machine. A remote host carries the
+// API key over the network, so it stays HTTPS only even when the scheme looks
+// deliberate.
+func TestPlainHTTPIsAllowedOnlyOnLoopback(t *testing.T) {
+	for _, baseURL := range []string{
+		"http://127.0.0.1:9999", "http://localhost:9999", "http://[::1]:9999",
+	} {
+		if !isLoopbackHost(mustHost(t, baseURL)) {
+			t.Errorf("%q was not recognised as loopback", baseURL)
+		}
+	}
+	for _, baseURL := range []string{
+		"http://api.e2b.dev", "http://192.168.0.10:8080", "http://10.0.0.1", "http://provider.e2b.dev",
+	} {
+		p := HTTPProvider{BaseURL: baseURL, APIKey: "k"}
+		if _, err := p.Create(context.Background(), validRequest()); err == nil {
+			t.Errorf("%q: create succeeded over plain HTTP", baseURL)
+		}
+	}
+}
+
+func mustHost(t *testing.T, raw string) string {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse %q: %v", raw, err)
+	}
+	return u.Hostname()
 }
 
 // A transport failure whose outcome cannot be seen is ErrAmbiguous, and the

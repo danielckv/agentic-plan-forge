@@ -148,6 +148,16 @@ type HTTPProvider struct {
 	HTTP    *http.Client
 }
 
+// isLoopbackHost reports whether a host is the local machine. Only these may use
+// plain HTTP.
+func isLoopbackHost(host string) bool {
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1", "[::1]":
+		return true
+	}
+	return false
+}
+
 // Client returns the transport used for provider calls, falling back to the
 // default client.
 func (p HTTPProvider) Client() *http.Client {
@@ -165,11 +175,15 @@ func (p HTTPProvider) validate() error {
 	if err != nil {
 		return fmt.Errorf("sandbox provider: parse BaseURL: %w", err)
 	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("sandbox provider: BaseURL must be https, got %q", u.Scheme)
-	}
 	if u.Host == "" {
 		return errors.New("sandbox provider: BaseURL has no host")
+	}
+	// Provider traffic carries the API key, so a remote base URL is HTTPS only.
+	// A loopback address is exempt because there is no network to eavesdrop on:
+	// it is how the contract tests and a local provider stand-in are reached,
+	// and refusing it would leave the provider untestable.
+	if u.Scheme != "https" && !(u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
+		return fmt.Errorf("sandbox provider: BaseURL must be https, got %q", u.Scheme)
 	}
 	if p.APIKey == "" {
 		return errors.New("sandbox provider: APIKey is required")

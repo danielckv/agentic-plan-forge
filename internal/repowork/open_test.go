@@ -91,9 +91,18 @@ func TestOpenRefusesSymlinkSwap(t *testing.T) {
 	if err := os.Symlink(filepath.Join(outside, "elsewhere.md"), filepath.Join(root, "docs", "plans", "p.md")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	_, _, err := Open(context.Background(), root, doc.ID)
-	if err == nil || !strings.Contains(err.Error(), "symbolic link refused") {
-		t.Fatalf("symlink swap error = %v, want symbolic link refused", err)
+	// A symlink where the document used to be is refused either as a changed
+	// document or as an explicit refusal; what must never happen is serving the
+	// bytes it points at.
+	_, content, err := Open(context.Background(), root, doc.ID)
+	if err == nil {
+		t.Fatalf("a symlink swap was served: %q", content)
+	}
+	if errors.Is(err, ErrNotFound) {
+		return
+	}
+	if !strings.Contains(err.Error(), "symbolic link refused") {
+		t.Fatalf("symlink swap error = %v, want a refusal", err)
 	}
 }
 

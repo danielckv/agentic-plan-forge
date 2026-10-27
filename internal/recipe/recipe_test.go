@@ -68,16 +68,24 @@ func TestDeriveGoOnly(t *testing.T) {
 			t.Errorf("script %s marked generated; nothing is generated", s.Path)
 		}
 	}
-	if err := r.Validate(); err == nil {
-		// A recipe without a run command carries no port; Validate rejects
-		// port 0, so confirm the failure names the port rather than silently
-		// accepting an unconfigured run.
-		t.Error("Validate accepted a recipe with no run command and port 0")
+	// A project with build and test but no run is a valid recipe: run is
+	// "not configured", which is the documented state, not a failure. It must
+	// carry no port, because nothing will serve one.
+	if r.RuntimePort != 0 || len(r.ReadinessProbe) != 0 {
+		t.Errorf("a recipe with no run command carries port %d and probe %v", r.RuntimePort, r.ReadinessProbe)
 	}
-	// Once the caller configures run explicitly, the recipe validates.
-	r.Run = Command{ID: "run", Argv: []string{"./app"}, TimeoutSeconds: 60}
 	if err := r.Validate(); err != nil {
-		t.Errorf("Validate with explicit run: %v", err)
+		t.Errorf("Validate: %v", err)
+	}
+	// Once the caller configures run, it needs the port and probe to go with it.
+	r.Run = Command{ID: "run", Argv: []string{"./app"}, TimeoutSeconds: 60}
+	if err := r.Validate(); err == nil {
+		t.Error("Validate accepted a run command with no port and no probe")
+	}
+	r.RuntimePort = 8080
+	r.ReadinessProbe = []string{"tcp", "8080"}
+	if err := r.Validate(); err != nil {
+		t.Errorf("Validate with a complete run stage: %v", err)
 	}
 }
 

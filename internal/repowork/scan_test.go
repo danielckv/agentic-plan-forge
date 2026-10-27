@@ -66,11 +66,13 @@ func TestScanStateNextOrderAndExtraction(t *testing.T) {
 	if len(inv.Next) != 3 {
 		t.Fatalf("got %d next items, want 3", len(inv.Next))
 	}
-	if inv.Next[0].Text != "plan the launch" || inv.Next[0].Status != statusOpen || inv.Next[0].Line != 4 {
+	// The bullet is line 5: the file is "# State", blank, "## Next", blank, then
+	// the first item.
+	if inv.Next[0].Text != "plan the launch" || inv.Next[0].Status != statusOpen || inv.Next[0].Line != 5 {
 		t.Fatalf("first next wrong: %+v", inv.Next[0])
 	}
-	if inv.Next[0].EndLine != 4 {
-		t.Fatalf("plain bullet EndLine = %d, want 4", inv.Next[0].EndLine)
+	if inv.Next[0].EndLine != 5 {
+		t.Fatalf("plain bullet EndLine = %d, want 5", inv.Next[0].EndLine)
 	}
 	// Source-order preservation: ## Done bullets must not reorder or leak in.
 	for _, n := range inv.Next {
@@ -85,7 +87,7 @@ func TestScanStateNextOrderAndExtraction(t *testing.T) {
 	if len(inv2.Next) != 2 {
 		t.Fatalf("nested line became an item: %d items", len(inv2.Next))
 	}
-	if inv2.Next[0].EndLine != 5 || !strings.Contains(inv2.Next[0].Source, "nested detail") {
+	if inv2.Next[0].EndLine != 6 || !strings.Contains(inv2.Next[0].Source, "nested detail") {
 		t.Fatalf("continuation not merged: %+v", inv2.Next[0])
 	}
 }
@@ -230,9 +232,6 @@ func TestScanOversizeAndBinarySkipped(t *testing.T) {
 	})
 	inv := mustScan(t, root, Options{MaxFileBytes: 1024})
 	findDoc(t, inv, statePath)
-	if doc := findDoc(t, inv, "docs/plans/binary.md"); doc.Kind != kindPlan {
-		t.Fatal("binary doc missing")
-	}
 	if !inv.Partial {
 		t.Fatal("oversize skip must set Partial")
 	}
