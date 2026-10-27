@@ -119,10 +119,14 @@ not scan or block what you write.
 
 #### The Work tab
 
-**Work** reads the repository's own planning files — `.agents/STATE.md`, `docs/plans`, `docs/specs`, `docs/adrs`,
-`specs`, and root files named like a plan, a follow-up, an epic, a task or a state file — and shows what is next, which
-epics and tasks exist, and which decision records apply. The next list is exactly the order the active state file
-gives; everything else is shown by kind with the file and line it came from.
+**Work** reads the repository's own planning files and shows what is next, which epics and tasks exist, and which
+decision records apply. It reads `.agents/STATE.md`, everything under `docs/`, the top-level `plans/`, `specs/`,
+`adrs/` and `decisions/` directories, and root files named like a plan, a follow-up, an epic, a task or a state file.
+
+A plan nested a folder deeper is still found, so `docs/plans/q4/export.md` is a plan. Decision records are recognised
+under `docs/adrs`, `docs/adr` and `docs/decisions`. Media directories such as `docs/images` are not walked. The next
+list is exactly the order the active state file gives; everything else is shown by kind with the file and line it came
+from.
 
 Browsing is read-only. It starts no model call and changes no file. **Use in brief** inserts the source path and line
 into your requirements, so the plan can say where a requirement came from. A project that keeps its plans elsewhere

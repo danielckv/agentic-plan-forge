@@ -117,7 +117,7 @@ func TestScanRootFollowUpsAndKinds(t *testing.T) {
 		"docs/plans/p.md":     "# Plan\n",
 		"docs/specs/s.md":     "# Spec\n",
 		"docs/adrs/0001-x.md": "# ADR\n",
-		"docs/notes/n.md":     "# not indexed dir\n",
+		"docs/notes/n.md":     "# an indexed document, not work\n",
 		"web/src/README.md":   "# not indexed\n",
 		"PLAN.md":             "# root plan\n",
 		"TASKS.md":            "# tasks\n",
@@ -143,7 +143,10 @@ func TestScanRootFollowUpsAndKinds(t *testing.T) {
 			t.Fatalf("%s kind = %q, want %q", path, d.Kind, kind)
 		}
 	}
-	for _, absent := range []string{"docs/notes/n.md", "web/src/README.md", "README.md"} {
+	if d := findDoc(t, inv, "docs/notes/n.md"); d.Kind != kindDocument {
+		t.Fatalf("docs/notes/n.md kind = %q, want a plain document", d.Kind)
+	}
+	for _, absent := range []string{"web/src/README.md", "README.md"} {
 		for _, d := range inv.Documents {
 			if d.Path == absent {
 				t.Fatalf("%s must not be indexed", absent)

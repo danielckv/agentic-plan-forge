@@ -14,10 +14,16 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 )
 
-// The files the recall index covers, read directly when no index answers.
+// The roots mirror internal/repowork's discovery roots, so the brief is
+// grounded in the same documents the Work tab shows. docs is walked whole
+// because a project's decision records may live in docs/adrs, docs/adr or
+// docs/decisions, and a plan may sit a folder deeper.
 var (
 	sourceFiles = []string{".agents/STATE.md"}
-	sourceDirs  = []string{".agents/lanes", ".agents/sessions", "docs/specs", "docs/plans", "docs/adrs", "specs"}
+	sourceDirs  = []string{
+		".agents/lanes", ".agents/sessions",
+		"docs", "adrs", "decisions", "plans", "specs", "specifications",
+	}
 )
 
 const (
@@ -94,7 +100,8 @@ func sourcePaths(repo string) []string {
 					return nil
 				}
 				rel, _ := filepath.Rel(root, p)
-				if strings.HasPrefix(name, ".") || strings.Count(rel, string(filepath.Separator)) >= maxDepth {
+				if strings.HasPrefix(name, ".") || assetDir(name) ||
+					strings.Count(rel, string(filepath.Separator)) >= maxDepth {
 					return filepath.SkipDir
 				}
 				return nil
@@ -115,6 +122,17 @@ func sourcePaths(repo string) []string {
 		})
 	}
 	return out
+}
+
+// assetDir reports a directory that holds media rather than prose. Skipping it
+// keeps the bounded file budget for documents that can actually ground a brief:
+// docs/images can hold a hundred screenshots and no sentence.
+func assetDir(name string) bool {
+	switch strings.ToLower(name) {
+	case "images", "img", "assets", "static", "media":
+		return true
+	}
+	return false
 }
 
 func textSource(name string) bool {

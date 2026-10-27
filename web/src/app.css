@@ -4794,8 +4794,8 @@ figure > .pf-diagram-source { border-top: none; }
 }
 
 /* Documents tab: the files a documents-only export would write, and the one
-   button that writes them. The list is a preview, so it is styled as a list of
-   paths rather than as something that already happened. */
+ * button that writes them. The list is a preview, so it is styled as a list of
+ * paths rather than as something that already happened. */
 .pf-docs {
   display: flex;
   flex-direction: column;

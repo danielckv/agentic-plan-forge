@@ -142,21 +142,37 @@ func classify(rel string) string {
 	case strings.HasPrefix(base, "task"):
 		return kindTask
 	}
-	dir := strings.ToLower(parts[len(parts)-2])
-	switch dir {
-	case "plans":
-		return kindPlan
-	case "specs":
-		return kindSpec
-	case "adrs":
-		return kindADR
-	case "lanes", "sessions":
-		return kindDocument
+	// The nearest ancestor directory that names a kind decides it, so
+	// docs/plans/q4/export.md is a plan and docs/adr/0007-x.md is a decision
+	// record even when it sits a few levels down.
+	if kind := kindOfDir(parts[:len(parts)-1]); kind != "" {
+		return kind
 	}
 	if strings.HasPrefix(base, "plan") {
 		return kindPlan
 	}
 	return kindDocument
+}
+
+// kindOfDir maps a directory path to the document kind it names, checking the
+// nearest directory first. An empty result means the directory holds documents
+// of no particular kind.
+func kindOfDir(dirs []string) string {
+	for i := len(dirs) - 1; i >= 0; i-- {
+		switch strings.ToLower(dirs[i]) {
+		case "plans":
+			return kindPlan
+		case "specs", "specifications":
+			return kindSpec
+		case "adrs", "adr", "decisions":
+			return kindADR
+		case "lanes", "sessions":
+			// Session memory is not a planning document, and it stops the
+			// search: docs/sessions/plans would otherwise be a plan.
+			return kindDocument
+		}
+	}
+	return ""
 }
 
 // parseHeadings extracts ATX headings (1-6 leading #) with 1-based lines.

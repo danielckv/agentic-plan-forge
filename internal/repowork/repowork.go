@@ -124,9 +124,16 @@ func (o Options) withDefaults() Options {
 
 // fixedDirs are the discovery roots walked below the repository root, in
 // order. Missing roots are simply absent from the inventory.
+//
+// docs is walked whole rather than by the three directories a plan happens to
+// live in today: a project keeps its decisions in docs/adr, docs/decisions or
+// docs/architecture, and a plan under docs/plans/q4/ is still a plan. Walking
+// the parent and classifying by the nearest directory that names a kind covers
+// all of those without a list that goes stale. Non-markdown files (images,
+// PDFs) are filtered by extension during the walk.
 var fixedDirs = []string{
 	".agents/lanes", ".agents/sessions",
-	"docs/plans", "docs/specs", "docs/adrs", "specs",
+	"docs", "adrs", "decisions", "plans", "specs", "specifications",
 }
 
 // rootPrefixes match root-level files by lowercased basename prefix.
@@ -329,6 +336,11 @@ func (s *scanner) walkDir(rel string, depth int) {
 		case e.Type().IsDir():
 			if depth+1 > maxDepth {
 				s.skip(child, "depth limit reached")
+				continue
+			}
+			if assetDir(name) {
+				// Media, not prose. Walking it would spend the document
+				// budget on files that are rejected one by one anyway.
 				continue
 			}
 			s.walkDir(child, depth+1)
@@ -571,4 +583,13 @@ func validID(id string) bool {
 		}
 	}
 	return true
+}
+
+// assetDir reports a directory that holds media rather than planning documents.
+func assetDir(name string) bool {
+	switch strings.ToLower(name) {
+	case "images", "img", "assets", "static", "media":
+		return true
+	}
+	return false
 }
