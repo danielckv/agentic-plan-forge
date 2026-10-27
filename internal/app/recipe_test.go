@@ -48,7 +48,7 @@ func TestRepositoryRecipeUsesTheProjectsOwnCommands(t *testing.T) {
 
 // A project with no build assets reports that, rather than a passing check.
 func TestRecipeNeverInventsACommand(t *testing.T) {
-	_, err := RepositoryRecipe(context.Background(), t.TempDir(), "r", nil)
+	_, _, err := RepositoryRecipe(context.Background(), t.TempDir(), "r", nil)
 	if err == nil {
 		t.Fatal("a project with no build assets produced a recipe")
 	}
