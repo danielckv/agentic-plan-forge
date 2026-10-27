@@ -291,6 +291,20 @@ window asks which; after that it is a toggle on the page and a `deploy_target` k
 **Discard worktree** removes the worktree, its branch and the preview container. **Finish** ends the session and
 leaves everything in place.
 
+#### The Documents tab
+
+An approved plan can be written into your repository as files: a plan with its ordered tasks, a specification with
+acceptance criteria, and one decision record for each decision the deliberation actually made. The **Documents** tab on
+the Build page lists every path it would write before anything is written.
+
+The button is the only thing that writes. A file that already exists stops the whole export before the first write, so a
+generated document never replaces one you wrote and a refused export leaves your repository untouched. Decision records
+are numbered after the highest number your `docs/adrs` already uses, so history is never renumbered. Pressing the button
+again after an interrupted export finishes the job instead of making a second copy.
+
+This needs no sandbox, no provider key and no network: it is the path for a team that wants the planning deliverables
+without renting a machine. See [ADR 0018](adrs/0018-documents-are-written-and-the-sandbox-gets-the-source.md).
+
 ### 5. Prepared VM: build, test and preview elsewhere
 
 Approving a plan does not require a machine to stay on. The **Build** page carries a prepared-VM panel that builds and
@@ -304,6 +318,13 @@ it found in `execution_recipe.json` beside the approved plan. It reuses an exist
 it says **not configured** when a step has no command instead of reporting a pass. Review those commands before you
 launch: the sandbox runs exactly them.
 
+**The project travels with the launch.** Before the first command runs, Plan Forge packs your checkout into an archive
+and uploads it to the sandbox: the source, the recorded scripts and the recipe. It leaves behind `.git`, dependency
+directories, build output, host state and credential files, because a build needs none of them and a credential on a
+rented VM is a leak you cannot see. Symlinks are never packed, since a link can point outside your checkout. The panel
+says how many files went and how many were left out, so an exclusion is never silent. A project that needs a directory
+the packager drops can name it as an include.
+
 A launch asks you to confirm the revision, the commands, the resources, the expiry and the cost estimate. The default
 lifetime is one hour, and the provider enforces it. **Stop** deletes the sandbox; if the deletion cannot be confirmed,
 the page says so and the provider's expiry is the backstop. **Open preview** appears only once the sandbox has passed
@@ -311,8 +332,9 @@ its recorded readiness check, so a page that merely opened a port does not count
 
 Changing the revision, the scripts, a lockfile or the instructions the recipe cites invalidates earlier results: a
 green preview can never outlive the code it described. Settings and the full reasoning:
-[configuration.md](configuration.md#what-runs-the-build-and-where) and
-[ADR 0017](adrs/0017-prepared-vm-from-recorded-scripts.md).
+[configuration.md](configuration.md#what-runs-the-build-and-where),
+[ADR 0017](adrs/0017-prepared-vm-from-recorded-scripts.md) and
+[ADR 0018](adrs/0018-documents-are-written-and-the-sandbox-gets-the-source.md).
 
 **Accepting an implementation** is a separate decision from approving the plan. Both your own sign-off and a developer
 review on GitHub must cover the same commit, and the review must come from someone with write access who is not the
