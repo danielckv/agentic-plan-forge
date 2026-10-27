@@ -16,7 +16,7 @@ import (
 
 func buildSample(t *testing.T, opts synthesizer.BundleOptions) synthesizer.Bundle {
 	t.Helper()
-	in := synthtest.Sample()
+	in := synthtest.Sample().Input()
 	bundle, err := synthesizer.BuildBundle(in, contracts.ApprovalMeta{ApprovalID: "a-1"}, opts)
 	if err != nil {
 		t.Fatalf("BuildBundle: %v", err)
@@ -79,7 +79,7 @@ func TestBundleWritesNoAdrWithoutADecision(t *testing.T) {
 // A resolved decision becomes one record, numbered from the caller's next free
 // number.
 func TestBundleNumbersDecisionRecords(t *testing.T) {
-	in := synthtest.Sample()
+	in := synthtest.Sample().Input()
 	in.Decisions = []contracts.Decision{{
 		ID: "d-1", Question: "Which export format?",
 		Options:          []contracts.DecisionOption{{ID: "csv", Label: "CSV"}, {ID: "xlsx", Label: "XLSX"}},
@@ -114,7 +114,7 @@ func TestBundleRefusesAnExistingDestination(t *testing.T) {
 	opts := synthesizer.BundleOptions{
 		ExistingFiles: map[string]string{bundle.Entries[0].Path: "abc"},
 	}
-	_, err := synthesizer.BuildBundle(synthtest.Sample(), contracts.ApprovalMeta{ApprovalID: "a-1"}, opts)
+	_, err := synthesizer.BuildBundle(synthtest.Sample().Input(), contracts.ApprovalMeta{ApprovalID: "a-1"}, opts)
 	var collision *synthesizer.BundleCollision
 	if !errors.As(err, &collision) {
 		t.Fatalf("error = %v, want BundleCollision", err)
@@ -126,7 +126,7 @@ func TestBundleRefusesAnExistingDestination(t *testing.T) {
 
 // A decision-record number already used is skipped, never reused.
 func TestBundleNeverReusesAnAdrNumber(t *testing.T) {
-	in := synthtest.Sample()
+	in := synthtest.Sample().Input()
 	in.Decisions = []contracts.Decision{{
 		ID: "d-1", Question: "Which format?", ResolvedOptionID: "csv",
 		Options: []contracts.DecisionOption{{ID: "csv", Label: "CSV"}},
