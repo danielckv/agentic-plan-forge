@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-28
+
+### Fixed
+
+- A project's planning documents were only found in three exact directories. `docs/plans`, `docs/specs` and
+  `docs/adrs` were hard-coded, so a decision record under `docs/adr` or `docs/decisions` was invisible, a plan in
+  `docs/plans/q4/` was invisible, and a top-level `adrs/` or `plans/` was never walked at all. `docs/` is now walked
+  whole and the kind comes from the nearest ancestor directory that names one, so nesting depth and the alternate
+  spellings both work. Grounding uses the same roots, so the brief grounds in what the Work tab shows. Media
+  directories such as `docs/images` are skipped, so a project full of screenshots does not spend its document budget
+  rejecting images one at a time.
+- `sandbox.PackageSource` accepted an include path that escaped the repository. `cleanRel` trimmed `./` and then
+  trimmed slashes, so `a/../../b` became a path inside the repository instead of being refused: a caller asking for
+  something outside got a silent success. Every component is checked now.
+- `sandbox.PackageSource` dropped an explicitly included file when its directory was excluded. `filepath.SkipDir`
+  ended the walk before the subtree was reached, so naming `build/gen.sh` as an include did nothing while `build/`
+  was excluded. An include now keeps the walk descending into the directory that holds it.
+
 ## [0.8.0] - 2026-10-27
 
 ### Added
@@ -282,7 +300,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.0...v0.7.1
