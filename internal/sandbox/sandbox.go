@@ -242,6 +242,13 @@ func (p HTTPProvider) createOnce(ctx context.Context, req CreateRequest, body ma
 	// terminal. A terminal error here lets a retry buy a second VM.
 	resp, err := p.Client().Do(httpReq)
 	if err != nil {
+		// A context the caller cancelled or let expire before the request left
+		// buys nothing: nothing was sent, so nothing was created. Reporting it
+		// as ambiguous would send the caller to reconcile a sandbox that cannot
+		// exist. Every other transport failure may have landed.
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+			return Lease{}, fmt.Errorf("sandbox create: %w", ctxErr)
+		}
 		return Lease{}, fmt.Errorf("%w: %s", ErrAmbiguous, errText(err))
 	}
 	defer drainClose(resp.Body)
@@ -258,7 +265,7 @@ func (p HTTPProvider) createOnce(ctx context.Context, req CreateRequest, body ma
 		return Lease{}, fmt.Errorf("sandbox create: provider returned %s", resp.Status)
 	}
 	var lease Lease
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&lease); err != nil {
+	if err := decodeLimited(resp.Body, &lease); err != nil {
 		// A body that half-arrived is exactly the ambiguous case: the
 		// sandbox may exist while the answer is unreadable.
 		return Lease{}, fmt.Errorf("%w: decode create response: %s", ErrAmbiguous, errText(err))
@@ -270,6 +277,31 @@ func (p HTTPProvider) createOnce(ctx context.Context, req CreateRequest, body ma
 		lease.OperationID = req.OperationID
 	}
 	return lease, nil
+}
+
+// readLimited reads at most limit bytes and fails when the body continues past
+// it. A truncated read is an error, never a silent prefix: a caller must not
+// decode half an answer and treat it as the whole.
+func readLimited(r io.Reader, limit int64) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > limit {
+		return nil, fmt.Errorf("response body exceeds %d bytes", limit)
+	}
+	return raw, nil
+}
+
+// decodeLimited reads one bounded body and decodes it whole. A body that runs
+// past the bound is an error rather than a truncated parse: half an answer
+// decoded as a whole is how a provider response is mistaken for a lease.
+func decodeLimited(r io.Reader, out any) error {
+	raw, err := readLimited(r, maxBodyBytes)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
 }
 
 // InspectOperation looks a previously issued operation ID up, so an
@@ -308,8 +340,8 @@ func (p HTTPProvider) InspectOperation(ctx context.Context, operationID string) 
 		return Lease{}, fmt.Errorf("sandbox inspect operation: provider returned %s", resp.Status)
 	}
 	var lease Lease
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&lease); err != nil {
-		return Lease{}, fmt.Errorf("sandbox inspect operation: decode response: %w", err)
+	if err := decodeLimited(resp.Body, &lease); err != nil {
+		return Lease{}, fmt.Errorf("sandbox inspect operation: %w", err)
 	}
 	if lease.SandboxID == "" {
 		return Lease{}, errors.New("sandbox inspect operation: response carried no sandbox id")
@@ -391,8 +423,8 @@ func (p HTTPProvider) Inspect(ctx context.Context, sandboxID string) (Info, erro
 		return Info{}, fmt.Errorf("sandbox inspect: provider returned %s", resp.Status)
 	}
 	var info Info
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&info); err != nil {
-		return Info{}, fmt.Errorf("sandbox inspect: decode response: %w", err)
+	if err := decodeLimited(resp.Body, &info); err != nil {
+		return Info{}, fmt.Errorf("sandbox inspect: %w", err)
 	}
 	if info.SandboxID == "" {
 		info.SandboxID = sandboxID
