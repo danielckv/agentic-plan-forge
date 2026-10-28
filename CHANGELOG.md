@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-29
+
+### Fixed
+
+- Claude Code served nothing and every avatar fell through to OMP. Claude Code 2.1.312 attaches a classifier verdict
+  to the final message delta, `{"type":"dangerous_tool_use","status":{"type":"available","tool_uses":{}}}`. The
+  verdict is named after the check it performed and its tool-use map is empty: no tool ran. The tool-free gate
+  matched the name, so a clean bill of health read as a confession, `doctor` reported `serves: NO`, and an explicit
+  `main_host: claude` was printed as `IGNORED`. With Antigravity gated closed by construction, one host was left and
+  a three-host machine sent every avatar to it. A safeguard verdict is now read through its own tool-use map rather
+  than through its name; a verdict that does name a tool still discards the generation, reporting the tool's name.
+- A single malformed model reply ended a whole interpretation. Both the normalizer and the impact map document a
+  schema-repair retry, and neither could reach it: the adapter validates the terminal result itself and returned a
+  plain error, so the caller's repair branch only ever saw output the host had already accepted. A run of eleven
+  sections died on the fifth with `invalid character 'A' after object key:value pair`, and the offending bytes were
+  discarded, so the error named a position in text nobody could read back. A schema failure now carries the schema
+  id, the output and the cause; both loops repair and retry once; and a reply wrapped in a code fence or in prose is
+  unwrapped before validation, which costs no model call at all.
+
+### Changed
+
+- Independent work runs together instead of one call at a time. Document sections and impact-map batches were
+  dispatched sequentially while four concurrent calls were already budgeted. Eleven sections at roughly 20s each is
+  about 3m40s for ingestion alone, against a five-minute budget for the whole deliberation. Both now dispatch four at
+  a time and fold their results back in index order, so the merged lists, the `section N of M` ambiguity tags, the
+  source refs and the impact notes read the same whatever order the hosts answer in. An eleven-section document goes
+  from about 3m40s to about 1m; a 500-page PDF that splits into 125 sections goes from roughly 42 minutes to roughly
+  10.
+
 ## [0.8.1] - 2026-10-28
 
 ### Fixed
@@ -300,7 +329,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.1...v0.7.2
