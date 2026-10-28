@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 )
@@ -67,29 +68,61 @@ func Build(ctx context.Context, in Input) (contracts.ImpactMap, error) {
 	return m, nil
 }
 
+// maxBatchParallel bounds how many batch calls are open at once. Batches are
+// independent — each covers its own epics — so they run together rather than
+// one after another, which is what made a wide repository's map the slowest
+// stage. The bound matches config.DefaultMaxParallel.
+const maxBatchParallel = 4
+
+// batchResult is one batch's answer, kept at the batch's own index so the
+// assembled map does not depend on which call finished first.
+type batchResult struct {
+	links map[string][]contracts.ImpactLink
+	notes []string
+	err   error
+}
+
 // runBatches calls the model once per batch and assembles the result. One
 // batch that cannot be answered costs its own epics their model links and
 // nothing more.
+//
+// The calls run concurrently and are folded back in batch order, so the notes
+// and the links read the same whatever order the hosts answer in.
 func runBatches(ctx context.Context, in Input, packs []pack, fallback contracts.ImpactMap) (contracts.ImpactMap, error) {
 	batches := batchPacks(packs, MaxEvidenceChars)
+	results := make([]batchResult, len(batches))
+	sem := make(chan struct{}, maxBatchParallel)
+	var wg sync.WaitGroup
+
+	for i, b := range batches {
+		wg.Add(1)
+		go func(i int, b []pack) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			got, bnotes, err := callWithRetries(ctx, in, b, i+1, len(batches))
+			results[i] = batchResult{links: got, notes: bnotes, err: err}
+		}(i, b)
+	}
+	wg.Wait()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return contracts.ImpactMap{}, ctxErr
+	}
+
 	links := map[string][]contracts.ImpactLink{}
 	var notes []string
 	answered := map[string]bool{}
 
 	for i, b := range batches {
-		got, bnotes, err := callWithRetries(ctx, in, b, i+1, len(batches))
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return contracts.ImpactMap{}, ctxErr
-		}
-		notes = append(notes, bnotes...)
-		if err != nil {
-			notes = append(notes, batchNote(b, err))
+		notes = append(notes, results[i].notes...)
+		if results[i].err != nil {
+			notes = append(notes, batchNote(b, results[i].err))
 			continue
 		}
 		for _, p := range b {
 			answered[p.EpicID] = true
 		}
-		for epicID, ls := range got {
+		for epicID, ls := range results[i].links {
 			links[epicID] = append(links[epicID], ls...)
 		}
 	}

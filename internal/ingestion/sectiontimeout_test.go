@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
@@ -15,7 +16,12 @@ import (
 
 // timeoutGen is the host killing a call that outran contracts.DefaultGenerateTimeout:
 // any section longer than limit fails with context.DeadlineExceeded.
+//
+// Sections are classified concurrently, so mu guards the record. Without it
+// the recorded sizes lose entries and the test reads the loss as the
+// normalizer dropping part of the document.
 type timeoutGen struct {
+	mu    sync.Mutex
 	limit int
 	sizes []int
 	body  string
@@ -27,11 +33,20 @@ func (g *timeoutGen) GenerateStream(_ context.Context, req contracts.GenerateReq
 		return contracts.GenerationResult{}, err
 	}
 	n := utf8.RuneCountInString(p.DocumentMarkdown)
+	g.mu.Lock()
 	g.sizes = append(g.sizes, n)
+	g.mu.Unlock()
 	if n > g.limit {
 		return contracts.GenerationResult{}, context.DeadlineExceeded
 	}
 	return contracts.GenerationResult{Content: json.RawMessage(g.body)}, nil
+}
+
+// recorded returns the sizes seen so far, in call order.
+func (g *timeoutGen) recorded() []int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]int(nil), g.sizes...)
 }
 
 func TestNormalizeSplitsAgainWhenASectionOutrunsTheCallTimeout(t *testing.T) {
@@ -43,14 +58,15 @@ func TestNormalizeSplitsAgainWhenASectionOutrunsTheCallTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Normalize: %v", err)
 	}
-	if len(gen.sizes) < 2 {
-		t.Fatalf("model called %d times, want a timeout and at least one retry", len(gen.sizes))
+	sizes := gen.recorded()
+	if len(sizes) < 2 {
+		t.Fatalf("model called %d times, want a timeout and at least one retry", len(sizes))
 	}
-	if gen.sizes[0] <= gen.limit {
-		t.Fatalf("first call carried %d characters, want one over the %d limit", gen.sizes[0], gen.limit)
+	if sizes[0] <= gen.limit {
+		t.Fatalf("first call carried %d characters, want one over the %d limit", sizes[0], gen.limit)
 	}
 	accepted := 0
-	for _, n := range gen.sizes {
+	for _, n := range sizes {
 		if n <= gen.limit {
 			accepted += n
 		}
@@ -71,7 +87,7 @@ func TestNormalizeStopsSplittingAtMinSectionChars(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error = %v, want context.DeadlineExceeded", err)
 	}
-	for _, n := range gen.sizes {
+	for _, n := range gen.recorded() {
 		if n < MinSectionChars {
 			t.Fatalf("a call carried %d characters, under the %d floor", n, MinSectionChars)
 		}
@@ -86,7 +102,7 @@ func TestNormalizeReportsCallerCancellationWithoutSplitting(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
-	if len(gen.sizes) != 0 {
-		t.Fatalf("model called %d times after the caller cancelled", len(gen.sizes))
+	if n := len(gen.recorded()); n != 0 {
+		t.Fatalf("model called %d times after the caller cancelled", n)
 	}
 }

@@ -41,6 +41,16 @@ func (s *stubGen) GenerateStream(_ context.Context, req contracts.GenerateReques
 	if r.err != nil {
 		return contracts.GenerationResult{}, r.err
 	}
+	// A real adapter validates the named schema itself and reports a failure
+	// as ErrSchemaInvalid instead of a result. A stub that skipped the check
+	// would exercise a repair path no host can reach.
+	if req.SchemaID != "" {
+		if err := contracts.Validate(req.SchemaID, []byte(r.content)); err != nil {
+			return contracts.GenerationResult{}, &contracts.ErrSchemaInvalid{
+				SchemaID: req.SchemaID, Output: []byte(r.content), Err: err,
+			}
+		}
+	}
 	return contracts.GenerationResult{Content: json.RawMessage(r.content)}, nil
 }
 

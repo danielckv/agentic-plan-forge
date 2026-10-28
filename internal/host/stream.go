@@ -26,6 +26,19 @@ func inspectToolFree(host Kind, event map[string]any, receipt *contracts.ToolFre
 	return &contracts.ErrToolUseObserved{Host: string(host), Event: observed}
 }
 
+// safeguardResultsKey names the classifier verdicts Claude Code 2.1.312 and
+// later attach to a message delta. A verdict reports what was checked, not
+// what happened, and the check is named after the thing it looks for:
+//
+//	"safeguard_results":[{"type":"dangerous_tool_use",
+//	                      "status":{"type":"available","tool_uses":{}}}]
+//
+// Read as a content block that type says a tool was used, so every Claude call
+// was discarded and `plan-forge doctor` reported `serves: NO` on a host that
+// used no tools at all. The verdict is still inspected, through its own
+// tool_uses map rather than through its name.
+const safeguardResultsKey = "safeguard_results"
+
 func findToolEvent(value any, depth int) string {
 	if depth > 8 {
 		return ""
@@ -33,6 +46,12 @@ func findToolEvent(value any, depth int) string {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
+			if strings.EqualFold(key, safeguardResultsKey) {
+				if observed := findSafeguardToolUse(child, 0); observed != "" {
+					return observed
+				}
+				continue
+			}
 			if strings.EqualFold(key, "type") || strings.EqualFold(key, "subtype") {
 				if text, ok := child.(string); ok {
 					normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(text))
@@ -49,6 +68,43 @@ func findToolEvent(value any, depth int) string {
 		for _, child := range typed {
 			if found := findToolEvent(child, depth+1); found != "" {
 				return found
+			}
+		}
+	}
+	return ""
+}
+
+// findSafeguardToolUse reports a tool named by a safeguard verdict. A verdict
+// that lists no tool use is clean, however the check itself is named: an empty
+// or absent tool_uses map means the classifier found nothing.
+func findSafeguardToolUse(value any, depth int) string {
+	if depth > 4 {
+		return ""
+	}
+	switch typed := value.(type) {
+	case []any:
+		for _, child := range typed {
+			if found := findSafeguardToolUse(child, depth+1); found != "" {
+				return found
+			}
+		}
+	case map[string]any:
+		for key, child := range typed {
+			if !strings.EqualFold(key, "tool_uses") && !strings.EqualFold(key, "tooluses") {
+				if found := findSafeguardToolUse(child, depth+1); found != "" {
+					return found
+				}
+				continue
+			}
+			switch uses := child.(type) {
+			case map[string]any:
+				for name := range uses {
+					return name
+				}
+			case []any:
+				if len(uses) != 0 {
+					return "safeguard tool use"
+				}
 			}
 		}
 	}
@@ -214,9 +270,13 @@ func finalizeGeneration(
 		return result, &contracts.ErrBound{Name: "generation output", Limit: int64(req.ClampMaxOutput()), Observed: int64(len(raw))}
 	}
 	if req.SchemaID != "" {
-		if err := contracts.Validate(req.SchemaID, raw); err != nil {
-			return result, fmt.Errorf("validate %s host output: %w", req.SchemaID, err)
+		candidate := jsonCandidate(raw)
+		if err := contracts.Validate(req.SchemaID, candidate); err != nil {
+			// The output is carried on the error, not dropped: the caller
+			// repairs the reply by echoing it back to the model.
+			return result, &contracts.ErrSchemaInvalid{SchemaID: req.SchemaID, Output: raw, Err: err}
 		}
+		raw = candidate
 	}
 	result.Content = append(json.RawMessage(nil), raw...)
 	if usage.InputTokens != 0 || usage.OutputTokens != 0 {
@@ -228,6 +288,45 @@ func finalizeGeneration(
 		return result, err
 	}
 	return result, nil
+}
+
+// jsonCandidate returns the JSON value inside host output that is well-formed
+// but wrapped: a markdown fence, a sentence before the object, or a note after
+// it. A host that returns a bare JSON value is returned unchanged, and output
+// holding no JSON value at all is returned unchanged so the schema error
+// quotes what the host actually said.
+func jsonCandidate(raw []byte) []byte {
+	if json.Valid(raw) {
+		return raw
+	}
+	body := unfence(raw)
+	start := bytes.IndexAny(body, "{[")
+	if start < 0 {
+		return raw
+	}
+	// Decode stops at the end of the first complete value, so trailing prose
+	// is dropped and strings and escapes are respected on the way.
+	var first json.RawMessage
+	if err := json.NewDecoder(bytes.NewReader(body[start:])).Decode(&first); err != nil {
+		return raw
+	}
+	return first
+}
+
+// unfence drops a surrounding markdown code fence, with or without a language
+// tag. Output that is not fenced is returned trimmed.
+func unfence(raw []byte) []byte {
+	trimmed := bytes.TrimSpace(raw)
+	if !bytes.HasPrefix(trimmed, []byte("```")) {
+		return trimmed
+	}
+	if newline := bytes.IndexByte(trimmed, '\n'); newline >= 0 {
+		trimmed = trimmed[newline+1:]
+	}
+	if end := bytes.LastIndex(trimmed, []byte("```")); end >= 0 {
+		trimmed = trimmed[:end]
+	}
+	return bytes.TrimSpace(trimmed)
 }
 
 func promptBytes(req contracts.GenerateRequest) []byte {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,10 @@ type stubGen struct {
 	requests  []contracts.GenerateRequest
 }
 
+// GenerateStream answers like a real adapter: a request that names a schema
+// is validated here, and output that fails it comes back as ErrSchemaInvalid
+// rather than as a result. A stub that skipped the check would exercise a
+// repair path no host can reach.
 func (s *stubGen) GenerateStream(_ context.Context, req contracts.GenerateRequest, _ func(contracts.GenerationEvent) error) (contracts.GenerationResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -30,7 +35,27 @@ func (s *stubGen) GenerateStream(_ context.Context, req contracts.GenerateReques
 	if i >= len(s.responses) {
 		i = len(s.responses) - 1
 	}
-	return contracts.GenerationResult{Content: json.RawMessage(s.responses[i])}, nil
+	out := s.responses[i]
+	if req.SchemaID != "" {
+		if err := contracts.Validate(req.SchemaID, []byte(out)); err != nil {
+			return contracts.GenerationResult{}, &contracts.ErrSchemaInvalid{
+				SchemaID: req.SchemaID, Output: []byte(out), Err: err,
+			}
+		}
+	}
+	return contracts.GenerationResult{Content: json.RawMessage(out)}, nil
+}
+
+// payloadsBySection returns every recorded payload in section order. The
+// sections run concurrently, so arrival order says nothing.
+func (s *stubGen) payloadsBySection(t *testing.T) []normalizePayload {
+	t.Helper()
+	out := make([]normalizePayload, 0, len(s.requests))
+	for i := range s.requests {
+		out = append(out, s.payload(t, i))
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].Section.Index < out[b].Section.Index })
+	return out
 }
 
 func (s *stubGen) payload(t *testing.T, i int) normalizePayload {
@@ -279,9 +304,11 @@ func TestNormalizeSplitsLongDocumentsAtTopLevelHeadings(t *testing.T) {
 	if len(gen.requests) != 3 {
 		t.Fatalf("model called %d times, want 3 sections", len(gen.requests))
 	}
+	// Sections run concurrently, so the requests arrive in no fixed order.
+	// What must hold is that they carry their own position and that the
+	// document reassembles when they are put back in it.
 	var rebuilt strings.Builder
-	for i := range gen.requests {
-		p := gen.payload(t, i)
+	for i, p := range gen.payloadsBySection(t) {
 		if n := utf8.RuneCountInString(p.DocumentMarkdown); n > MaxSectionChars {
 			t.Errorf("section %d has %d characters, over the %d limit", i+1, n, MaxSectionChars)
 		}
