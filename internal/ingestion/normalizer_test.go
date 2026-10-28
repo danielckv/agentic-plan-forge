@@ -22,6 +22,10 @@ type stubGen struct {
 	requests  []contracts.GenerateRequest
 }
 
+// GenerateStream answers like a real adapter: a request that names a schema
+// is validated here, and output that fails it comes back as ErrSchemaInvalid
+// rather than as a result. A stub that skipped the check would exercise a
+// repair path no host can reach.
 func (s *stubGen) GenerateStream(_ context.Context, req contracts.GenerateRequest, _ func(contracts.GenerationEvent) error) (contracts.GenerationResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -30,7 +34,15 @@ func (s *stubGen) GenerateStream(_ context.Context, req contracts.GenerateReques
 	if i >= len(s.responses) {
 		i = len(s.responses) - 1
 	}
-	return contracts.GenerationResult{Content: json.RawMessage(s.responses[i])}, nil
+	out := s.responses[i]
+	if req.SchemaID != "" {
+		if err := contracts.Validate(req.SchemaID, []byte(out)); err != nil {
+			return contracts.GenerationResult{}, &contracts.ErrSchemaInvalid{
+				SchemaID: req.SchemaID, Output: []byte(out), Err: err,
+			}
+		}
+	}
+	return contracts.GenerationResult{Content: json.RawMessage(out)}, nil
 }
 
 func (s *stubGen) payload(t *testing.T, i int) normalizePayload {

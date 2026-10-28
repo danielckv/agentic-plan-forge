@@ -238,7 +238,16 @@ func normalizeSection(ctx context.Context, gen contracts.Generator, sec textSect
 			MaxOutput:    contracts.MaxStageOutputBytes,
 		}, func(contracts.GenerationEvent) error { return ctx.Err() })
 		if err != nil {
-			return wireNormalized{}, err
+			// The host validates the schema itself, so a malformed reply
+			// arrives here rather than at decodeWire. It is the repairable
+			// case: quote the reply back and ask for the object again.
+			reason, echo, repairable := contracts.RepairEcho(err, maxRepairEcho)
+			if !repairable {
+				return wireNormalized{}, err
+			}
+			lastErr = err
+			payload.Repair = &repairRequest{Errors: reason, PreviousOutput: echo}
+			continue
 		}
 		w, verr := decodeWire(res.Content)
 		if verr == nil {

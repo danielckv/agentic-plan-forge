@@ -102,7 +102,16 @@ func callBatch(ctx context.Context, gen contracts.Generator, batch []pack, index
 			MaxOutput:    contracts.MaxStageOutputBytes,
 		}, func(contracts.GenerationEvent) error { return ctx.Err() })
 		if err != nil {
-			return wireMap{}, err
+			// The host validates the schema itself, so a malformed reply
+			// arrives here rather than at decodeWire. It is the repairable
+			// case: quote the reply back and ask for the object again.
+			reason, echo, repairable := contracts.RepairEcho(err, maxRepairEcho)
+			if !repairable {
+				return wireMap{}, err
+			}
+			lastErr = err
+			p.Repair = &repairRequest{Errors: reason, PreviousOutput: echo}
+			continue
 		}
 		w, verr := decodeWire(res.Content)
 		if verr == nil {

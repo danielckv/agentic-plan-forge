@@ -3,6 +3,8 @@ package contracts
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 )
 
 // ErrorCode is the single vocabulary of machine-readable failures shared by Go,
@@ -130,4 +132,58 @@ type ErrToolUseObserved struct {
 
 func (e *ErrToolUseObserved) Error() string {
 	return fmt.Sprintf("tool use observed from %s (%s); generation discarded", e.Host, e.Event)
+}
+
+// MaxSchemaEcho bounds how much host output an ErrSchemaInvalid message
+// carries. The output is discarded on a schema failure, so without an excerpt
+// the error names a character position in text nobody can read back.
+const MaxSchemaEcho = 400
+
+// ErrSchemaInvalid reports host output that did not satisfy the schema the
+// request asked for. It carries the output because the failure is recoverable:
+// a caller holding a repair prompt echoes the bytes back to the model and asks
+// for the object again, rather than ending the run on one malformed reply.
+type ErrSchemaInvalid struct {
+	SchemaID string
+	Output   []byte
+	Err      error
+}
+
+func (e *ErrSchemaInvalid) Error() string {
+	if len(e.Output) == 0 {
+		return fmt.Sprintf("validate %s host output: %v", e.SchemaID, e.Err)
+	}
+	return fmt.Sprintf("validate %s host output: %v (output: %s)",
+		e.SchemaID, e.Err, Excerpt(e.Output, MaxSchemaEcho))
+}
+
+func (e *ErrSchemaInvalid) Unwrap() error { return e.Err }
+
+// RepairEcho reports whether err is a schema failure a repair retry can act
+// on. It returns the schema complaint and the host output to quote back, cut
+// to limit bytes. A caller with no repair prompt ignores it and fails on err
+// as before.
+func RepairEcho(err error, limit int) (reason, output string, ok bool) {
+	var invalid *ErrSchemaInvalid
+	if !errors.As(err, &invalid) {
+		return "", "", false
+	}
+	if invalid.Err != nil {
+		reason = invalid.Err.Error()
+	}
+	return reason, Excerpt(invalid.Output, limit), true
+}
+
+// Excerpt returns at most limit bytes of raw on one line, marking a cut with a
+// trailing ellipsis. It cuts on a rune boundary so UTF-8 text stays printable.
+func Excerpt(raw []byte, limit int) string {
+	s := strings.Join(strings.Fields(string(raw)), " ")
+	if limit <= 0 || len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "..."
 }
