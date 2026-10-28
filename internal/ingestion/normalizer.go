@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
@@ -43,6 +44,13 @@ const (
 	maxResolutionNote = 500
 	// maxRepairEcho bounds the previous model output echoed back for repair.
 	maxRepairEcho = 64 << 10
+	// maxSectionParallel bounds how many section calls are open at once.
+	// Sections are independent and a long document is the slowest part of an
+	// interpretation, so they run together: 11 sections at roughly 20s each
+	// take about a minute at 4 in flight instead of nearly four sequentially.
+	// The bound matches config.DefaultMaxParallel, which is already what one
+	// host is asked to carry for the Domain Specialists.
+	maxSectionParallel = 4
 )
 
 // emptyFieldChips are the ProductPRD sections that must not be empty without
@@ -132,25 +140,10 @@ func Normalize(ctx context.Context, gen contracts.Generator, prdText string, res
 	var sections []textSection
 	var parts []wireNormalized
 	if strings.TrimSpace(text) != "" {
+		var err error
 		sections = splitSections(text, MaxSectionChars)
-		for i := 0; i < len(sections); i++ {
-			if err := ctx.Err(); err != nil {
-				return contracts.NormalizedPRD{}, err
-			}
-			w, err := normalizeSection(ctx, gen, sections[i], i+1, len(sections))
-			if err != nil {
-				halves, ok := halveSection(sections[i])
-				if !ok || !overranCallTimeout(ctx, err) {
-					return contracts.NormalizedPRD{}, fmt.Errorf("normalize section %d of %d: %w", i+1, len(sections), err)
-				}
-				// The section was too large to classify inside the call
-				// timeout. Replace it with its halves and retry those: the
-				// retry is smaller work, not the same work billed twice.
-				sections = append(sections[:i:i], append(halves, sections[i+1:]...)...)
-				i--
-				continue
-			}
-			parts = append(parts, w)
+		if parts, sections, err = normalizeAll(ctx, gen, sections); err != nil {
+			return contracts.NormalizedPRD{}, err
 		}
 	}
 
@@ -213,6 +206,113 @@ func validateResolutions(rs []contracts.AmbiguityResolution) error {
 		}
 	}
 	return nil
+}
+
+// normalizeAll classifies every section and returns the results in section
+// order, together with the final section list: halving changes that list, and
+// mergeWire pairs each result with the section it came from.
+//
+// Sections are independent, so they run concurrently, up to
+// maxSectionParallel at a time. A section that outruns the call timeout is
+// replaced by its halves and only the halves are called again, so a retry is
+// smaller work and a section that already answered is never billed twice.
+func normalizeAll(ctx context.Context, gen contracts.Generator, sections []textSection) ([]wireNormalized, []textSection, error) {
+	parts := make([]wireNormalized, len(sections))
+	done := make([]bool, len(sections))
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		pending := pendingIndices(done)
+		if len(pending) == 0 {
+			return parts, sections, nil
+		}
+		errs := runSections(ctx, gen, sections, pending, parts)
+
+		// Report the earliest section that failed for a reason halving cannot
+		// fix, so the message names the section a reader counts to.
+		for _, i := range pending {
+			if errs[i] == nil {
+				done[i] = true
+				continue
+			}
+			if _, ok := halveSection(sections[i]); !ok || !overranCallTimeout(ctx, errs[i]) {
+				return nil, nil, fmt.Errorf("normalize section %d of %d: %w", i+1, len(sections), errs[i])
+			}
+		}
+		// Splice from the back so the indices of the earlier sections hold.
+		for k := len(pending) - 1; k >= 0; k-- {
+			i := pending[k]
+			if errs[i] == nil {
+				continue
+			}
+			halves, _ := halveSection(sections[i])
+			sections = replaceAt(sections, i, halves)
+			parts = growAt(parts, i, len(halves))
+			done = growAt(done, i, len(halves))
+		}
+	}
+}
+
+// runSections calls the pending sections, up to maxSectionParallel at once,
+// and writes each result into parts at its own index.
+func runSections(
+	ctx context.Context,
+	gen contracts.Generator,
+	sections []textSection,
+	pending []int,
+	parts []wireNormalized,
+) map[int]error {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	errs := make(map[int]error, len(pending))
+	sem := make(chan struct{}, maxSectionParallel)
+
+	for _, index := range pending {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			w, err := normalizeSection(ctx, gen, sections[i], i+1, len(sections))
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			parts[i] = w
+		}(index)
+	}
+	wg.Wait()
+	return errs
+}
+
+func pendingIndices(done []bool) []int {
+	var out []int
+	for i, finished := range done {
+		if !finished {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// replaceAt puts halves where sections[i] was, keeping document order.
+func replaceAt(sections []textSection, i int, halves []textSection) []textSection {
+	out := make([]textSection, 0, len(sections)+len(halves)-1)
+	out = append(out, sections[:i]...)
+	out = append(out, halves...)
+	return append(out, sections[i+1:]...)
+}
+
+// growAt replaces the entry at i with n zero entries, so a slice kept parallel
+// to the section list stays aligned after a section is halved.
+func growAt[T any](in []T, i, n int) []T {
+	out := make([]T, 0, len(in)+n-1)
+	out = append(out, in[:i]...)
+	out = append(out, make([]T, n)...)
+	return append(out, in[i+1:]...)
 }
 
 // normalizeSection runs one model call with a single schema-repair retry.
