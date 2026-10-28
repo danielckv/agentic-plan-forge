@@ -14,18 +14,18 @@ import (
 // The safeguard verdict is named after the check, and its tool_uses map is
 // empty: no tool ran.
 const claudeSafeguardDelta = `{
-  "type": "stream_event",
-  "event": {
-    "type": "message_delta",
-    "delta": {
-      "stop_reason": "end_turn",
-      "safeguard_results": [
-        {"type": "dangerous_tool_use", "status": {"type": "available", "tool_uses": {}}}
-      ]
-    },
-    "usage": {"input_tokens": 2, "output_tokens": 4}
-  },
-  "parent_tool_use_id": null
+	"type": "stream_event",
+	"event": {
+		"type": "message_delta",
+		"delta": {
+			"stop_reason": "end_turn",
+			"safeguard_results": [
+				{"type": "dangerous_tool_use", "status": {"type": "available", "tool_uses": {}}}
+			]
+		},
+		"usage": {"input_tokens": 2, "output_tokens": 4}
+	},
+	"parent_tool_use_id": null
 }`
 
 func decodeEvent(t *testing.T, raw string) map[string]any {

@@ -12,8 +12,8 @@ doctor` on this machine, 2026-10-29:
 
 ```text
 agy     found 1.4.9     serves: NO — AGY exposes no verified isolated settings mechanism
-claude  found 2.1.312   serves: NO — tool use observed from claude (dangerous_tool_use);
-                                     generation discarded
+claude  found 2.1.312   serves: NO — tool use observed from claude
+                        (dangerous_tool_use); generation discarded
 omp     found 18.13.3   serves: yes
 
 main_host = claude IGNORED: tool use observed from claude (dangerous_tool_use)
