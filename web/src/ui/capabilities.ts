@@ -66,6 +66,24 @@ export interface DetectedCLI {
   blocks?: string;
 }
 
+/**
+ * One HTTP generation provider's credential state (`app.ProviderStatus`).
+ *
+ * Never carries the key. `masked` is enough to tell two keys apart and useless
+ * to anyone reading over a shoulder; `source` matters because a stored key
+ * that an environment variable is overriding is the state owners misread most.
+ */
+export interface ProviderStatus {
+  name: string;
+  label: string;
+  configured: boolean;
+  source?: string;
+  masked?: string;
+  env_var: string;
+  console_url: string;
+  base_url?: string;
+}
+
 export interface CapabilitiesView {
   hosts: CapabilityHost[];
   tools: CapabilityTool[];
@@ -78,6 +96,87 @@ export interface CapabilitiesView {
   clis?: DetectedCLI[];
   /** `main_host = agy` and friends, when the pin names a host that cannot serve. */
   pinned: string[];
+  /**
+   * API providers and whether each holds a key. Optional so a payload from an
+   * older bridge still type-checks.
+   */
+  providers?: ProviderStatus[];
+}
+
+/** The API providers holding a usable key. */
+export function configuredProviders(view: CapabilitiesView | null): ProviderStatus[] {
+  return (view?.providers ?? []).filter((p) => p.configured);
+}
+
+/**
+ * True when this installation cannot generate at all: no API key and no local
+ * agent CLI that passed preflight. That is the one state worth interrupting
+ * the owner for, because every run fails until it changes.
+ */
+export function needsSetup(view: CapabilitiesView | null): boolean {
+  if (view === null) return false;
+  return configuredProviders(view).length === 0 && usableCLIs(view).length === 0;
+}
+
+/** The browser-local record that setup has been offered once. */
+const SETUP_PROMPTED_KEY = "plan-forge:ui:setup-prompted";
+
+/**
+ * Whether to open setup unprompted. True only on a first run that holds no API
+ * key at all, and only once per browser profile: an owner who runs on a local
+ * agent CLI is not asked again, and nobody is asked twice.
+ *
+ * It reads `GET /api/providers`, which is one file read. The full capability
+ * probe shells out to every host CLI, so it is far too expensive to run just
+ * to decide whether to show a dialog.
+ */
+export async function shouldOfferSetup(): Promise<boolean> {
+  try {
+    if (window.localStorage.getItem(SETUP_PROMPTED_KEY) !== null) return false;
+  } catch {
+    // A browser with storage disabled simply never auto-opens.
+    return false;
+  }
+  try {
+    const res = await apiFetch("/api/providers");
+    if (!res.ok) return false;
+    const providers = (await res.json()) as ProviderStatus[];
+    if (providers.some((p) => p.configured)) return false;
+  } catch {
+    return false;
+  }
+  try {
+    window.localStorage.setItem(SETUP_PROMPTED_KEY, "1");
+  } catch {
+    /* asking twice is better than failing to open at all */
+  }
+  return true;
+}
+
+/**
+ * Save one provider's key. An empty key disconnects the provider. Returns null
+ * on success, else the message to show.
+ *
+ * The reply carries masked status only, so a key never travels back out of the
+ * bridge once it has been stored.
+ */
+export async function saveProvider(
+  provider: string,
+  apiKey: string,
+  baseURL: string,
+): Promise<string | null> {
+  try {
+    const res = await apiFetch("/api/providers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, api_key: apiKey, base_url: baseURL }),
+    });
+    if (res.ok) return null;
+    const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+    return detail?.error ?? `could not save the key (${res.status})`;
+  } catch {
+    return "the binary did not answer";
+  }
 }
 
 /** The detected agents that can actually take a call. */

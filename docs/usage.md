@@ -239,11 +239,28 @@ A Confluence-style specification with diagrams, Jira-style epics and subtasks, d
 effort schedules. The table of contents follows your scroll. The task matrix can be filtered by ID, title or target
 file. Diagrams expand to full screen.
 
+**Implementation phases** sit directly under the executive summary: the work split into ordered waves, each listing its
+tasks, its workstreams, its PERT effort in human hours and agent minutes, and the gate — the verification commands that
+must pass before the next phase starts. Tasks inside a phase have no dependency on each other, so they can be worked at
+the same time; the phases themselves are strictly sequenced.
+
+The phases are computed from the task dependency graph, not written by an avatar. A task sits one level deeper than the
+deepest task it depends on, so a phase can never depend on a later one, and the same plan always produces the same
+phases. This is also the section a coding agent reads first: the Plan Mode handoff points it at the compiled spec, so
+the order of work is stated there rather than left implicit in a flat task list.
+
 ## Setup: what this installation can do
 
-The sliders button in the top bar opens **Setup**: every generation host with whether it can actually
-serve a call, the external tools each feature needs, the skills installed into each agent, and the
-managed hooks.
+The sliders button in the top bar opens **Setup**: the API providers and whether each holds a key, every
+generation host with whether it can actually serve a call, the external tools each feature needs, the
+skills installed into each agent, and the managed hooks.
+
+**API providers** come first, because a key is the quickest way to a working installation and the
+fastest way to run a plan. Paste a key for Anthropic, OpenAI or Fireworks and that provider serves the
+next call; leave them all empty to keep running on the coding agents below. A first run holding no key
+opens Setup once by itself, and never asks again. Keys are stored outside `config.json`, shown only
+masked, and never passed through an agent — see [configuration](configuration.md) for where they live
+and why there is no subscription sign-in.
 
 The distinction worth knowing is **signed in** versus **serving**. A host can be installed,
 authenticated and still unable to take a call — Antigravity is exactly this case. Setup shows the

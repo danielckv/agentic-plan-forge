@@ -61,6 +61,57 @@ type CapabilitiesView struct {
 	// the window can say the choice is being ignored rather than leaving the
 	// owner to infer it from the placements.
 	Pinned []string `json:"pinned"`
+	// Providers is the API key state of each HTTP generation provider. It is
+	// what the setup window reads to decide whether this installation has a
+	// usable provider at all.
+	Providers []ProviderStatus `json:"providers"`
+}
+
+// ProviderStatus is one HTTP provider's credential state.
+//
+// It never carries the key. Masked holds the first and last few characters so
+// the owner can tell which key is installed, and Source names where it came
+// from, because a stored key silently overridden by an environment variable is
+// the commonest confusing state.
+type ProviderStatus struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	// Configured is true when a usable key is present, from either source.
+	Configured bool `json:"configured"`
+	// Source is the environment variable name, or "credentials.json".
+	Source string `json:"source,omitempty"`
+	Masked string `json:"masked,omitempty"`
+	// EnvVar and ConsoleURL tell the owner how to supply a key without
+	// leaving the window to look either one up.
+	EnvVar     string `json:"env_var"`
+	ConsoleURL string `json:"console_url"`
+	// BaseURL is a configured endpoint override, empty for the public one.
+	BaseURL string `json:"base_url,omitempty"`
+}
+
+// providerStatuses reports the credential state of every API provider. It
+// reads the key file and nothing else: no network call and no provider probe,
+// so the window can ask "is a provider configured?" cheaply and often.
+func providerStatuses() []ProviderStatus {
+	creds, err := config.LoadCredentials()
+	out := make([]ProviderStatus, 0, len(config.ProviderNames()))
+	for _, name := range config.ProviderNames() {
+		status := ProviderStatus{
+			Name:       name,
+			Label:      config.ProviderLabel(name),
+			EnvVar:     config.ProviderKeyEnv(name),
+			ConsoleURL: config.ProviderConsoleURL(name),
+		}
+		if err == nil {
+			key, source := creds.Key(name)
+			status.Configured = key != ""
+			status.Source = source
+			status.Masked = config.MaskKey(key)
+			status.BaseURL = creds.BaseURL(name)
+		}
+		out = append(out, status)
+	}
+	return out
 }
 
 // Capabilities probes the hosts, the optional tools, the installed skills and
@@ -121,6 +172,7 @@ func Capabilities(ctx context.Context, cfg config.Config, repo, version string) 
 	// Rediscovery on every call is deliberate: a person installs a CLI and
 	// reloads the window, and a cached first-run result would keep saying it is
 	// missing until the process restarted.
+	view.Providers = providerStatuses()
 	view.CLIs = host.ScanKnownCLIs(ctx)
 	for i := range view.CLIs {
 		entry, ok := serves[view.CLIs[i].Kind]
@@ -188,6 +240,9 @@ func (v CapabilitiesView) withoutNilLists() CapabilitiesView {
 	}
 	if v.Pinned == nil {
 		v.Pinned = []string{}
+	}
+	if v.Providers == nil {
+		v.Providers = []ProviderStatus{}
 	}
 	return v
 }

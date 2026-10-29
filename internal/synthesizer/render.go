@@ -16,6 +16,7 @@ type specInput struct {
 	tasks    []contracts.TechnicalTask
 	schedule DualSchedule
 	diagrams Diagrams
+	phases   []Phase
 	title    string
 	meta     contracts.ApprovalMeta
 }
@@ -106,6 +107,9 @@ func renderSpec(s specInput) string {
 		w.blank()
 		w.bullets(d.Synthesis.VerificationNotes)
 	}
+
+	w.h2(SectionPhases)
+	writePhases(&w, s.phases)
 
 	w.h2(SectionProduct)
 	p := s.in.PRD.Product
@@ -479,4 +483,36 @@ func orNone(s string) string {
 		return "none"
 	}
 	return s
+}
+
+// writePhases renders the implementation as ordered dependency waves.
+//
+// This is the section a coding agent reads first: the managed host prompts
+// point it at the compiled spec as its blueprint, so the order of work has to
+// be stated here rather than left implicit in a flat task list. Every task in
+// a phase is independent of the others in that phase, so a phase can be worked
+// in parallel, and its gate is what must pass before the next phase starts.
+func writePhases(w *writer, phases []Phase) {
+	if len(phases) == 0 {
+		w.line("No tasks, so there is nothing to sequence.")
+		return
+	}
+	w.line("%d phases, derived from the task dependency graph. Tasks inside a phase have no dependency on each other and can run at the same time; a phase starts only once every earlier phase has passed its gate.", len(phases))
+	for _, phase := range phases {
+		w.blank()
+		w.line("### Phase %d — %s", phase.Number, inline(phase.Title))
+		w.line("- **Tasks:** %s", code(strings.Join(phase.TaskIDs, ", ")))
+		if len(phase.WorkstreamIDs) > 0 {
+			w.line("- **Workstreams:** %s", code(strings.Join(phase.WorkstreamIDs, ", ")))
+		}
+		w.line("- **Effort:** %.1f human hours, %.0f agent minutes (PERT)", phase.HumanHours, phase.AgentMinutes)
+		if len(phase.Gate) == 0 {
+			w.line("- **Gate:** none declared; this phase cannot be verified on its own.")
+			continue
+		}
+		w.line("- **Gate:** every command below exits %d.", phase.Gate[0].ExpectedExitCode)
+		for _, check := range phase.Gate {
+			w.line("  - %s %s", code(check.ID), code(strings.Join(check.Argv, " ")))
+		}
+	}
 }

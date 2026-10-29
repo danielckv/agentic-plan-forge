@@ -92,6 +92,15 @@ type GenerateRequest struct {
 	SystemPrompt string          `json:"system_prompt"`
 	UserPayload  json.RawMessage `json:"user_payload"`
 	SchemaID     string          `json:"schema_id"`
+	// OutputSchema constrains the reply to a JSON Schema at the provider,
+	// where the provider supports it (Anthropic structured outputs, the
+	// OpenAI-compatible json_schema response format). It is independent of
+	// SchemaID: SchemaID names an embedded schema the host validates the
+	// terminal result against, and the five avatar stages have none because
+	// their documents are strict-decoded in the avatars layer instead. A
+	// provider that cannot constrain output ignores this field, so the reply
+	// is still only as good as the prompt.
+	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 	RunID        string          `json:"run_id,omitempty"`
 	Timeout      time.Duration   `json:"timeout"`
 	MaxOutput    int             `json:"max_output_bytes"`

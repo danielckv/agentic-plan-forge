@@ -137,7 +137,10 @@ type Config struct {
 }
 
 // Valid host identifiers. An empty value means "not configured yet".
-var validHosts = map[string]bool{"": true, "claude": true, "omp": true, "agy": true}
+var validHosts = map[string]bool{
+	"": true, "claude": true, "omp": true, "agy": true,
+	ProviderAnthropic: true, ProviderOpenAI: true, ProviderFireworks: true,
+}
 
 // IsValidHost reports whether h names a supported host adapter.
 func IsValidHost(h string) bool { return validHosts[h] }

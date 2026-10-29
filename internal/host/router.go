@@ -39,15 +39,29 @@ type Resolution struct {
 // to one host still works and says in its skip reasons what it fell back from.
 // An explicit main_host or judge_host overrides the order entirely; a
 // role_models entry overrides it for that role alone.
+//
+// The API hosts lead every order because they are the faster transport: no
+// process to start, a cached prompt prefix, and output constrained to the
+// reply schema. A provider with no key fails Detect on a cached file read and
+// costs the walk nothing, so an installation with no keys behaves exactly as
+// it did before and lands on its CLI hosts.
+//
+// Two placements are deliberate rather than a rotation. The reasoning-heavy
+// roles — product manager, architect, synthesizer, ingestion — lead with
+// Anthropic, because ADR 0009 settled that the architect design part stays on
+// the strongest model and that load spreads by role, never by downgrading the
+// model that does the designing. The narrator leads with the cheapest provider
+// because it writes a status line that gates nothing and is dropped on
+// failure.
 var roleHostOrder = map[contracts.RoleID][]Kind{
-	contracts.RoleProductManager: {KindClaude, KindOMP, KindAGY},
-	contracts.RoleArchitect:      {KindClaude, KindAGY, KindOMP},
-	contracts.RoleSpecialist:     {KindOMP, KindAGY, KindClaude},
-	contracts.RoleCritic:         {KindAGY, KindOMP, KindClaude},
-	contracts.RoleSynthesizer:    {KindClaude, KindOMP, KindAGY},
-	contracts.RoleNarrator:       {KindAGY, KindOMP, KindClaude},
-	contracts.RoleIngestion:      {KindClaude, KindOMP, KindAGY},
-	contracts.RoleImpact:         {KindOMP, KindClaude, KindAGY},
+	contracts.RoleProductManager: {KindAnthropic, KindOpenAI, KindClaude, KindOMP, KindAGY},
+	contracts.RoleArchitect:      {KindAnthropic, KindOpenAI, KindClaude, KindAGY, KindOMP},
+	contracts.RoleSpecialist:     {KindOpenAI, KindAnthropic, KindFireworks, KindOMP, KindAGY, KindClaude},
+	contracts.RoleCritic:         {KindOpenAI, KindAnthropic, KindFireworks, KindAGY, KindOMP, KindClaude},
+	contracts.RoleSynthesizer:    {KindAnthropic, KindOpenAI, KindClaude, KindOMP, KindAGY},
+	contracts.RoleNarrator:       {KindFireworks, KindOpenAI, KindAnthropic, KindAGY, KindOMP, KindClaude},
+	contracts.RoleIngestion:      {KindAnthropic, KindOpenAI, KindFireworks, KindClaude, KindOMP, KindAGY},
+	contracts.RoleImpact:         {KindOpenAI, KindAnthropic, KindFireworks, KindOMP, KindClaude, KindAGY},
 }
 
 // NoHostError means no authenticated adapter satisfied the tool-free gate. CLI

@@ -107,4 +107,7 @@ func init() {
 	Register(NewClaude())
 	Register(NewOMP())
 	Register(NewAGY())
+	Register(NewAnthropicAPI())
+	Register(NewOpenAIAPI())
+	Register(NewFireworksAPI())
 }

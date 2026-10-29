@@ -8,6 +8,7 @@ import {
   hostTone,
   useCapabilities,
 } from "../ui/capabilities";
+import { ProviderSetup } from "./ProviderSetup";
 
 /**
  * Setup: the hosts that serve this session's avatars, the tools its features
@@ -39,6 +40,8 @@ export function CapabilitiesDialog(props: {
             {pin} is being ignored: that host cannot serve a call, so roles go elsewhere.
           </p>
         ))}
+
+        <ProviderSetup providers={view?.providers ?? []} onSaved={refresh} />
 
         <section className="pf-cap-section">
           <h3 className="pf-cap-title">
