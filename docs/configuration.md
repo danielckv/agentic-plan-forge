@@ -9,6 +9,40 @@ credentials can only be set from your own terminal (`plan-forge config --set-rel
 
 The `/plan-config` slash command reviews and changes the same settings from inside your agent.
 
+## API providers, and why there is no "sign in with Claude"
+
+A plan can run two ways: through a coding-agent CLI installed on your machine, or over a
+provider's API with your own API key. Open **Setup** in the window to add a key; a first run
+with no key opens it for you once.
+
+| Provider | Key from | Environment variable |
+| --- | --- | --- |
+| Anthropic | <https://platform.claude.com/settings/keys> | `ANTHROPIC_API_KEY` |
+| OpenAI | <https://platform.openai.com/api-keys> | `OPENAI_API_KEY` |
+| Fireworks | <https://app.fireworks.ai/settings/users/api-keys> | `FIREWORKS_API_KEY` |
+
+Keys are stored in `~/.plan-forge/credentials.json` with mode `0600`, deliberately **not** in
+`config.json`: the settings file gets quoted in `doctor` output and pasted into bug reports. An
+environment variable always wins over the stored key, so an export in your shell or a CI runner
+overrides Setup without deleting anything — the window says which source is in effect. Plan
+Forge shows a key only in masked form and never writes one to a receipt or a log.
+
+Set a key yourself, in the window or your own terminal. Never paste one into an agent prompt,
+for the same reason `plan-forge config --set-relay-token` is interactive only.
+
+**There is no subscription sign-in, and there will not be one.** Anthropic's terms reserve
+Claude.ai OAuth for Anthropic's own applications and forbid a third-party tool from collecting,
+storing or routing those credentials; developers are directed to a Console API key. Fireworks
+has no OAuth at all. So a Claude, ChatGPT or similar subscription is reached only by running
+that vendor's own CLI, which stays available as a host — that use is explicitly permitted, and
+it is why the CLI hosts are not going away. Reasoning:
+[ADR 0022](adrs/0022-api-providers-join-the-cli-hosts.md).
+
+An API provider is preferred over a CLI host when it has a key, because it is faster: no process
+to start per call, the prompt prefix is cached between stages, and the reply is constrained to
+the schema instead of being unwrapped and repaired afterwards. With no keys configured, nothing
+changes — every role lands on your CLI hosts exactly as before.
+
 ## Hosts and models belong together
 
 A model identifier is host-specific. `claude-opus-5-5-high` is an `agy` name; Claude Code calls the same family `opus`

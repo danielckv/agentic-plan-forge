@@ -21,6 +21,7 @@ const SynthesisSchemaID = "synthesis.v1"
 // contract with the Page 3 renderer and the tests.
 const (
 	SectionExecutive     = "Executive summary"
+	SectionPhases        = "Implementation phases"
 	SectionProduct       = "Product requirements and acceptance"
 	SectionConstraints   = "Immutable constraints"
 	SectionDiagrams      = "Architecture and sequence diagrams"
@@ -35,7 +36,7 @@ const (
 
 // SectionOrder lists the level-2 headings of a compiled spec in order.
 var SectionOrder = []string{
-	SectionExecutive, SectionProduct, SectionConstraints, SectionDiagrams, SectionInterfaces,
+	SectionExecutive, SectionPhases, SectionProduct, SectionConstraints, SectionDiagrams, SectionInterfaces,
 	SectionEpics, SectionDocSync, SectionDAG, SectionVerification, SectionEstimates, SectionDecisionsCave,
 }
 
@@ -57,6 +58,9 @@ type CompiledPlan struct {
 	ManifestSHA256 string
 	Diagrams       Diagrams
 	Schedule       DualSchedule
+	// Phases is the implementation broken into dependency waves, derived from
+	// the task graph rather than written by an avatar.
+	Phases []Phase
 }
 
 // DraftContent returns the synthesis.v1 draft content {spec_markdown,
@@ -282,12 +286,18 @@ func Compile(input contracts.SynthesisInput, meta contracts.ApprovalMeta) (Compi
 		return CompiledPlan{}, err
 	}
 
+	phases, err := Phases(tasks, docs.PM.Epics)
+	if err != nil {
+		return CompiledPlan{}, &ValidationError{Stage: "synthesis", Problems: []string{err.Error()}}
+	}
+
 	title := strings.TrimSpace(sanitize.Terminal(input.PRD.Product.Title))
 	if title == "" {
 		title = "Plan-Forge specification"
 	}
 	spec := renderSpec(specInput{
-		in: input, docs: docs, tasks: tasks, schedule: schedule, diagrams: diagrams, title: title, meta: meta,
+		in: input, docs: docs, tasks: tasks, schedule: schedule, diagrams: diagrams,
+		phases: phases, title: title, meta: meta,
 	})
 	specBytes := []byte(spec)
 	manifest, err := buildManifest(input, docs, tasks, schedule, title, meta, specBytes)
@@ -307,6 +317,7 @@ func Compile(input contracts.SynthesisInput, meta contracts.ApprovalMeta) (Compi
 		ManifestSHA256: sha256Hex(manifest),
 		Diagrams:       diagrams,
 		Schedule:       schedule,
+		Phases:         phases,
 	}, nil
 }
 

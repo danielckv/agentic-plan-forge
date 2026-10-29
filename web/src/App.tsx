@@ -9,6 +9,7 @@ import { Page2AvatarCanvas } from "./pages/Page2AvatarCanvas";
 import { Page3SynthesisConfluence } from "./pages/Page3SynthesisConfluence";
 import { Page4Build } from "./pages/Page4Build";
 import { CapabilitiesDialog } from "./pages/CapabilitiesDialog";
+import { shouldOfferSetup } from "./ui/capabilities";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { prefs, usePrefs } from "./ui/prefs";
@@ -35,6 +36,19 @@ export function App(): React.ReactElement {
   useEffect(() => {
     connect();
     return () => disconnect();
+  }, []);
+
+  // A first run with no API key opens setup once, so the owner is asked for a
+  // key before a plan fails rather than after. An installation that runs on a
+  // local agent CLI, or one that has been offered setup before, is left alone.
+  useEffect(() => {
+    let cancelled = false;
+    void shouldOfferSetup().then((offer) => {
+      if (offer && !cancelled) setSetupOpen(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // The bridge owns the status pills and the repository identity. Polling
