@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-29
+
+### Added
+
+- Plans can run over a provider's API instead of a local agent CLI. Every generation used to shell out to a coding
+  agent: one trivial tool-free `claude -p` call measures 2.83s wall against 1.10s of model time, with 0.59s before
+  the request is even issued, about 1.15s of teardown, and roughly 2,900 tokens of the CLI's own scaffolding added to
+  every call. A run makes 25 to 60 calls. Anthropic, OpenAI and Fireworks now join the same adapter registry as
+  `claude`, `omp` and `agy`, authenticated with your own API key, and lead each role's rotation when a key is
+  present. A provider with no key fails detection on a cached file read, so an installation with no keys behaves
+  exactly as it did before and still lands on its CLI hosts. Replies are constrained to the reply schema at the
+  provider — Anthropic structured outputs, the OpenAI-compatible `json_schema` response format — so a schema-valid
+  answer is produced by construction rather than unwrapped and repaired afterwards, and the prompt prefix is cached
+  between stages. A refused schema costs one retry, not the stage.
+- Setup asks for API keys, and a first run holding none opens it once. Keys are stored in
+  `~/.plan-forge/credentials.json` with mode `0600`, deliberately outside `config.json`, which is quoted in `doctor`
+  output and pasted into bug reports. An environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+  `FIREWORKS_API_KEY`) overrides the stored key, and the window says which source is in effect. A key is shown only
+  masked, never written to a receipt or a log, and never returned by an endpoint.
+- The specification states the order of the work. Implementation phases sit under the executive summary: the tasks
+  split into dependency waves, each with its workstreams, its PERT effort in human hours and agent minutes, and the
+  verification commands that must pass before the next phase starts. A task sits one level deeper than the deepest
+  task it depends on, so a phase can never depend on a later one and the same plan always produces the same phases.
+  The phases are computed from the task graph, not written by an avatar: the Lead Synthesizer still cannot invent
+  work. This is the section a coding agent reads first, because the Plan Mode handoff points it at the compiled spec.
+
+### Changed
+
+- The avatars are asked for output a developer and a product owner can act on. An acceptance criterion now states one
+  observable outcome as "Given, when, then" and names no file or framework, so "the export finishes" is rejected
+  where "Given a report with 500 rows, when the user clicks Export, then a CSV of 500 rows downloads within 10
+  seconds" is not. An epic goal names the measure that moves and its current value. Each error on an interface
+  contract says what the consumer must do about it, and a contract that changes an existing boundary is called out as
+  breaking, with its migration and rollback. Tasks are sized by effort — half a day to two days, 1 to 8 per
+  workstream — rather than capped at four regardless of the work, and each names the test that fails before the
+  change and passes after. A critique must state a reproducible failure scenario, the inputs and the wrong result
+  that follows, or it is dropped rather than filed at a lower severity.
+
+### Note
+
+- There is no subscription sign-in, and there will not be one. Anthropic's terms reserve Claude.ai OAuth for
+  Anthropic's own applications and state that third-party developers may not offer Claude.ai login, route requests
+  through Free, Pro or Max credentials, or collect, store or intermediate those credentials; they direct developers
+  to a Console API key. Fireworks has no OAuth at all. A consumer subscription stays reachable only by running that
+  vendor's own unmodified CLI, which is explicitly permitted and is why the CLI hosts remain first-class. Reasoning:
+  ADR 0022.
+
 ## [0.8.2] - 2026-10-29
 
 ### Fixed
@@ -330,6 +377,7 @@ First public release.
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
 [Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...HEAD
+[0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...v0.8.0
