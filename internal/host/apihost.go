@@ -52,19 +52,32 @@ var credentialCache struct {
 	sync.Mutex
 	creds  config.Credentials
 	loaded time.Time
-	err    error
+	// home is the Plan Forge home the cached file came from. The credentials
+	// path is derived from PLAN_FORGE_HOME, and a process can be re-pointed at
+	// another home (a test, a second profile), so a cache keyed only by time
+	// would answer for the wrong file.
+	home string
+	err  error
 }
 
 // loadCredentials returns the key file, re-reading it at most every
 // credentialCacheTTL.
 func loadCredentials() (config.Credentials, error) {
+	home, homeErr := config.Home()
 	credentialCache.Lock()
 	defer credentialCache.Unlock()
-	if !credentialCache.loaded.IsZero() && time.Since(credentialCache.loaded) < credentialCacheTTL {
+	if !credentialCache.loaded.IsZero() &&
+		time.Since(credentialCache.loaded) < credentialCacheTTL &&
+		credentialCache.home == home {
 		return credentialCache.creds, credentialCache.err
 	}
 	creds, err := config.LoadCredentials()
+	if homeErr != nil {
+		credentialCache.creds, credentialCache.err, credentialCache.loaded = config.Credentials{}, homeErr, time.Now()
+		return creds, err
+	}
 	credentialCache.creds, credentialCache.err, credentialCache.loaded = creds, err, time.Now()
+	credentialCache.home = home
 	return creds, err
 }
 

@@ -43,6 +43,23 @@ to start per call, the prompt prefix is cached between stages, and the reply is 
 the schema instead of being unwrapped and repaired afterwards. With no keys configured, nothing
 changes — every role lands on your CLI hosts exactly as before.
 
+### The Gemini schema is prepared before it is sent
+
+Gemini's `responseJsonSchema` accepts less than the draft it advertises, and it reports every rejection as one bare
+"Request contains an invalid argument" with no field named. Two things break on it, measured against the live API on
+2026-10-31:
+
+- **`maxItems` is unusable.** One array with `maxItems: 447` is accepted and 448 is refused, and the ceiling is shared
+  across the whole schema rather than per array. `normalized_prd.v1` declares twelve bounded arrays, so every
+  normalization section failed. The keyword is dropped before the request is sent; `maxOutputTokens` bounds the reply
+  on the wire and the reply is validated against the original schema afterwards.
+- **`const` is silently ignored**, not rejected: `schema_version: {const: 1}` produced a reply with a different value.
+  It is rewritten as the single-value `enum`, which Gemini does enforce.
+
+The adapter also retries a `400 … invalid argument` once without the optional `thinkingConfig`, since the message
+cannot say which field it refused. The model is chosen from the provider's live `/models` list; a preference entry the
+API has retired is skipped rather than sent.
+
 ## Hosts and models belong together
 
 A model identifier is host-specific. `claude-opus-5-5-high` is an `agy` name; Claude Code calls the same family `opus`
@@ -69,6 +86,15 @@ and joins the spread with no configuration change the day its preflight can pass
 being ignored because of it. A host that passes preflight and then breaks the tool-free contract once a call is open —
 a stale OMP advertising a tools list is the live case — costs one retry on the next host rather than the stage it was
 serving. Reasoning: [ADR 0012](adrs/0012-a-broken-host-costs-one-retry-not-the-run.md).
+
+### Oh-my-pi is the last host
+
+Claude Code, the Google credential (`gemini` / `antigravity`) and `agy` outrank oh-my-pi for every role. Oh-my-pi
+serves a run only when none of them can, and that holds even when `main_host` pins it: a skipped OMP says why in
+`plan-forge doctor` and in `/api/status`. The reason is cost, measured: one tool-free `omp` call takes 2.83s wall
+against 1.10s of model time and adds about 2,900 tokens of the CLI's own scaffolding, on a run that makes 25 to 60
+calls. An installation with only oh-my-pi still works. Reasoning:
+[ADR 0025](adrs/0025-oh-my-pi-is-the-last-host.md).
 
 ## One run, every host you are signed in to
 

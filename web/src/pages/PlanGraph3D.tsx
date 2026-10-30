@@ -36,13 +36,18 @@ export default function PlanGraph3D(props: {
   fresh?: ReadonlySet<string>;
   selectedId?: string | null;
   onSelect: (id: string) => void;
+  /** True when the scene fills a dialog: more room, so the camera backs off. */
+  expanded?: boolean;
 }): React.ReactElement {
-  const { graph, fresh, selectedId, onSelect } = props;
+  const { graph, fresh, selectedId, onSelect, expanded } = props;
   const mountRef = useRef<HTMLDivElement | null>(null);
   // The click handler changes on every render; the scene is built once. A ref
   // keeps the listener stable while still calling the current handler.
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
+  const selected = selectedId === null || selectedId === undefined
+    ? null
+    : graph.nodes.find((n) => n.id === selectedId) ?? null;
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -50,7 +55,9 @@ export default function PlanGraph3D(props: {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
-    camera.position.set(0, 14, 26);
+    // A dialog gives the plan room to breathe, so the camera starts further
+    // back and shows the whole graph instead of the front cluster.
+    camera.position.set(0, expanded === true ? 20 : 14, expanded === true ? 38 : 26);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -165,7 +172,22 @@ export default function PlanGraph3D(props: {
       for (const material of materials.values()) material.dispose();
       mount.removeChild(renderer.domElement);
     };
-  }, [graph, fresh, selectedId]);
+  }, [graph, fresh, selectedId, expanded]);
 
-  return <div className="pf-plangraph3d" ref={mountRef} role="img" aria-label="Plan graph in three dimensions" />;
+  return (
+    <div className="pf-plangraph3d-wrap" data-expanded={expanded === true ? "yes" : undefined}>
+      <div className="pf-plangraph3d" ref={mountRef} role="img" aria-label="Plan graph in three dimensions" />
+      {selected !== null && (
+        <aside className="pf-plangraph3d-detail" aria-label={`Details for ${selected.label}`}>
+          <span className="pf-plandocs-kind">{selected.kind}</span>
+          <h3 className="pf-plangraph3d-title">{selected.label}</h3>
+          {selected.severity !== undefined && (
+            <p className="pf-plandocs-detail-severity">{selected.severity} finding</p>
+          )}
+          {selected.detail !== "" && <p className="pf-plangraph3d-text">{selected.detail}</p>}
+          <p className="pf-caption pf-mono">{selected.id}</p>
+        </aside>
+      )}
+    </div>
+  );
 }

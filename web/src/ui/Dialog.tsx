@@ -33,9 +33,10 @@ export interface DialogProps {
   /**
    * `md`/`doc`/`wide` centre the panel; `drawer` docks it to the right edge at
    * half the viewport, for a panel that stays open beside the workspace; `full`
-   * fills the viewport, for a diagram that needs the room.
+   * fills the viewport, for a diagram that needs the room; `settings` is the
+   * large centred panel the Setup view uses, tall enough for every section.
    */
-  size?: "md" | "doc" | "wide" | "drawer" | "full";
+  size?: "md" | "doc" | "wide" | "drawer" | "full" | "settings";
   children: React.ReactNode;
 }
 

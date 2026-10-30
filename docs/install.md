@@ -8,12 +8,12 @@ Version notes live in [CHANGELOG.md](../CHANGELOG.md). This page describes the c
 | :--- | :--- |
 | Git | Plan Forge grounds on a repository. Non-Git folders work with reduced status features. |
 | A browser | The UI opens as a tab in your default browser, through the platform URL opener. Set `browser_path` to send it somewhere else. |
-| Claude Code or OMP, signed in | Avatar generation runs through these CLIs. |
-| Antigravity (optional) | Hosts `/plan-forge` and `/plan-config` as skills. With only Antigravity installed, avatar generation reports that Claude Code or OMP is required. |
+| Claude Code or Antigravity (OMP only as a fallback) | Generation runs through Claude Code, the Google Gemini key, or Antigravity. Oh-my-pi serves only when none of them is present; each of its calls carries the CLI's own scaffolding. |
+| Antigravity (optional) | Hosts `/plan-forge` and `/plan-config` as skills. |
 | Poppler and Tesseract (optional) | Only needed to read scanned PDFs. Text from born-digital PDFs needs nothing extra. |
 
-Plan Forge never asks for or stores provider API keys. It uses the credentials and configuration your host agent already
-has.
+Plan Forge stores API keys in `~/.plan-forge/credentials.json` with mode `0600`, never in `config.json`.
+`plan-forge uninstall --purge` deletes that file along with the rest of the state.
 
 ## One command
 
@@ -35,16 +35,26 @@ start-up. If the install directory is not on your `PATH`, the installer prints t
 The one-command install fetches the latest published release. [Build from source](#build-from-source) is the path for
 unreleased changes.
 
+### A reinstall starts from defaults
+
+On macOS and Linux the installer runs `plan-forge uninstall --purge --yes` before it registers anything. That deletes
+`config.json`, the relay token, the approvals file, the sessions and the cache, so an installation that had pinned
+`main_host`, shortened a timeout or enabled a host does not carry those settings into the new release.
+
+`credentials.json` is copied aside first and restored afterwards: the keys are what make the Gemini and Claude hosts
+work, and asking for them again is not a default value.
+
 ## What gets installed
 
 The installer verifies the release checksum, places the binary, then runs `plan-forge install --host auto`, which detects
-installed agents and writes the skills, commands and hooks:
+installed agents and writes the skills, commands and hooks. `auto` selects Claude Code and Antigravity when they are
+present, and oh-my-pi only when neither is.
 
 | Host | Installed files | Slash commands |
 | :--- | :--- | :--- |
 | Claude Code | `~/.claude/skills/plan-forge/SKILL.md` and `~/.claude/skills/plan-config/SKILL.md` | `/plan-forge`, `/plan-config` |
-| OMP | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge`. No skill files | `/plan-forge`, `/plan-config` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
+| OMP (fallback only) | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge`. No skill files | `/plan-forge`, `/plan-config` |
 
 **OMP installs no skills.** oh-my-pi reaches Plan Forge through built-in commands only: the hook registers `/plan-forge`
 with `pi.registerCommand`, and `/plan-config` is `~/.omp/agent/commands/plan-config.md`. Because no `SKILL.md` is

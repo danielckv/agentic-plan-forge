@@ -44,6 +44,10 @@ func TestCapabilitiesNeverReportsANullList(t *testing.T) {
 // here rather than trusting whatever the machine happens to have.
 func TestCapabilitiesNeverReportsANullListWithNoHostsInstalled(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
+	// PATH covers the CLI hosts; the API hosts answer from credentials.json,
+	// so the home must be empty too. Without this the test passed on CI and
+	// failed on any machine that had ever set a provider key.
+	t.Setenv("PLAN_FORGE_HOME", t.TempDir())
 	view := Capabilities(context.Background(), config.Config{}, t.TempDir(), "test")
 	if view.Hosts == nil || view.Tools == nil || view.Skills == nil || view.Hooks == nil || view.Pinned == nil || view.CLIs == nil {
 		t.Fatalf("a list is nil with no hosts installed: %+v", view)

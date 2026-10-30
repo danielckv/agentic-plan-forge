@@ -179,17 +179,23 @@ The four avatars sit across the top with what each is doing now. Click one to sh
 - **Discussion.** Every status, draft, critic finding and decision in the order it happened. Decisions the avatars cannot
   make wait at the top as A/B cards; synthesis waits until you choose.
 - **Plan.** The plan as a clustered node graph: epics, the stories under them and the architect's workstreams, drawn
-  as a tree you can orbit with the mouse and zoom with the wheel. Click a node to select it. A node carrying a critic
-  finding is coloured by the worst severity against it, so the trouble is visible in the shape of the work rather than
-  only in a list. This one view replaces the separate Epics and Architecture tabs, which showed the same plan at two
-  depths.
+  as a tree you can orbit with the mouse and zoom with the wheel. Click a node to show its kind, title, summary and
+  worst finding beside the scene. A node carrying a critic finding is coloured by the worst severity against it, so the
+  trouble is visible in the shape of the work rather than only in a list. This one view replaces the separate Epics and
+  Architecture tabs, which showed the same plan at two depths.
 
   Nodes appear as the avatars draft. Each new node arrives larger and pulsing for a few seconds, so the plan visibly
   grows while the run works. Nothing new is sent over the wire to do this: a draft carries the whole document and
   replaces the one before it, so growth is the difference between one draft and the next.
 
-  A browser without WebGL — or a locked-down one, or a machine out of GPU contexts — gets the same plan as a nested
-  list. It is the same data, so the two views cannot disagree about what the plan contains.
+  A browser without WebGL — or a locked-down one, or a machine out of GPU contexts — gets the same plan as a stack of
+  documents. Each node is a card with its kind, title and summary, with a left rule coloured by kind. A card expands
+  and collapses to its children, and selecting one shows its id, parent, child count, worst finding and full summary
+  beside the list. It is the same data, so the two views cannot disagree about what the plan contains.
+
+  Either view opens full screen: **Expand** in the plan pane's own bar puts the same graph in a dialog that fills the
+  viewport. The rail is 420px wide and a plan is a thing you read, so the rail and the dialog use one renderer rather
+  than two.
 
 - **Findings** by severity, and **Usage**: how many calls each generation host served, the tokens it reported and how
   long it took, per host and per avatar.
@@ -315,7 +321,8 @@ the order of work is stated there rather than left implicit in a flat task list.
 
 The sliders button in the top bar opens **Setup**: the API providers and whether each holds a key, every
 generation host with whether it can actually serve a call, the external tools each feature needs, the
-skills installed into each agent, and the managed hooks.
+skills installed into each agent, and the managed hooks. It opens as a large centred panel — nearly the whole
+viewport — because every section is multi-row and a 520px card put most of them below the fold.
 
 **API providers** come first, because a key is the quickest way to a working installation and the
 fastest way to run a plan. Paste a key for Anthropic, OpenAI or Fireworks and that provider serves the
@@ -327,7 +334,9 @@ and why there is no subscription sign-in.
 The distinction worth knowing is **signed in** versus **serving**. A host can be installed,
 authenticated and still unable to take a call — Antigravity is exactly this case. Setup shows the
 host's own refusal text, and says so explicitly when a configured `main_host` or `judge_host` is being
-ignored because of it. The same facts are on the terminal in `plan-forge doctor`.
+ignored because of it. The same facts are on the terminal in `plan-forge doctor`. Oh-my-pi is listed as
+what it is: a fallback host. Claude Code, the Gemini key and agy outrank it for every role, and a
+`main_host: omp` pin does not override that ([ADR 0025](adrs/0025-oh-my-pi-is-the-last-host.md)).
 
 On first use, Setup also lists the coding agents it found installed: Claude Code, oh-my-pi, agy, Codex,
 pi, OpenCode, Gemini and Cursor Agent. Presence is not capability. A tool Plan Forge has no adapter for

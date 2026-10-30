@@ -139,6 +139,31 @@ if [ "${PLAN_FORGE_NO_SKILLS:-}" = "1" ]; then
     exit 0
 fi
 
+# A reinstall starts from defaults. An installation that kept the previous
+# config.json would inherit whatever host or timeout the last run had, and the
+# owner asking for a reinstall means "as if for the first time". The purge
+# removes config.json, the relay token and the cache; the API keys are copied
+# aside first, because they are what makes the gemini and claude hosts work and
+# asking for them again is not "default values".
+set +e
+home_dir=${PLAN_FORGE_HOME:-"$HOME/.plan-forge"}
+creds_backup=""
+if [ -f "$home_dir/credentials.json" ]; then
+    creds_backup="$tmpdir/credentials.json"
+    cp "$home_dir/credentials.json" "$creds_backup" 2>/dev/null || creds_backup=""
+fi
+"$install_dir/plan-forge" uninstall --purge --yes >/dev/null 2>&1
+purged=$?
+if [ -n "$creds_backup" ] && [ -f "$creds_backup" ]; then
+    mkdir -p "$home_dir" 2>/dev/null || true
+    cp "$creds_backup" "$home_dir/credentials.json" 2>/dev/null || true
+    chmod 600 "$home_dir/credentials.json" 2>/dev/null || true
+fi
+set -e
+if [ "$purged" -ne 0 ] && [ "$purged" -ne 3 ]; then
+    printf 'warning: could not clear previous Plan Forge state (exit %s); continuing with a fresh config\n' "$purged" >&2
+fi
+
 set +e
 "$install_dir/plan-forge" install --host auto --scope user --yes
 code=$?
@@ -146,7 +171,7 @@ set -e
 case $code in
     0) ;;
     3)
-        printf 'plan-forge is installed, but no supported agent (Claude Code, OMP, Antigravity) was found. Install one, then run: %s/plan-forge install\n' "$install_dir"
+        printf 'plan-forge is installed, but no supported agent (Claude Code, Antigravity, OMP) was found. Install one, then run: %s/plan-forge install\n' "$install_dir"
         exit 3
         ;;
     *)

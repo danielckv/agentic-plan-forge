@@ -1,8 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Maximize2 } from "lucide-react";
 
 import { buildPlanGraph, newNodeIds } from "../ui/planGraph";
 import type { PlanGraph } from "../ui/planGraph";
 import { hasWebGL } from "../ui/webgl";
+import { Dialog } from "../ui/Dialog";
 import { PlanTree } from "./PlanTree";
 import type { ArchitectDraft, PMDraft } from "../protocol/drafts";
 import type { CritiqueIssue } from "../store/syncStore";
@@ -23,7 +25,8 @@ const FRESH_MS = 6000;
  *
  * Both render from the same `PlanGraph`, so they can never disagree about what
  * the plan contains — the fallback is a different presentation, not a reduced
- * one.
+ * one. Either way the view can be opened full screen: the rail is too narrow
+ * to read a plan in, which is what the expand control is for.
  */
 export function PlanGraphView(props: {
   pm: PMDraft | null;
@@ -35,26 +38,61 @@ export function PlanGraphView(props: {
   const { pm, architect, critiques, selectedId, onSelect } = props;
   const graph = useMemo(() => buildPlanGraph(pm, architect, critiques), [pm, architect, critiques]);
   const fresh = useFreshNodes(graph);
+  const [expanded, setExpanded] = useState(false);
 
   // Decided once per mount. The answer cannot change while the view is open,
   // and probing creates a real context.
   const [webgl] = useState(() => hasWebGL());
 
-  if (!webgl) {
+  const render = (full: boolean): React.ReactElement => {
+    if (!webgl) {
+      return <PlanTree graph={graph} fresh={fresh} selectedId={selectedId} onSelect={onSelect} />;
+    }
     return (
-      <div className="pf-plangraph">
-        <p className="pf-caption">
-          This browser has no WebGL, so the plan is shown as a tree. It carries the same nodes.
-        </p>
-        <PlanTree graph={graph} fresh={fresh} selectedId={selectedId} onSelect={onSelect} />
-      </div>
+      <Suspense fallback={<PlanTree graph={graph} fresh={fresh} selectedId={selectedId} onSelect={onSelect} />}>
+        <PlanGraph3D
+          graph={graph}
+          fresh={fresh}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          expanded={full}
+        />
+      </Suspense>
     );
-  }
+  };
+
   return (
     <div className="pf-plangraph">
-      <Suspense fallback={<PlanTree graph={graph} fresh={fresh} selectedId={selectedId} onSelect={onSelect} />}>
-        <PlanGraph3D graph={graph} fresh={fresh} selectedId={selectedId} onSelect={onSelect} />
-      </Suspense>
+      <div className="pf-plangraph-bar">
+        {!webgl && (
+          <p className="pf-caption">
+            This browser has no WebGL, so the plan is shown as a list of documents. It carries the same nodes.
+          </p>
+        )}
+        <button
+          type="button"
+          className="pf-btn pf-btn-ghost pf-btn-sm pf-plangraph-expand"
+          aria-label="Open the plan full screen"
+          title="Open the plan full screen"
+          onClick={() => setExpanded(true)}
+        >
+          <Maximize2 size={13} /> Expand
+        </button>
+      </div>
+      {render(false)}
+      <Dialog
+        open={expanded}
+        onClose={() => setExpanded(false)}
+        title="Plan"
+        description={
+          webgl
+            ? "Drag to orbit, scroll to zoom, click a node for its details."
+            : "Select a document to read its details."
+        }
+        size="full"
+      >
+        <div className="pf-plangraph pf-plangraph--full">{render(true)}</div>
+      </Dialog>
     </div>
   );
 }
