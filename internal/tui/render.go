@@ -256,6 +256,7 @@ func writeHelp(b *strings.Builder, cols int) {
 	b.WriteString(section(cols, "Keys"))
 	for _, k := range [][2]string{
 		{"1 – 5", "brief, agents, plan, questions, settings"},
+		{"1 – 9", "on the questions pane: answer the selected question"},
 		{"Tab / Shift-Tab", "next / previous pane"},
 		{"↑ / ↓", "move the selection"},
 		{"Enter", "act on the selection (answer a question, open a row)"},

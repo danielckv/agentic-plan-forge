@@ -374,7 +374,8 @@ Five panes, one key each: **1** brief, **2** agents, **3** plan, **4** questions
 move between them, the arrows move a selection, `Enter` acts on it, and `?` shows every key. The agents pane lists each
 avatar with its status, cycle and the host and model serving it, and marks a temporary agent so a run-scoped one is
 never mistaken for the fixed team. The questions pane is the terminal equivalent of the drawer: the same options, with
-the recommended one marked — a hint, never an answer — and `1`–`9` to answer.
+the recommended one marked — a hint, never an answer. On that pane `1`–`9` answer the selected question; everywhere else
+those digits select a pane.
 
 Progress is always a list, never an attempted 3D scene: a terminal is the worst place to pretend otherwise, and the
 plan asks for a state-equivalent view. Closing the terminal does not cancel the run; quitting the shell ends the
