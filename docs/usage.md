@@ -178,13 +178,25 @@ The four avatars sit across the top with what each is doing now. Click one to sh
 
 - **Discussion.** Every status, draft, critic finding and decision in the order it happened. Decisions the avatars cannot
   make wait at the top as A/B cards; synthesis waits until you choose.
-- **Plan taking shape.** The Product Manager's epics as files, the architect's diagram and workstreams, the critic's
-  findings by severity, and **Usage**: how many calls each generation host served, the tokens it reported and how long
-  it took, per host and per avatar.
+- **Plan.** The plan as a clustered node graph: epics, the stories under them and the architect's workstreams, drawn
+  as a tree you can orbit with the mouse and zoom with the wheel. Click a node to select it. A node carrying a critic
+  finding is coloured by the worst severity against it, so the trouble is visible in the shape of the work rather than
+  only in a list. This one view replaces the separate Epics and Architecture tabs, which showed the same plan at two
+  depths.
+
+  Nodes appear as the avatars draft. Each new node arrives larger and pulsing for a few seconds, so the plan visibly
+  grows while the run works. Nothing new is sent over the wire to do this: a draft carries the whole document and
+  replaces the one before it, so growth is the difference between one draft and the next.
+
+  A browser without WebGL — or a locked-down one, or a machine out of GPU contexts — gets the same plan as a nested
+  list. It is the same data, so the two views cannot disagree about what the plan contains.
+
+- **Findings** by severity, and **Usage**: how many calls each generation host served, the tokens it reported and how
+  long it took, per host and per avatar.
 
 **Synthesize Master Spec** unlocks once every avatar has finished the cycle, no CRITICAL or HIGH finding is open and no
-decision waits. A run that reaches the cycle limit with blocking findings pauses and offers to retry the architect or
-revise the requirements.
+decision waits. A run that reaches the cycle limit with blocking findings asks whether to record them on the plan and
+produce it anyway, or to pause and revise.
 
 **When a stage fails.** The room says which stage failed and offers **Retry stage** and **Revise baseline**. The avatars
 that never ran are marked cancelled rather than left waiting. Retrying re-runs only the failed stage: every draft that
