@@ -3004,7 +3004,7 @@ figure > .pf-diagram-source { border-top: none; }
   justify-content: center;
   gap: 5px;
   /* Five tabs share the rail's width: each takes an equal share and keeps its
-     label whole, because a truncated tab is a guess at which panel it opens. */
+   * label whole, because a truncated tab is a guess at which panel it opens. */
   min-width: 0;
   flex: 1 1 0;
   padding: 0 6px;
@@ -3858,7 +3858,7 @@ figure > .pf-diagram-source { border-top: none; }
   display: grid;
   flex: 1;
   /* The rail carries five tabs and a plan; 420px wrapped them into two
-     rows and truncated every label, so it gets a third of a wide viewport. */
+   * rows and truncated every label, so it gets a third of a wide viewport. */
   grid-template-columns: minmax(0, 1fr) minmax(420px, 34%);
   gap: 16px;
   min-height: 0;
