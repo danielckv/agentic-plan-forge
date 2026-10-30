@@ -33,6 +33,7 @@ decisions they contained live here.
 | [0022](0022-api-providers-join-the-cli-hosts.md) | API providers join the CLI hosts, authenticated by API key | accepted |
 | [0023](0023-a-run-always-produces-a-plan.md) | A run always produces a plan, and says what is still open | accepted |
 | [0024](0024-temporary-gap-agents-and-embedded-stage-schemas.md) | Temporary gap agents behind a server-side admission gate, and an embedded schema on every stage | accepted |
+| [0025](0025-oh-my-pi-is-the-last-host.md) | Oh-my-pi is the last host, not the default | accepted |
 
 [0017](0017-prepared-vm-from-recorded-scripts.md) still reads **proposed** although the prepared-VM
 work shipped in PR #24. Its status is left as its author wrote it: moving a decision to accepted is

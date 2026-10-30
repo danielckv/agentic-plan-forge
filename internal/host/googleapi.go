@@ -52,16 +52,23 @@ const (
 
 // geminiModelPreference lists the model ids planning wants, most wanted
 // first. As with the other API hosts this is a hint resolved against the
-// live model list, never a catalogue baked in at release time.
+// live model list, never a catalogue baked in at release time: measured
+// 2026-10-31 the API served gemini-3-flash-preview and gemini-3.1-pro-preview,
+// and retired the bare gemini-3-* ids, so every entry here is a prefix match
+// against what the provider actually lists.
 var geminiModelPreference = []string{
-	"gemini-4-argon",
-	"gemini-3-pro",
-	"gemini-3-flash",
+	"gemini-3.1-pro-preview",
+	"gemini-3-pro-preview",
+	"gemini-3-flash-preview",
+	"gemini-2.5-pro",
+	"gemini-2.5-flash",
+	"gemini-flash-latest",
+	"gemini-pro-latest",
 }
 
 // geminiDefaultModel is the last-resort id used only when the model list
 // cannot be read at all.
-const geminiDefaultModel = "gemini-3-flash"
+const geminiDefaultModel = "gemini-3-flash-preview"
 
 // antigravityUnavailable is the reason recorded when the isolation gate has
 // not passed. The gate lives in the run checkpoint, not here: the adapter
@@ -198,6 +205,22 @@ func (a *Gemini) listModels(ctx context.Context) ([]string, error) {
 	return ids, nil
 }
 
+// geminiTextModel reports whether a served id is a Gemini text model that can
+// answer a planning call. The list also carries managed agents (antigravity),
+// question answering, deep research, image and TTS variants, none of which
+// accept a plan schema.
+func geminiTextModel(id string) bool {
+	if !strings.HasPrefix(id, "gemini-") {
+		return false
+	}
+	for _, suffix := range []string{"-image", "-tts", "-audio", "-embedding"} {
+		if strings.HasSuffix(id, suffix) || strings.Contains(id, suffix+"-") {
+			return false
+		}
+	}
+	return true
+}
+
 // model resolves which model this call uses. An explicit choice wins;
 // otherwise the first served preference is taken and remembered for the
 // process, so placement stays stable within a run.
@@ -217,12 +240,27 @@ func (a *Gemini) model(ctx context.Context, req contracts.GenerateRequest) strin
 		for _, id := range ids {
 			served[id] = true
 		}
-		chosen = ids[0]
+		chosen = ""
 		for _, want := range geminiModelPreference {
 			if served[want] {
 				chosen = want
 				break
 			}
+		}
+		// Nothing in the preference list is served: take the first listed
+		// gemini text model rather than ids[0]. The list is alphabetical and
+		// also carries antigravity, aqa, deep-research and image/tts models,
+		// so ids[0] is a managed agent, not a model that answers this call.
+		if chosen == "" {
+			for _, id := range ids {
+				if geminiTextModel(id) {
+					chosen = id
+					break
+				}
+			}
+		}
+		if chosen == "" {
+			chosen = geminiDefaultModel
 		}
 	}
 	a.mu.Lock()
@@ -253,29 +291,38 @@ func (a *Gemini) Generate(
 	endpoint := a.base() + "/models/" + model + ":streamGenerateContent?alt=sse"
 	result.Receipt.Argv = apiReceiptArgs(endpoint, model)
 
-	body := a.requestBody(req, true)
+	body := a.requestBody(req, geminiWire{Schema: true, Thinking: true})
 	text, usage, err := a.stream(callCtx, endpoint, key, body, req, emit)
+	if err != nil && geminiTerseRefusal(err) {
+		// The API does not say which field it refused, so the retry drops
+		// both optional ones. The prompt already states the reply shape, and
+		// the host validates the reply afterwards, so a call without the
+		// schema constraint still produces a plan.
+		text, usage, err = a.stream(callCtx, endpoint, key, a.requestBody(req, geminiWire{}), req, emit)
+	}
 	if err != nil {
-		// A refused schema costs one retry, not the stage.
-		if schemaRejectionText(err) {
-			text, usage, err = a.stream(callCtx, endpoint, key, a.requestBody(req, false), req, emit)
-		}
-		if err != nil {
-			result.Usage = usage
-			return result, apiFailure(KindGemini, "generate", err)
-		}
+		result.Usage = usage
+		return result, apiFailure(KindGemini, "generate", err)
 	}
 	return finalizeGeneration(req, text, result.Receipt, usage, emit)
 }
 
-// requestBody builds one Gemini request. withSchema is false on the retry
-// that follows a schema rejection.
+// geminiWire says which optional parts of a Gemini request to send. Both are
+// dropped on the single retry that follows a terse 400, because the API names
+// no field: a schema it cannot serve and a thinkingConfig it does not support
+// both arrive as the same "Request contains an invalid argument".
+type geminiWire struct {
+	Schema   bool
+	Thinking bool
+}
+
+// requestBody builds one Gemini request.
 //
 // Thinking: an explicit effort parameter is the reason direct calls are the
 // default PRD path. The API takes thinkingConfig.thinkingBudget; medium maps
 // to a bounded budget rather than "unbounded", so deliberation stays
-// predictable. A runtime that rejects the field costs one retry without it.
-func (a *Gemini) requestBody(req contracts.GenerateRequest, withSchema bool) map[string]any {
+// predictable.
+func (a *Gemini) requestBody(req contracts.GenerateRequest, wire geminiWire) map[string]any {
 	body := map[string]any{
 		"systemInstruction": map[string]any{
 			"parts": []map[string]any{{"text": req.SystemPrompt}},
@@ -288,17 +335,15 @@ func (a *Gemini) requestBody(req contracts.GenerateRequest, withSchema bool) map
 			"maxOutputTokens": apiMaxTokens,
 		},
 	}
-	if req.Effort == contracts.EffortMedium {
-		body["generationConfig"].(map[string]any)["thinkingConfig"] = map[string]any{
-			"thinkingBudget": geminiMediumThinkingBudget,
+	cfg := body["generationConfig"].(map[string]any)
+	if wire.Thinking && req.Effort == contracts.EffortMedium {
+		cfg["thinkingConfig"] = map[string]any{"thinkingBudget": geminiMediumThinkingBudget}
+	}
+	if wire.Schema {
+		if schema := geminiSchema(outputSchemaMap(req)); schema != nil {
+			cfg["responseMimeType"] = "application/json"
+			cfg["responseJsonSchema"] = schema
 		}
-	}
-	if !withSchema {
-		return body
-	}
-	if schema := outputSchemaMap(req); schema != nil {
-		body["generationConfig"].(map[string]any)["responseMimeType"] = "application/json"
-		body["generationConfig"].(map[string]any)["responseJsonSchema"] = schema
 	}
 	return body
 }
@@ -306,6 +351,80 @@ func (a *Gemini) requestBody(req contracts.GenerateRequest, withSchema bool) map
 // geminiMediumThinkingBudget bounds thinking for a medium-effort call. The
 // API takes tokens, not levels; this is the bounded, predictable form.
 const geminiMediumThinkingBudget = 12288
+
+// geminiSchema prepares a decoded plan schema for the Gemini API.
+//
+// `responseJsonSchema` is documented to accept JSON Schema, but two things
+// break on it, both verified against the live API on 2026-10-31:
+//
+//  1. maxItems is unusable. The API answers a bare "400 ... Request contains
+//     an invalid argument" and names no field. One array with maxItems 447 is
+//     accepted and 448 refused, two arrays of 400 refused and four of 100
+//     accepted, and the same schema with every maxItems removed is accepted —
+//     so the ceiling is cumulative and undocumented. Dropping it loses only a
+//     length hint: maxOutputTokens bounds the reply on the wire, and the reply
+//     is validated against the original embedded schema afterwards.
+//  2. `const` is not among the keywords the API honours (supported: $id,
+//     $defs, $ref, $anchor, type, format, title, description, enum, items,
+//     prefixItems, minItems, maxItems, minimum, maximum, anyOf, oneOf,
+//     properties, additionalProperties, required). It is silently ignored:
+//     `schema_version: {const: 1}` produced a reply with a different value.
+//     The single-value enum is the equivalent the API does enforce.
+//
+// `$schema` is a draft marker the API does not read.
+func geminiSchema(raw map[string]any) map[string]any {
+	if raw == nil {
+		return nil
+	}
+	delete(raw, "$schema")
+	dropKey(raw, "maxItems")
+	constToEnum(raw)
+	return raw
+}
+
+// constToEnum rewrites every `const: v` as `enum: [v]`, which the API honours.
+func constToEnum(node any) {
+	switch v := node.(type) {
+	case map[string]any:
+		if fixed, ok := v["const"]; ok {
+			delete(v, "const")
+			v["enum"] = []any{fixed}
+		}
+		for _, child := range v {
+			constToEnum(child)
+		}
+	case []any:
+		for _, child := range v {
+			constToEnum(child)
+		}
+	}
+}
+
+// dropKey removes a keyword everywhere in a decoded schema.
+func dropKey(node any, key string) {
+	switch v := node.(type) {
+	case map[string]any:
+		delete(v, key)
+		for _, child := range v {
+			dropKey(child, key)
+		}
+	case []any:
+		for _, child := range v {
+			dropKey(child, key)
+		}
+	}
+}
+
+// geminiTerseRefusal reports whether a call failed in the way a retry without
+// the optional request fields can cure. The message is the same for every
+// rejected field, so the retry drops both.
+func geminiTerseRefusal(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "400") && strings.Contains(message, "invalid argument")
+}
 
 // stream issues the request and assembles the SSE reply.
 func (a *Gemini) stream(

@@ -34,7 +34,7 @@ export function CapabilitiesDialog(props: {
       onClose={onClose}
       title="Setup"
       description={capabilitySummary(view)}
-      size="wide"
+      size="settings"
     >
       <div className="pf-cap">
         {(view?.pinned ?? []).map((pin) => (

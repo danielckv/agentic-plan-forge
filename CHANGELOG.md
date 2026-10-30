@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Gemini normalization failed on every section with `400 ... Request contains an invalid argument`. The API refused the
+  whole schema without naming a field: `maxItems` is unusable there (447 accepted, 448 refused, the ceiling shared across
+  the schema, and `normalized_prd.v1` declares twelve bounded arrays), and `const` was silently ignored rather than
+  enforced, so `schema_version` came back wrong. The adapter now drops `maxItems`, rewrites `const` as the single-value
+  `enum`, and retries once without `thinkingConfig` when a 400 names no field. Verified end to end against the live API:
+  a normalize call now returns an object that satisfies `normalized_prd.v1`.
+- The Gemini model is chosen from the provider's live list. The shipped preference named `gemini-3-pro` and
+  `gemini-3-flash`, which the API has retired, and the fallback took the alphabetically first entry — a managed-agent id
+  — so a call could be sent to a model that does not answer it.
+- `capabilities_test` reported anthropic and gemini as found on an empty `PATH`: the API hosts answer from
+  `credentials.json`, so the test needed an emptied `PLAN_FORGE_HOME` too. The credential cache is now keyed by home, so a
+  process re-pointed at another home cannot read the previous one's keys.
+
+### Changed
+
+- Oh-my-pi is the last host. Claude Code, the Gemini/Google credential and `agy` outrank it for every role, and a
+  `main_host: omp` pin no longer survives them: the pin keeps the preference, the rule decides what may serve. An
+  installation with only oh-my-pi still works. Reasoning: ADR 0025.
+- Installing over an existing copy starts from defaults on macOS and Linux: `uninstall --purge --yes` runs before
+  registration, so a previous `main_host`, timeout or host choice does not survive. `credentials.json` is preserved.
+- `plan-forge install --host auto` selects Claude Code and Antigravity, and oh-my-pi only when neither is present.
+- The Setup dialog opens as a large centred panel instead of a 520px card, and the plan rail is a third of a wide
+  viewport instead of a fixed 420px, with its five tabs sharing the width instead of truncating.
+
+### Added
+
+- The plan opens full screen, from either rendering: an Expand control in the plan rail's own bar opens the same graph in
+  a dialog that fills the viewport. Clicking a node in the 3D view shows its kind, title, summary and worst finding
+  beside the scene.
+- The 2D plan renders each node as a document card — kind, title and summary, with a left rule coloured by kind — rather
+  than a row in a tree. Cards expand and collapse, and selecting one shows its id, parent, child count, worst finding and
+  full summary beside the list.
+
 ## [0.9.0] - 2026-10-29
 
 ### Added

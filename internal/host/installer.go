@@ -141,24 +141,33 @@ func NewInstaller(version string) (*Installer, error) {
 // Bin returns the substituted {{PLAN_FORGE_BIN}} value.
 func (in *Installer) Bin() string { return in.bin }
 
-// selectedHosts maps the --host flag to concrete kinds. auto selects every
-// host whose binary is found or (for agy) whose config directories exist.
+// selectedHosts maps the --host flag to concrete kinds. auto selects the
+// skill hosts found on this machine, in the order the owner wants them to
+// outrank each other.
+//
+// Claude Code and Antigravity are the supported skill hosts, and the hosts
+// generation runs on. Oh-my-pi is a fallback: it is selected only when neither
+// of the other two is present, because its calls carry the CLI's own
+// scaffolding and it is not the default.
 func (in *Installer) selectedHosts(ctx context.Context, flag string) ([]string, error) {
 	switch flag {
 	case "claude", "omp", "agy":
 		return []string{flag}, nil
 	case "all":
-		return []string{string(KindClaude), string(KindOMP), string(KindAGY)}, nil
+		return []string{string(KindClaude), string(KindAGY), string(KindOMP)}, nil
 	case "auto":
 		var found []string
-		for _, kind := range []string{string(KindClaude), string(KindOMP), string(KindAGY)} {
+		for _, kind := range []string{string(KindClaude), string(KindAGY)} {
 			if in.hostPresent(ctx, kind) {
 				found = append(found, kind)
 			}
 		}
+		if len(found) == 0 && in.hostPresent(ctx, string(KindOMP)) {
+			found = append(found, string(KindOMP))
+		}
 		return found, nil
 	default:
-		return nil, fmt.Errorf("unknown host %q (supported: auto, claude, omp, agy, all)", flag)
+		return nil, fmt.Errorf("unknown host %q (supported: auto, claude, agy, omp, all)", flag)
 	}
 }
 
@@ -1707,7 +1716,16 @@ func attachNotes(reports []HostReport, lines []string) {
 }
 
 // homeDir resolves the user's home directory for host roots.
+//
+// $HOME wins when it is set. os.UserHomeDir reads the passwd entry on some
+// platforms, which would reach outside a sandbox: a test, a container or a
+// PLAN_FORGE_HOME-scoped run must see the home it was given, not the
+// machine's. Host agents themselves honour $HOME, so using it here keeps the
+// two in agreement.
 func homeDir() (string, error) {
+	if home, ok := os.LookupEnv("HOME"); ok && home != "" {
+		return home, nil
+	}
 	return os.UserHomeDir()
 }
 

@@ -1530,6 +1530,18 @@ body {
 }
 
 /*
+ * Setup: the widest centred panel that still reads as a dialog. Every section
+ * is multi-column (hosts, tools, skills, hooks, limits), so a 520px card put
+ * most of the content below the fold; this uses 92% of the viewport width and
+ * 90% of its height instead, and stays centred.
+ */
+.pf-dialog[data-size="settings"] {
+  width: min(1100px, calc(100vw - 48px));
+  height: min(calc(100vh - 48px), 1100px);
+  max-height: calc(100vh - 48px);
+}
+
+/*
  * The graph overlay: as large as the viewport allows, because the point of it
  * is reading a diagram. It keeps a small inset so the panel still reads as a
  * dialog rather than a new page.
@@ -2989,11 +3001,13 @@ figure > .pf-diagram-source { border-top: none; }
 .pf-rail-tab {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  /* Four tabs share the rail's width, so each gives up what it can rather than pushing the last one off the edge. */
+  /* Five tabs share the rail's width: each takes an equal share and keeps its
+     label whole, because a truncated tab is a guess at which panel it opens. */
   min-width: 0;
-  flex: 0 1 auto;
-  padding: 0 7px;
+  flex: 1 1 0;
+  padding: 0 6px;
   overflow: hidden;
   border: none;
   border-bottom: 2px solid transparent;
@@ -3003,7 +3017,6 @@ figure > .pf-diagram-source { border-top: none; }
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  text-overflow: ellipsis;
   cursor: pointer;
 }
 
@@ -3844,7 +3857,9 @@ figure > .pf-diagram-source { border-top: none; }
 .pf-room-grid {
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr) 420px;
+  /* The rail carries five tabs and a plan; 420px wrapped them into two
+     rows and truncated every label, so it gets a third of a wide viewport. */
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 34%);
   gap: 16px;
   min-height: 0;
 }
@@ -4977,8 +4992,11 @@ figure > .pf-diagram-source { border-top: none; }
 }
 
 /*
- * The plan graph. The 3D canvas fills its rail; the tree is the same plan for
- * a browser without WebGL, so both are styled to read as one view.
+ * The plan graph. The 3D canvas fills its rail; the document stack is the same
+ * plan for a browser without WebGL, so both are styled to read as one view.
+ *
+ * The rail is narrow, so the view carries its own expand control: a plan is a
+ * thing you read, and 420px is not enough to read one in.
  */
 .pf-plangraph {
   display: flex;
@@ -4986,6 +5004,41 @@ figure > .pf-diagram-source { border-top: none; }
   gap: 8px;
   min-height: 320px;
   height: 100%;
+}
+
+.pf-plangraph-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.pf-plangraph-bar > .pf-caption {
+  margin: 0;
+  font-size: 11px;
+}
+
+.pf-plangraph-expand {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* The full-screen dialog: the canvas and the document stack both fill it. */
+.pf-plangraph--full {
+  min-height: 0;
+  height: calc(100vh - 140px);
+}
+
+.pf-plangraph3d-wrap {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+}
+
+.pf-plangraph3d-wrap[data-expanded="yes"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
 }
 
 .pf-plangraph3d {
@@ -5000,25 +5053,142 @@ figure > .pf-diagram-source { border-top: none; }
   cursor: grabbing;
 }
 
-.pf-plantree,
-.pf-plantree ul {
+/* What a clicked node actually says, beside the scene. */
+.pf-plangraph3d-detail {
+  display: flex;
+  flex: 0 0 190px;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel);
+  overflow: auto;
+}
+
+.pf-plangraph3d-title {
   margin: 0;
-  padding: 0 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.pf-plangraph3d-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--pf-ink-2);
+  line-height: 1.45;
+}
+
+/* ---------- the plan as documents (the 2D view) ---------- */
+
+.pf-plandocs {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Wide enough for a detail pane once there is room for one. */
+@media (min-width: 720px) {
+  .pf-plandocs {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    align-content: start;
+  }
+}
+
+.pf-plandocs-list,
+.pf-plandocs-children {
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
-.pf-plantree-item {
-  position: relative;
+.pf-plandocs-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 6px 22px;
 }
 
-.pf-plantree-node {
+.pf-plandocs-list {
   display: flex;
-  gap: 6px;
-  align-items: baseline;
-  width: 100%;
-  padding: 3px 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-plandocs-item {
+  min-width: 0;
+}
+
+/*
+ * One node, drawn as a page: a card with its kind, title and summary. A
+ * circle answers nothing when the reader wants to know what a task says.
+ */
+.pf-plandocs-card {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid var(--pf-border);
+  border-left: 3px solid var(--pf-border);
+  border-radius: 8px;
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  overflow: hidden;
+}
+
+.pf-plandocs-card[data-kind="epic"] { border-left-color: var(--pf-epic); }
+.pf-plandocs-card[data-kind="story"] { border-left-color: var(--pf-ok); }
+.pf-plandocs-card[data-kind="workstream"] { border-left-color: var(--pf-warn); }
+.pf-plandocs-card[data-kind="task"] { border-left-color: var(--pf-accent); }
+
+.pf-plandocs-card[data-selected="yes"] {
+  border-color: var(--pf-accent);
+  border-left-color: var(--pf-accent);
+  box-shadow: 0 0 0 1px var(--pf-accent);
+}
+
+.pf-plandocs-card[data-fresh="yes"] .pf-plandocs-title {
+  color: var(--pf-accent);
+}
+
+.pf-plandocs-card[data-severity="CRITICAL"],
+.pf-plandocs-card[data-severity="HIGH"] {
+  border-left-color: var(--pf-danger);
+}
+
+.pf-plandocs-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pf-muted);
+  cursor: pointer;
+}
+
+.pf-plandocs-toggle:disabled {
+  cursor: default;
+}
+
+.pf-plandocs-spacer {
+  display: block;
+  width: 14px;
+}
+
+.pf-plandocs-open {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 9px 10px 9px 0;
+  border: none;
   background: none;
   color: inherit;
   font: inherit;
@@ -5026,41 +5196,109 @@ figure > .pf-diagram-source { border-top: none; }
   cursor: pointer;
 }
 
-.pf-plantree-node:hover {
-  background: var(--pf-surface-2);
+.pf-plandocs-open:hover .pf-plandocs-title {
+  text-decoration: underline;
 }
 
-.pf-plantree-node[data-selected="yes"] {
-  border-color: var(--pf-accent);
-}
-
-.pf-plantree-node[data-fresh="yes"] .pf-plantree-label {
-  color: var(--pf-accent);
-}
-
-.pf-plantree-kind {
+.pf-plandocs-icon {
   flex: none;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  margin-top: 2px;
   color: var(--pf-muted);
 }
 
-.pf-plantree-label {
+.pf-plandocs-body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.pf-plantree-severity {
+.pf-plandocs-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pf-muted);
+}
+
+.pf-plandocs-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pf-plandocs-summary {
+  font-size: 11px;
+  color: var(--pf-ink-2);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.pf-plandocs-severity {
   flex: none;
   display: inline-flex;
   gap: 3px;
   align-items: center;
   font-size: 10px;
   color: var(--pf-danger);
+}
+
+/* The selected document's content. */
+.pf-plandocs-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: start;
+  padding: 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: 10px;
+  background: var(--pf-panel-subtle);
+}
+
+.pf-plandocs-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pf-plandocs-detail-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pf-plandocs-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.pf-plandocs-facts dt {
+  color: var(--pf-muted);
+}
+
+.pf-plandocs-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pf-plandocs-detail-severity {
+  color: var(--pf-danger);
+  font-weight: 600;
+}
+
+.pf-plandocs-detail-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--pf-ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /*
