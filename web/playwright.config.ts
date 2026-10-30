@@ -14,7 +14,8 @@ import { defineConfig, devices } from "@playwright/test";
  * enforces the CSP and handshake there.
  */
 const PORT = 4173;
-const BASE_URL = process.env.PLAN_FORGE_UI_URL ?? `http://localhost:${PORT}`;
+const EXTERNAL_URL = process.env.PLAN_FORGE_UI_URL;
+const BASE_URL = EXTERNAL_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -26,13 +27,18 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     baseURL: BASE_URL,
   },
-  webServer: process.env.PLAN_FORGE_UI_URL
-    ? undefined
+  // The property is always present. `exactOptionalPropertyTypes` is on, so an
+  // explicit `undefined` is not assignable to webServer — assigning the whole
+  // object conditionally is what the type accepts.
+  ...(EXTERNAL_URL
+    ? {}
     : {
-        command: `npx vite preview --port ${PORT} --strictPort`,
-        url: BASE_URL,
-        reuseExistingServer: !process.env.CI,
-        timeout: 60_000,
-      },
+        webServer: {
+          command: `npx vite preview --port ${PORT} --strictPort`,
+          url: BASE_URL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+      }),
   outputDir: "./test-results",
 });
