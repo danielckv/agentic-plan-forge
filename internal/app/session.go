@@ -39,6 +39,12 @@ type windowHandle interface {
 	Terminate(after time.Duration)
 }
 
+// FrontendHandle is the exported form of windowHandle: what a non-browser
+// frontend returns so the session can supervise it like a window. It exists so
+// a caller outside this package can supply a frontend runner without the
+// interface leaking the browser's name.
+type FrontendHandle = windowHandle
+
 // Options configures one session.
 type Options struct {
 	// SessionID is the local UUIDv4 handle (`wait --session`, `invite --session`,
@@ -71,6 +77,15 @@ type Options struct {
 	// Version is the build identifier the binary reports. The window shows it
 	// beside the capabilities so a bug report names the build it came from.
 	Version string
+
+	// Frontend selects where the session is presented. Empty means the browser
+	// tab, which is the default and the only one that needs a display.
+	Frontend Frontend
+	// RunFrontend presents the session without a browser. It is called once the
+	// bridge is serving and the executor has started; the returned handle is
+	// supervised exactly like a window, so a terminal that dies ends the session
+	// the same way a closed tab does. When set, no browser is opened.
+	RunFrontend func(ctx context.Context, origin, token string) (windowHandle, error)
 
 	// Seams for tests; production leaves them nil.
 	Generator    contracts.Generator
@@ -241,6 +256,11 @@ var roleSlots = []struct {
 	{contracts.RoleCritic, contracts.SlotJudge},
 	{contracts.RoleSynthesizer, contracts.SlotMain},
 	{contracts.RoleNarrator, contracts.SlotMain},
+	// The code reviewer judges the assembled candidate, so it runs on JUDGE
+	// and cannot simply agree with the draft. The technical leader edits on
+	// MAIN, the slot the draft was written with.
+	{contracts.RoleCodeReviewer, contracts.SlotJudge},
+	{contracts.RoleTechLead, contracts.SlotMain},
 }
 
 // wireSolo connects a Solo room to its executor: every document change
@@ -420,12 +440,29 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 		return classify(err)
 	}
 
-	win, outcome, err := startWindow(ctx, windowParams{
-		Bridge: bridge, Launch: opts.LaunchWindow, BrowserPath: opts.Config.BrowserPath, Logger: log,
-		Detached: opts.Detached, Grace: opts.Grace, StartupWait: opts.StartupWait,
-		OnRunning:    func() { write(PhaseRunning, "") },
-		OnWindowGone: windowGone,
-	})
+	var win windowHandle
+	var outcome <-chan Result
+	if opts.Frontend.Terminal() && opts.RunFrontend != nil {
+		// Terminal mode: no browser at all. The nonce is minted once so the
+		// frontend authenticates through the same handshake a tab would, then
+		// the socket is handed to the terminal runner.
+		origin, token, terr := terminalCredentials(bridge)
+		if terr != nil {
+			return classify(terr)
+		}
+		win, err = opts.RunFrontend(ctx, origin, token)
+		if err != nil {
+			return classify(err)
+		}
+		outcome = windowOutcome(ctx, win)
+	} else {
+		win, outcome, err = startWindow(ctx, windowParams{
+			Bridge: bridge, Launch: opts.LaunchWindow, BrowserPath: opts.Config.BrowserPath, Logger: log,
+			Detached: opts.Detached, Grace: opts.Grace, StartupWait: opts.StartupWait,
+			OnRunning:    func() { write(PhaseRunning, "") },
+			OnWindowGone: windowGone,
+		})
+	}
 	if err != nil {
 		return classify(err)
 	}
@@ -437,7 +474,11 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 		}
 	}
 	if !opts.Detached {
-		fmt.Fprintln(opts.Stderr, "Plan-Forge opened a browser tab. Approve the plan there to continue.")
+		if opts.Frontend.Terminal() {
+			fmt.Fprintln(opts.Stderr, "Plan-Forge is running in this terminal. Press ? for keys.")
+		} else {
+			fmt.Fprintln(opts.Stderr, "Plan-Forge opened a browser tab. Approve the plan there to continue.")
+		}
 	}
 
 	for {

@@ -1,6 +1,6 @@
-import { FolderGit2, GitBranch, Keyboard, SlidersHorizontal } from "lucide-react";
+import { FolderGit2, GitBranch, Keyboard, Network, SlidersHorizontal } from "lucide-react";
 
-import type { SyncState } from "../store/syncStore";
+import { openGraph, type SyncState } from "../store/syncStore";
 import { CONN_META } from "../ui/conn";
 import { PhaseStepper } from "../ui/PhaseStepper";
 import { ThemeSelect } from "../ui/ThemeSelect";
@@ -63,6 +63,15 @@ export function TopBar({
           onClick={onOpenSetup}
         >
           <SlidersHorizontal size={16} />
+        </button>
+        <button
+          type="button"
+          className="pf-icon-btn"
+          aria-label="Component graph: files, folders and their imports"
+          title="Component graph — files, folders and their imports"
+          onClick={() => openGraph()}
+        >
+          <Network size={16} />
         </button>
         <button
           type="button"

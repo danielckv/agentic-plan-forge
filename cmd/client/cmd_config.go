@@ -21,6 +21,11 @@ func init() {
 }
 
 func runConfig(ctx context.Context, args []string) int {
+	// `config skills` is a subcommand, not a top-level command: one entry point
+	// for settings, with a narrow verb under it.
+	if len(args) > 0 && args[0] == "skills" {
+		return runConfigSkills(args[1:])
+	}
 	var (
 		show          bool
 		asJSON        bool
@@ -41,8 +46,8 @@ func runConfig(ctx context.Context, args []string) int {
 		fs.StringVar(&relayURL, "relay-url", "", "set the relay server URL")
 		fs.StringVar(&modelMain, "model-main", "", "set the main generation model")
 		fs.StringVar(&modelJudge, "model-judge", "", "set the critic model")
-		fs.StringVar(&mainHost, "main-host", "", "set the main host (claude, omp, agy)")
-		fs.StringVar(&judgeHost, "judge-host", "", "set the critic host (claude, omp, agy)")
+		fs.StringVar(&mainHost, "main-host", "", "set the main host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)")
+		fs.StringVar(&judgeHost, "judge-host", "", "set the critic host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)")
 		fs.Float64Var(&workdayHours, "workday-hours", 0, "set the human workday baseline in hours")
 		fs.BoolVar(&setRelayToken, "set-relay-token", false, "store the relay token read from a hidden prompt")
 		fs.IntVar(&stageTimeout, "stage-timeout", 0, "set what one deliberation call may take, in seconds (60..1800)")
@@ -103,14 +108,14 @@ func runConfig(ctx context.Context, args []string) int {
 	}
 	if mainHost != "" {
 		if !config.IsValidHost(mainHost) {
-			return fail(fmt.Errorf("main_host %q is not one of claude, omp, agy", mainHost))
+			return fail(fmt.Errorf("main_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", mainHost))
 		}
 		cfg.MainHost = mainHost
 		changed = true
 	}
 	if judgeHost != "" {
 		if !config.IsValidHost(judgeHost) {
-			return fail(fmt.Errorf("judge_host %q is not one of claude, omp, agy", judgeHost))
+			return fail(fmt.Errorf("judge_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", judgeHost))
 		}
 		cfg.JudgeHost = judgeHost
 		changed = true
@@ -238,7 +243,7 @@ func applyRoleModels(cfg *config.Config, values []string) error {
 		}
 		host, model, _ := strings.Cut(binding, "/")
 		if !config.IsValidHost(host) {
-			return fmt.Errorf("-role %s host %q is not one of claude, omp, agy", role, host)
+			return fmt.Errorf("-role %s host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", role, host)
 		}
 		if cfg.RoleModels == nil {
 			cfg.RoleModels = map[string]config.RoleBinding{}
@@ -349,16 +354,16 @@ func wizard(cfg *config.Config) int {
 		}
 		changed = true
 	}
-	if v := ask("main_host (claude, omp, agy)", cfg.MainHost); v != "" {
+	if v := ask("main_host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)", cfg.MainHost); v != "" {
 		if !config.IsValidHost(v) {
-			return fail(fmt.Errorf("main_host %q is not one of claude, omp, agy", v))
+			return fail(fmt.Errorf("main_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", v))
 		}
 		cfg.MainHost = v
 		changed = true
 	}
-	if v := ask("judge_host (claude, omp, agy)", cfg.JudgeHost); v != "" {
+	if v := ask("judge_host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)", cfg.JudgeHost); v != "" {
 		if !config.IsValidHost(v) {
-			return fail(fmt.Errorf("judge_host %q is not one of claude, omp, agy", v))
+			return fail(fmt.Errorf("judge_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", v))
 		}
 		cfg.JudgeHost = v
 		changed = true
@@ -409,7 +414,7 @@ func wizard(cfg *config.Config) int {
 		}
 		host, model, _ := strings.Cut(v, "/")
 		if !config.IsValidHost(host) {
-			return fail(fmt.Errorf("role_models.%s host %q is not one of claude, omp, agy", role, host))
+			return fail(fmt.Errorf("role_models.%s host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", role, host))
 		}
 		cfg.RoleModels[role] = config.RoleBinding{Host: host, Model: model}
 		changed = true

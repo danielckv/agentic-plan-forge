@@ -58,7 +58,8 @@ func newOrchestrator(in RunInput, gen contracts.Generator, emit func(contracts.P
 	return &orchestrator{
 		in: in, gen: gen, sink: emit, decisions: decisions, store: store,
 		maxC: in.maxCycles(), par: par, sem: make(chan struct{}, par),
-		specs: map[string]synthesizer.SpecialistDoc{},
+		maxGapAgents: in.gapAgents(),
+		specs:        map[string]synthesizer.SpecialistDoc{},
 	}
 }
 
@@ -241,6 +242,14 @@ func (o *orchestrator) cycle(ctx context.Context, c int) (bool, error) {
 		// An architect failure outranks a specialist one: the specialists were
 		// planning against a design that turned out not to assemble.
 		if err := o.finishArchitect(ctx, c, rest); err != nil {
+			return false, err
+		}
+	}
+	// Admission runs after the architect's design part lands: the proposals
+	// arrive inside it. Emitted before scheduling so the workspace shows the
+	// agent before its first call.
+	if specErr == nil {
+		if err := o.admitAndRunGaps(ctx, c); err != nil {
 			return false, err
 		}
 	}
@@ -749,6 +758,173 @@ func (o *orchestrator) criticSpec(c int, barrier bool) stageSpec {
 	}
 }
 
+// codeReviewerSpec reviews the assembled candidate's code claims. It runs on
+// JUDGE beside the Red-Team Critic and cannot agree with the draft by
+// construction.
+func (o *orchestrator) codeReviewerSpec(c int) stageSpec {
+	return stageSpec{
+		avatar: relay.StageCodeReviewer, role: contracts.RoleCodeReviewer, slot: contracts.SlotJudge,
+		system: CodeReviewerSystemPrompt(), schema: synthesizer.SchemaCodeReviewer, cycle: c, status: statusCritiquing,
+		summary: "Reviewing the assembled candidate's code claims against the repository evidence.",
+		step:    "code review",
+	}
+}
+
+// techLeadSpec integrates the merged findings into the candidate and directs
+// the one bounded repair pass over the sections the findings name.
+func (o *orchestrator) techLeadSpec(c int) stageSpec {
+	return stageSpec{
+		avatar: relay.StageTechLead, role: contracts.RoleTechLead, slot: contracts.SlotMain,
+		system: TechLeadSystemPrompt(), schema: synthesizer.SchemaTechLead, cycle: c, status: statusRevising,
+		summary: "Integrating the review findings and directing the one repair pass.",
+		step:    "integrate findings",
+	}
+}
+
+// techLeadPayload is what the Technical Leader sees: the merged findings and
+// a brief of the assembled candidate.
+type techLeadPayload struct {
+	Cycle     int                  `json:"cycle"`
+	Findings  []contracts.Critique `json:"findings"`
+	Candidate candidateBriefShape  `json:"candidate"`
+
+	notes []string
+}
+
+func (p *techLeadPayload) trim() (string, bool) { return "", false }
+func (p *techLeadPayload) addNote(n string)     { p.notes = append(p.notes, n) }
+
+// candidateBriefShape names the plan sections the repair can touch.
+type candidateBriefShape struct {
+	Summary     string   `json:"summary"`
+	Workstreams []string `json:"workstreams"`
+	Contracts   []string `json:"contracts"`
+	Tasks       []string `json:"tasks"`
+}
+
+func candidateBrief(si contracts.SynthesisInput) candidateBriefShape {
+	var arch synthesizer.ArchitectDoc
+	_ = json.Unmarshal(si.Architecture, &arch)
+	out := candidateBriefShape{Summary: arch.Summary, Workstreams: []string{}, Contracts: []string{}, Tasks: []string{}}
+	for _, w := range arch.Workstreams {
+		out.Workstreams = append(out.Workstreams, w.ID)
+	}
+	for _, k := range arch.Contracts {
+		out.Contracts = append(out.Contracts, k.ID)
+	}
+	for _, s := range oSpecs(si) {
+		for _, t := range s.Tasks {
+			out.Tasks = append(out.Tasks, t.ID)
+		}
+	}
+	return out
+}
+
+// oSpecs decodes the specialist raw docs of a synthesis input.
+func oSpecs(si contracts.SynthesisInput) []synthesizer.SpecialistDoc {
+	out := make([]synthesizer.SpecialistDoc, 0, len(si.Specialists))
+	for _, raw := range si.Specialists {
+		var s synthesizer.SpecialistDoc
+		if json.Unmarshal(raw, &s) == nil {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// reviewspec builds the code reviewer's payload: the assembled candidate in
+// brief plus the repository graph, so code claims can be checked.
+func reviewspec(cycle int, knownTargets []string, o *orchestrator) *criticPayload {
+	return &criticPayload{
+		Cycle: cycle, Barrier: true, Architect: o.arch, Specialists: o.specSlice(), Stories: o.pm.Stories,
+		Graph: o.graphForPrompt(), Context: o.contextForPrompt(), EvidenceNotes: o.evidenceNotes(),
+		KnownTargets: knownTargets, Decisions: append([]contracts.Decision{}, o.st.Decisions...),
+	}
+}
+
+// specFor returns the stage spec of one review avatar.
+func (o *orchestrator) specFor(avatar string, cycle int) stageSpec {
+	if avatar == relay.StageCodeReviewer {
+		return o.codeReviewerSpec(cycle)
+	}
+	return o.criticSpec(cycle, true)
+}
+
+// parseFindings decodes either reviewer's output, validating critique ids
+// against the known targets and the severities the shape allows.
+func (o *orchestrator) parseFindings(avatar string) func(json.RawMessage) (json.RawMessage, json.RawMessage, error) {
+	return func(raw json.RawMessage) (json.RawMessage, json.RawMessage, error) {
+		known := o.knownTargetsLocked()
+		known["synthesis"] = true
+		doc, norm, err := parseCritic(known)(raw)
+		if err != nil {
+			return nil, norm, err
+		}
+		return mustJSON(doc), norm, nil
+	}
+}
+
+// parseTechLead validates the integration record: every finding gets exactly
+// one resolution and a repair without a rationale is rejected.
+func parseTechLead(findings []contracts.Critique) func(json.RawMessage) (synthesizer.TechLeadDoc, json.RawMessage, error) {
+	return func(raw json.RawMessage) (synthesizer.TechLeadDoc, json.RawMessage, error) {
+		d, err := synthesizer.DecodeTechLead(raw)
+		if err != nil {
+			return d, nil, err
+		}
+		byID := map[string]bool{}
+		for _, f := range findings {
+			byID[f.ID] = true
+		}
+		var problems []string
+		seen := map[string]bool{}
+		for _, r := range d.Resolutions {
+			switch {
+			case !byID[r.FindingID]:
+				problems = append(problems, fmt.Sprintf("resolution names unknown finding %q", r.FindingID))
+			case seen[r.FindingID]:
+				problems = append(problems, fmt.Sprintf("duplicate resolution for finding %q", r.FindingID))
+			case r.Blocks && len(r.Sections) == 0:
+				problems = append(problems, fmt.Sprintf("blocking resolution for %q names the sections it repairs", r.FindingID))
+			case !r.Blocks && strings.TrimSpace(r.Rationale) == "":
+				problems = append(problems, fmt.Sprintf("non-blocking resolution for %q states a rationale", r.FindingID))
+			}
+			seen[r.FindingID] = true
+		}
+		for _, f := range findings {
+			if !seen[f.ID] {
+				problems = append(problems, fmt.Sprintf("finding %s has no resolution", f.ID))
+			}
+		}
+		if len(problems) > 0 {
+			return d, nil, &synthesizer.ValidationError{Stage: "tech_lead", Problems: problems}
+		}
+		return d, raw, nil
+	}
+}
+
+// mustFit fits a payload or panics: the payload shapes here are built from
+// already-validated material, so a fit failure is a programmer error.
+func mustFit[T trimmable](p T) *stageInput {
+	in, err := fitPayload("", p)
+	if err != nil {
+		panic(err)
+	}
+	return in
+}
+
+// critsOf decodes a stored reviewer doc back into its critiques.
+func critsOf(raw json.RawMessage) []contracts.Critique {
+	if len(raw) == 0 {
+		return nil
+	}
+	d, err := synthesizer.DecodeCritic(raw)
+	if err != nil {
+		return nil
+	}
+	return d.Critiques
+}
+
 func detID(parts ...string) string {
 	return deterministicPrefix + sha256Hex([]byte(strings.Join(parts, "\x00")))[:10]
 }
@@ -877,7 +1053,11 @@ func (o *orchestrator) criticBarrier(ctx context.Context, c int) error {
 		fmt.Sprintf("Reviewed the complete current drafts: %d finding(s) open, %d blocking.", open, blocking))
 }
 
-// synthesisInput assembles the validated material for the synthesizer.
+// synthesisInput assembles the validated material for the synthesizer. A
+// completed gap agent's deliverable joins the specialist documents, so the
+// fused plan carries the expertise the architect asked for. Its lifecycle is
+// recorded here: fused when the deliverable reached the synthesis input,
+// retired when it did not, with the reason kept on the descriptor.
 func (o *orchestrator) synthesisInput() contracts.SynthesisInput {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -886,9 +1066,33 @@ func (o *orchestrator) synthesisInput() contracts.SynthesisInput {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	specs := make([]json.RawMessage, 0, len(ids))
+	specs := make([]json.RawMessage, 0, len(ids)+len(o.st.GapDocs))
 	for _, id := range ids {
 		specs = append(specs, append(json.RawMessage(nil), o.st.Specs[id].Raw...))
+	}
+	gapIDs := make([]string, 0, len(o.st.GapDocs))
+	for id := range o.st.GapDocs {
+		rec := o.st.GapDocs[id]
+		if !rec.present() {
+			continue
+		}
+		gapIDs = append(gapIDs, id)
+	}
+	sort.Strings(gapIDs)
+	for _, id := range gapIDs {
+		specs = append(specs, append(json.RawMessage(nil), o.st.GapDocs[id].Raw...))
+		o.setGapStatus(id, contracts.GapFused)
+	}
+	// An agent that completed but whose draft is gone, and any agent still
+	// admitted or failed, is retired with the reason kept for the run history.
+	for i := range o.st.Gaps {
+		g := &o.st.Gaps[i]
+		if g.Status == contracts.GapCompleted && g.Reason == "" {
+			if rec, ok := o.st.GapDocs[g.ID]; !ok || !rec.present() {
+				g.Status = contracts.GapRetired
+				g.Reason = "deliverable was not validated in time for synthesis"
+			}
+		}
 	}
 	crit := append([]contracts.Critique(nil), o.st.Critiques...)
 	sort.SliceStable(crit, func(i, j int) bool { return crit[i].ID < crit[j].ID })

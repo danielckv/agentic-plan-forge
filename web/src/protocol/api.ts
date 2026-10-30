@@ -39,6 +39,36 @@ export interface ComponentsView {
   truncated: boolean;
 }
 
+/** One vertex of the 2D component graph (`app.GraphNode`). */
+export interface GraphNode {
+  id: string;
+  kind: "module" | "file";
+  label: string;
+  path: string;
+  language?: string;
+  symbols: number;
+  depth: number;
+}
+
+/** One directed relationship in the component graph (`app.GraphEdge`). */
+export interface GraphEdge {
+  from: string;
+  to: string;
+  kind: "imports" | "contains";
+}
+
+/** GET /api/component-graph (`app.GraphView`). */
+export interface GraphView {
+  ready: boolean;
+  stack: string[];
+  focus?: string;
+  depth: number;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  truncated: boolean;
+  truncated_at?: number;
+}
+
 /** One excerpt of the project's notes (`contracts.ContextHit`). */
 export interface ContextHit {
   path: string;

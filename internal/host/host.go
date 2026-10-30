@@ -110,4 +110,6 @@ func init() {
 	Register(NewAnthropicAPI())
 	Register(NewOpenAIAPI())
 	Register(NewFireworksAPI())
+	Register(NewGeminiAPI())
+	Register(NewAntigravityAPI())
 }

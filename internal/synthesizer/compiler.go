@@ -62,6 +62,9 @@ type CompiledPlan struct {
 	// Phases is the implementation broken into dependency waves, derived from
 	// the task graph rather than written by an avatar.
 	Phases []Phase
+	// Readiness is the verdict written into the spec: ready, provisional or
+	// blocked, with the findings it lists.
+	Readiness Readiness
 }
 
 // DraftContent returns the synthesis.v1 draft content {spec_markdown,
@@ -201,25 +204,11 @@ func Validate(in contracts.SynthesisInput) (Docs, error) {
 	for _, is := range CompareInterfaces(docs.Architect, docs.Specialists) {
 		problems = append(problems, fmt.Sprintf("interface %s: %s", is.Kind, is.Detail))
 	}
-	accepted := AcceptedIDs(docs)
-	for _, c := range in.Critiques {
-		if c.Status == contracts.CritiqueResolved {
-			continue
-		}
-		switch c.Severity {
-		case contracts.SeverityCritical, contracts.SeverityHigh:
-			problems = append(problems, fmt.Sprintf("critique %s (%s) is still open", c.ID, c.Severity))
-		default:
-			if !accepted[c.ID] && !strings.HasPrefix(c.ResolutionRef, "accepted:") {
-				problems = append(problems, fmt.Sprintf("critique %s (MEDIUM) is neither resolved nor recorded as an accepted tradeoff", c.ID))
-			}
-		}
-	}
-	for _, d := range in.Decisions {
-		if d.ResolvedOptionID == "" {
-			problems = append(problems, fmt.Sprintf("decision %s is unresolved", d.ID))
-		}
-	}
+	// The findings and decision gates are the readiness gate, called rather than
+	// restated: a plan that compiles and a plan whose verdict is not blocked are
+	// then the same plan by construction. A waived finding is resolved for the
+	// gate and still listed by the readiness section, never dropped.
+	problems = append(problems, assess(in, docs, nil).Blockers...)
 	if len(problems) > 0 {
 		return docs, &ValidationError{Stage: "synthesis", Problems: problems}
 	}
@@ -296,9 +285,15 @@ func Compile(input contracts.SynthesisInput, meta contracts.ApprovalMeta) (Compi
 	if title == "" {
 		title = "Plan-Forge specification"
 	}
+	readiness := assess(input, docs, nil)
+	if readiness.Blocked() {
+		// Validate already refused these; the check is restated here so a plan
+		// can never compile with a blocked verdict, even if the gate drifts.
+		return CompiledPlan{}, &ValidationError{Stage: "synthesis", Problems: readiness.Blockers}
+	}
 	spec := renderSpec(specInput{
 		in: input, docs: docs, tasks: tasks, schedule: schedule, diagrams: diagrams,
-		phases: phases, title: title, meta: meta,
+		phases: phases, title: title, meta: meta, readiness: readiness,
 	})
 	specBytes := []byte(spec)
 	manifest, err := buildManifest(input, docs, tasks, schedule, title, meta, specBytes)
@@ -319,6 +314,7 @@ func Compile(input contracts.SynthesisInput, meta contracts.ApprovalMeta) (Compi
 		Diagrams:       diagrams,
 		Schedule:       schedule,
 		Phases:         phases,
+		Readiness:      readiness,
 	}, nil
 }
 

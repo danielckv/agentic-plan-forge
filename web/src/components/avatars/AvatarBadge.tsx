@@ -1,4 +1,4 @@
-import { Compass, DraftingCompass, ShieldAlert, Sparkles, Wrench } from "lucide-react";
+import { Compass, DraftingCompass, FileSearch, GitMerge, ShieldAlert, Sparkles, Wrench } from "lucide-react";
 
 /**
  * The avatars' faces. Each role has a name, a one-line job, a color from the
@@ -22,6 +22,8 @@ export const MAIN_AVATARS: AvatarSpec[] = [
   { id: "architect", name: "Technical Architect", job: "Maps the work onto the real code", color: "var(--pf-epic)", soft: "var(--pf-epic-soft)", icon: DraftingCompass },
   { id: "critic", name: "Red-Team Critic", job: "Attacks the drafts for failure states", color: "var(--pf-danger)", soft: "var(--pf-danger-soft)", icon: ShieldAlert },
   { id: "synthesizer", name: "Lead Synthesizer", job: "Locks the design into one spec", color: "var(--pf-ok)", soft: "var(--pf-ok-soft)", icon: Sparkles },
+  { id: "code_reviewer", name: "Code Reviewer", job: "Checks the plan's code claims against the repository", color: "var(--pf-warn)", soft: "var(--pf-warn-soft)", icon: FileSearch },
+  { id: "tech_lead", name: "Technical Leader", job: "Integrates the findings and directs the one repair", color: "var(--pf-accent)", soft: "var(--pf-accent-soft)", icon: GitMerge },
 ];
 
 const SPECIALIST: Omit<AvatarSpec, "id" | "name"> = {

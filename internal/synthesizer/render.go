@@ -11,14 +11,15 @@ import (
 )
 
 type specInput struct {
-	in       contracts.SynthesisInput
-	docs     Docs
-	tasks    []contracts.TechnicalTask
-	schedule DualSchedule
-	diagrams Diagrams
-	phases   []Phase
-	title    string
-	meta     contracts.ApprovalMeta
+	in        contracts.SynthesisInput
+	docs      Docs
+	tasks     []contracts.TechnicalTask
+	schedule  DualSchedule
+	diagrams  Diagrams
+	phases    []Phase
+	title     string
+	meta      contracts.ApprovalMeta
+	readiness Readiness
 }
 
 var mdEscaper = strings.NewReplacer(
@@ -109,7 +110,7 @@ func renderSpec(s specInput) string {
 	}
 
 	w.h2(SectionReadiness)
-	writeReadiness(&w, s.in.Critiques)
+	writeReadiness(&w, s.readiness)
 
 	w.h2(SectionPhases)
 	writePhases(&w, s.phases)
@@ -321,11 +322,20 @@ func renderSpec(s specInput) string {
 			w.line("- %s (task %s): %s in %s, timeout %ds, expect exit %d", code(v.ID), code(t.ID), code(strings.Join(v.Argv, " ")), code(cwd), v.TimeoutSeconds, v.ExpectedExitCode)
 		}
 	}
+	// Specified and executed are different facts. A command this document
+	// declares has not run: compilation executes nothing. Saying "verified" of a
+	// declared command would tell a reader work passed when no run happened.
 	if nverify == 0 {
 		w.line("No verification commands declared: behavior is unverified until some are added.")
 	} else {
 		w.blank()
-		w.line("Commands run only through `plan-forge verify`, which shows argv and cwd and asks for confirmation.")
+		w.line("**Specified:** %d command(s) above, none of them executed. This document declares what will prove the work; it does not report a run.", nverify)
+		w.line("Commands run only through `plan-forge verify`, which shows argv and cwd, asks for confirmation, and writes a receipt bound to the source fingerprint it measured.")
+	}
+	if len(s.readiness.VerificationExecuted) > 0 {
+		w.line("**Executed:** %s — receipts exist for these.", code(strings.Join(s.readiness.VerificationExecuted, ", ")))
+	} else {
+		w.line("**Executed:** none. No receipt vouches for any command in this plan yet.")
 	}
 
 	w.h2(SectionEstimates)
@@ -491,44 +501,98 @@ func orNone(s string) string {
 // writeReadiness states whether this plan is safe to build from, and says so
 // before any of the design it is judging.
 //
-// A plan can now be produced with blocking findings still open: a capped run
-// used to end with no plan at all, which served nobody. The trade is that the
-// document must never imply it is clean when it is not. A finding the owner
-// recorded rather than fixed is listed here in full — severity, target,
-// evidence and the change it asks for — so the reader meets it before the
-// phases, not after shipping.
-func writeReadiness(w *writer, critiques []contracts.Critique) {
-	var recorded []contracts.Critique
-	for _, c := range critiques {
-		if c.IsRecorded() {
-			recorded = append(recorded, c)
-		}
+// Three verdicts, and the words are the gate's words:
+//
+//   - ready: every gate held. Requirement coverage, interfaces, dependency
+//     order and validators all passed, and no finding is outstanding.
+//   - provisional: the plan is complete enough to build from, and it carries
+//     findings that were recorded rather than fixed — by the owner, or by the
+//     Technical Leader with a rationale. Each is listed here in full: severity,
+//     targets, evidence, impact and the change it still asks for. A reader
+//     meets it before the phases, not after shipping.
+//   - blocked: an unresolved blocking finding or an unanswered material
+//     decision. A blocked verdict is never compiled; Compile refuses it, so
+//     this branch exists for completeness and never reaches a written spec.
+//
+// What the snapshot could not cover is stated too. A truncated scan or an
+// unparsed language is evidence of a gap, never evidence of absence, and this
+// section is where a reader learns which claims the plan did not verify.
+func writeReadiness(w *writer, rd Readiness) {
+	open := len(rd.Waived) + len(rd.Integrated)
+	switch rd.Verdict {
+	case ReadinessProvisional:
+		w.line("**Verdict: %s.** %d finding(s) were recorded rather than fixed: %d waived by the owner and %d integrated by the Technical Leader. Read them before building.",
+			code(ReadinessProvisional), open, len(rd.Waived), len(rd.Integrated))
+	default:
+		w.line("**Verdict: %s.** Every gate held: requirements are covered, interfaces agree, the dependency order resolves, and no finding is outstanding. Nothing was waived.", code(ReadinessReady))
 	}
-	sort.SliceStable(recorded, func(i, j int) bool { return recorded[i].ID < recorded[j].ID })
-
-	if len(recorded) == 0 {
-		w.line("**Verdict: complete.** Every finding raised against this plan was resolved by a revision. Nothing was waived.")
-		return
-	}
-	w.line("**Verdict: provisional.** %d finding(s) were recorded rather than fixed: the owner chose to take this plan with them open. Read them before building.",
-		len(recorded))
-	for _, c := range recorded {
+	if len(rd.Blockers) > 0 {
 		w.blank()
-		w.line("### %s — %s", code(c.ID), inline(c.Severity))
-		if targets := strings.Join(c.TargetIDs, ", "); targets != "" {
-			w.line("- **Affects:** %s", code(targets))
+		w.line("**Blocking:** %d condition(s) must clear before this plan is ready.", len(rd.Blockers))
+		for _, b := range rd.Blockers {
+			w.line("- %s", inline(b))
 		}
-		if evidence := strings.TrimSpace(c.Evidence); evidence != "" {
-			w.line("- **Finding:** %s", inline(evidence))
-		}
-		if impact := strings.TrimSpace(c.Impact); impact != "" {
-			w.line("- **Impact:** %s", inline(impact))
-		}
-		if change := strings.TrimSpace(c.RequiredChange); change != "" {
-			w.line("- **Still asks for:** %s", inline(change))
-		}
-		w.line("- **Recorded by:** %s", code(c.ResolutionRef))
 	}
+	if rd.AcceptedTradeoffs > 0 {
+		w.blank()
+		w.line("**Accepted tradeoffs:** %d MEDIUM finding(s) are recorded with a rationale. They are listed under Accepted tradeoffs and none of them blocks.", rd.AcceptedTradeoffs)
+	}
+	if len(rd.Repaired) > 0 {
+		w.blank()
+		w.line("**Repaired:** %s. The one bounded repair pass re-drafted the sections these findings named.", code(joinCritiqueIDs(rd.Repaired)))
+	}
+	if len(rd.Decisions) > 0 {
+		w.blank()
+		w.line("**Resolved decisions:** %s.", code(joinStrings(rd.Decisions)))
+	}
+	if len(rd.EvidenceGaps) > 0 {
+		w.blank()
+		w.line("**Unverified evidence:** these claims rest on a bounded snapshot, not on a complete reading of the repository.")
+		for _, g := range rd.EvidenceGaps {
+			w.line("- %s", inline(g))
+		}
+	}
+	for _, c := range rd.Waived {
+		writeOpenFinding(w, c, "Recorded by")
+	}
+	for _, c := range rd.Integrated {
+		writeOpenFinding(w, c, "Integrated by")
+	}
+}
+
+// writeOpenFinding lists one finding a plan carries unresolved, so a reader sees
+// the evidence and the change it asks for rather than a bare ID.
+func writeOpenFinding(w *writer, c contracts.Critique, by string) {
+	w.blank()
+	w.line("### %s — %s", code(c.ID), inline(c.Severity))
+	if targets := strings.Join(c.TargetIDs, ", "); targets != "" {
+		w.line("- **Affects:** %s", code(targets))
+	}
+	if evidence := strings.TrimSpace(c.Evidence); evidence != "" {
+		w.line("- **Finding:** %s", inline(evidence))
+	}
+	if impact := strings.TrimSpace(c.Impact); impact != "" {
+		w.line("- **Impact:** %s", inline(impact))
+	}
+	if change := strings.TrimSpace(c.RequiredChange); change != "" {
+		w.line("- **Still asks for:** %s", inline(change))
+	}
+	w.line("- **%s:** %s", by, code(c.ResolutionRef))
+}
+
+func joinCritiqueIDs(list []contracts.Critique) string {
+	ids := make([]string, len(list))
+	for i, c := range list {
+		ids[i] = c.ID
+	}
+	return joinStrings(ids)
+}
+
+func joinStrings(items []string) string {
+	if len(items) == 0 {
+		return "none"
+	}
+	return strings.Join(items, ", ")
 }
 
 // writePhases renders the implementation as ordered dependency waves.

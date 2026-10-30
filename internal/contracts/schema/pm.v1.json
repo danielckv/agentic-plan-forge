@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pm.v1",
+  "title": "Product Manager output",
+  "description": "Epics and traceable user stories derived from the normalized brief.",
+  "type": "object",
+  "properties": {
+    "epics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "goal": { "type": "string" },
+          "story_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["id", "title"],
+        "additionalProperties": false
+      }
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "epic_id": { "type": "string", "minLength": 1 },
+          "actor": { "type": "string", "minLength": 1 },
+          "need": { "type": "string", "minLength": 1 },
+          "benefit": { "type": "string" },
+          "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+          "requirement_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["id", "epic_id", "actor", "need", "acceptance_criteria"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["epics", "stories"],
+  "additionalProperties": false
+}

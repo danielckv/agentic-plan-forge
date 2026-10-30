@@ -38,6 +38,7 @@ func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/impact", s.handleImpact)
 	s.bridge.Handle("GET /api/usage", s.handleUsage)
 	s.bridge.Handle("GET /api/components", s.handleComponents)
+	s.bridge.Handle("GET /api/component-graph", s.handleComponentGraph)
 	s.bridge.Handle("GET /api/plan-files", s.handlePlanFiles)
 	s.bridge.Handle("GET /api/repository-work", s.handleRepositoryWork)
 	s.bridge.Handle("GET /api/repository-work/document", s.handleRepositoryWorkDocument)
@@ -56,6 +57,9 @@ func (s *appSession) routes() {
 	s.bridge.Handle("GET /api/capabilities", s.handleCapabilities)
 	s.bridge.Handle("GET /api/providers", s.handleProviders)
 	s.bridge.Handle("POST /api/providers", s.handleSetProvider)
+	s.bridge.Handle("GET /api/models", s.handleModels)
+	s.bridge.Handle("GET /api/settings", s.handleGetSettings)
+	s.bridge.Handle("PUT /api/settings", s.handlePutSettings)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

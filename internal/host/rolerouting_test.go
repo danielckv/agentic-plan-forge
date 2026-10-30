@@ -31,16 +31,16 @@ func readyRouter(t *testing.T, cfg config.Config) *Router {
 	return &Router{
 		cfg: cfg,
 		adapters: map[Kind]Adapter{
-			KindClaude: &modelAdapter{
-				routingAdapter: routingAdapter{kind: KindClaude, version: "2.1.0", ready: true},
+			KindAnthropic: &modelAdapter{
+				routingAdapter: routingAdapter{kind: KindAnthropic, version: anthropicLabel, ready: true},
 				models:         []string{"haiku", "opus", "sonnet"},
 			},
-			KindOMP: &modelAdapter{
-				routingAdapter: routingAdapter{kind: KindOMP, version: "18.0.0", ready: true},
+			KindGemini: &modelAdapter{
+				routingAdapter: routingAdapter{kind: KindGemini, version: geminiWireLabel, ready: true},
 				models:         []string{"claude-sonnet-5-5", "claude-opus-5-5"},
 			},
-			KindAGY: &modelAdapter{
-				routingAdapter: routingAdapter{kind: KindAGY, version: "1.4.0", ready: true},
+			KindOpenAI: &modelAdapter{
+				routingAdapter: routingAdapter{kind: KindOpenAI, version: openAICompatLabel, ready: true},
 				models:         []string{"claude-opus-5-5-high", "gemini-3.8-flash-low"},
 			},
 		},
@@ -70,7 +70,7 @@ func TestRolesSpreadAcrossEveryReadyHost(t *testing.T) {
 		}
 		used[p.Kind]++
 	}
-	for _, kind := range []Kind{KindClaude, KindOMP, KindAGY} {
+	for _, kind := range []Kind{KindAnthropic, KindGemini, KindOpenAI} {
 		if used[kind] == 0 {
 			t.Errorf("no role was placed on %s; placements = %v", kind, used)
 		}
@@ -106,23 +106,25 @@ func TestPlacementIsStablePerRole(t *testing.T) {
 // An explicit role_models entry wins over the rotation, host and model both.
 func TestRoleBindingPinsHostAndModel(t *testing.T) {
 	r := readyRouter(t, config.Config{RoleModels: map[string]config.RoleBinding{
-		"architect": {Host: "omp", Model: "claude-opus-5-5"},
+		"architect": {Host: "gemini", Model: "claude-opus-5-5"},
 		"narrator":  {Model: "gemini-3.8-flash-low"},
 	}})
 	arch, err := r.PlaceRole(context.Background(), contracts.RoleArchitect, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if arch.Kind != KindOMP || arch.Model != "claude-opus-5-5" {
-		t.Fatalf("architect = %s/%s, want omp/claude-opus-5-5", arch.Kind, arch.Model)
+	if arch.Kind != KindGemini || arch.Model != "claude-opus-5-5" {
+		t.Fatalf("architect = %s/%s, want gemini/claude-opus-5-5", arch.Kind, arch.Model)
 	}
-	// A binding with a model but no host keeps the rotation's host.
+	// A binding with a model but no host keeps the rotation's host. The
+	// narrator's rotation leads with Fireworks, which is not in the fixture,
+	// so the first ready host in its order serves: gemini.
 	narrator, err := r.PlaceRole(context.Background(), contracts.RoleNarrator, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if narrator.Kind != KindAGY || narrator.Model != "gemini-3.8-flash-low" {
-		t.Fatalf("narrator = %s/%s, want agy/gemini-3.8-flash-low", narrator.Kind, narrator.Model)
+	if narrator.Kind != KindGemini || narrator.Model != "gemini-3.8-flash-low" {
+		t.Fatalf("narrator = %s/%s, want gemini/gemini-3.8-flash-low", narrator.Kind, narrator.Model)
 	}
 }
 
@@ -130,7 +132,7 @@ func TestRoleBindingPinsHostAndModel(t *testing.T) {
 // spread is what happens when nothing is pinned, not a policy that overrides
 // a configured host.
 func TestConfiguredMainHostStillForcesOneHost(t *testing.T) {
-	r := readyRouter(t, config.Config{MainHost: string(KindOMP)})
+	r := readyRouter(t, config.Config{MainHost: string(KindGemini)})
 	for _, role := range []contracts.RoleID{
 		contracts.RoleProductManager, contracts.RoleArchitect, contracts.RoleSpecialist,
 	} {
@@ -138,8 +140,8 @@ func TestConfiguredMainHostStillForcesOneHost(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if p.Kind != KindOMP {
-			t.Errorf("%s placed on %s, want the configured omp", role, p.Kind)
+		if p.Kind != KindGemini {
+			t.Errorf("%s placed on %s, want the configured gemini", role, p.Kind)
 		}
 	}
 }
@@ -153,15 +155,15 @@ func TestSlotModelOnlyAppliesToAHostThatListsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claude.Kind != KindClaude || claude.Model != "opus" {
-		t.Fatalf("pm = %s/%s, want claude/opus", claude.Kind, claude.Model)
+	if claude.Kind != KindAnthropic || claude.Model != "opus" {
+		t.Fatalf("pm = %s/%s, want anthropic/opus", claude.Kind, claude.Model)
 	}
 	spec, err := r.PlaceRole(context.Background(), contracts.RoleSpecialist, "", contracts.SlotMain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.Kind != KindOMP {
-		t.Fatalf("specialist placed on %s, want omp", spec.Kind)
+	if spec.Kind != KindOpenAI {
+		t.Fatalf("specialist placed on %s, want openai", spec.Kind)
 	}
 	if spec.Model != "" {
 		t.Fatalf("specialist model = %q, want the host default: omp does not list \"opus\"", spec.Model)
@@ -172,12 +174,12 @@ func TestSlotModelOnlyAppliesToAHostThatListsIt(t *testing.T) {
 // preference, never a prerequisite.
 func TestOneReadyHostStillServesEveryRole(t *testing.T) {
 	only := &modelAdapter{
-		routingAdapter: routingAdapter{kind: KindClaude, version: "2.1.0", ready: true},
+		routingAdapter: routingAdapter{kind: KindGemini, version: geminiWireLabel, ready: true},
 		models:         []string{"opus"},
 	}
 	r := &Router{
 		cfg:      config.Config{},
-		adapters: map[Kind]Adapter{KindClaude: only},
+		adapters: map[Kind]Adapter{KindGemini: only},
 		ready:    make(map[Kind]resolvedAdapter),
 		byRole:   make(map[RoleLane]Placement),
 		models:   make(map[Kind]map[string]bool),
@@ -193,7 +195,7 @@ func TestOneReadyHostStillServesEveryRole(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", role, err)
 		}
-		if p.Kind != KindClaude {
+		if p.Kind != KindGemini {
 			t.Errorf("%s placed on %s, want the only ready host", role, p.Kind)
 		}
 	}
@@ -220,10 +222,10 @@ func TestGenerateStreamAnnouncesThePlacementFirst(t *testing.T) {
 	if len(kinds) == 0 || kinds[0] != contracts.EventPlacement {
 		t.Fatalf("first event = %v, want the placement", kinds)
 	}
-	if place == nil || place.Host != string(KindOMP) || place.Role != contracts.RoleSpecialist {
-		t.Fatalf("placement = %+v, want the specialist on omp", place)
+	if place == nil || place.Host != string(KindOpenAI) || place.Role != contracts.RoleSpecialist {
+		t.Fatalf("placement = %+v, want the specialist on openai", place)
 	}
-	if place.Version != "18.0.0" {
+	if place.Version != openAICompatLabel {
 		t.Fatalf("placement version = %q, want the detected host version", place.Version)
 	}
 }
@@ -233,7 +235,7 @@ func TestGenerateStreamAnnouncesThePlacementFirst(t *testing.T) {
 // event. Observed live on 2026-10-25 for the specialist and critic roles.
 func ompTripwire() error {
 	return &contracts.ErrCapability{
-		Host:   string(KindOMP),
+		Host:   string(KindGemini),
 		Reason: "host advertised a non-empty or invalid tools list",
 		Remedy: "update OMP",
 	}
@@ -243,8 +245,8 @@ func ompTripwire() error {
 // open call must cost one retry, not the stage. Before the failover the critic
 // stayed pinned to the broken host and every retry died the same way.
 func TestACallFailsOverWhenAHostBreaksTheToolFreeContract(t *testing.T) {
-	r := readyRouter(t, config.Config{JudgeHost: string(KindOMP)})
-	broken := r.adapters[KindOMP].(*modelAdapter)
+	r := readyRouter(t, config.Config{JudgeHost: string(KindGemini)})
+	broken := r.adapters[KindGemini].(*modelAdapter)
 	broken.generateErr = ompTripwire()
 
 	res, err := r.GenerateStream(context.Background(), contracts.GenerateRequest{
@@ -253,7 +255,7 @@ func TestACallFailsOverWhenAHostBreaksTheToolFreeContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("critic call: %v", err)
 	}
-	if res.Receipt.Host == string(KindOMP) {
+	if res.Receipt.Host == string(KindGemini) {
 		t.Fatalf("critic answered from the broken host %s", res.Receipt.Host)
 	}
 	if broken.generateCalls != 1 {
@@ -264,8 +266,8 @@ func TestACallFailsOverWhenAHostBreaksTheToolFreeContract(t *testing.T) {
 // The demoted host must stay out of the rotation: a later role that would
 // start there walks on instead of paying the same failure again.
 func TestADemotedHostIsNotOfferedToTheNextRole(t *testing.T) {
-	r := readyRouter(t, config.Config{JudgeHost: string(KindOMP)})
-	broken := r.adapters[KindOMP].(*modelAdapter)
+	r := readyRouter(t, config.Config{JudgeHost: string(KindGemini)})
+	broken := r.adapters[KindGemini].(*modelAdapter)
 	broken.generateErr = ompTripwire()
 
 	if _, err := r.GenerateStream(context.Background(), contracts.GenerateRequest{
@@ -278,7 +280,7 @@ func TestADemotedHostIsNotOfferedToTheNextRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("specialist placement: %v", err)
 	}
-	if p.Kind == KindOMP {
+	if p.Kind == KindGemini {
 		t.Fatalf("specialist placed on the demoted host %s", p.Kind)
 	}
 	if broken.generateCalls != 1 {
@@ -286,7 +288,7 @@ func TestADemotedHostIsNotOfferedToTheNextRole(t *testing.T) {
 	}
 	var found bool
 	for _, reason := range r.SkipReasons() {
-		if reason.Kind == KindOMP && reason.Probe == "generate" {
+		if reason.Kind == KindGemini && reason.Probe == "generate" {
 			found = true
 		}
 	}
@@ -299,7 +301,7 @@ func TestADemotedHostIsNotOfferedToTheNextRole(t *testing.T) {
 // placement error and not an endless retry.
 func TestEveryHostBrokenReportsTheCapabilityError(t *testing.T) {
 	r := readyRouter(t, config.Config{})
-	for _, kind := range []Kind{KindClaude, KindOMP, KindAGY} {
+	for _, kind := range []Kind{KindAnthropic, KindGemini, KindOpenAI} {
 		r.adapters[kind].(*modelAdapter).generateErr = ompTripwire()
 	}
 	_, err := r.GenerateStream(context.Background(), contracts.GenerateRequest{

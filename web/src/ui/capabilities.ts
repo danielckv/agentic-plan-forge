@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch } from "../protocol/bridge";
+import type { SkillScanReport } from "./skills";
 
 export interface CapabilityHost {
   host: string;
@@ -101,6 +102,12 @@ export interface CapabilitiesView {
    * older bridge still type-checks.
    */
   providers?: ProviderStatus[];
+  /**
+   * Every skill the harnesses on this machine already have, with its
+   * frontmatter description (`host.SkillScanReport`). Optional for the same
+   * reason as `providers`: a payload from an older bridge omits it.
+   */
+  discovered_skills?: SkillScanReport;
 }
 
 /** The API providers holding a usable key. */

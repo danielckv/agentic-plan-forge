@@ -32,7 +32,11 @@ type doctorReport struct {
 	OCR     map[string]string `json:"ocr"`
 
 	SkillRoots []host.SkillRootView `json:"skill_roots"`
-	Hooks      []host.HookStatus    `json:"hooks"`
+	// DiscoveredSkills is every skill found on disk with its description, so
+	// the terminal report says what a harness already offers, not only which
+	// roots exist.
+	DiscoveredSkills host.SkillScanReport `json:"discovered_skills"`
+	Hooks            []host.HookStatus    `json:"hooks"`
 }
 
 type doctorBrowser struct {
@@ -145,6 +149,9 @@ func runDoctor(ctx context.Context, args []string) int {
 	if views, serr := host.InspectSkillRoots(found, repo); serr == nil {
 		report.SkillRoots = views
 	}
+	if scan, serr := host.DiscoverSkills(found, repo); serr == nil {
+		report.DiscoveredSkills = scan
+	}
 	// Hooks are checked for every host that was detected or that the install
 	// manifest knows about, so a host whose binary is absent but whose hook is
 	// installed is never silently skipped.
@@ -194,7 +201,7 @@ func runDoctor(ctx context.Context, args []string) int {
 	printPinnedHosts(os.Stdout, cfg, report.Hosts)
 	fmt.Println()
 	printHookStatuses(os.Stdout, report.Hooks)
-	printSkillRoots(os.Stdout, report.SkillRoots)
+	printSkillRoots(os.Stdout, report.SkillRoots, report.DiscoveredSkills)
 	fmt.Println()
 	fmt.Printf("ocr (optional, scanned PDFs only): pdftoppm %s; tesseract %s\n",
 		report.OCR["pdftoppm"], report.OCR["tesseract"])
@@ -266,7 +273,7 @@ func printHookStatuses(w io.Writer, statuses []host.HookStatus) {
 
 // printSkillRoots lists, per detected host, the skill roots it reads and
 // flags every Plan Forge skill present in more than one of them. Read-only.
-func printSkillRoots(w io.Writer, views []host.SkillRootView) {
+func printSkillRoots(w io.Writer, views []host.SkillRootView, report host.SkillScanReport) {
 	home, _ := os.UserHomeDir()
 	short := func(p string) string {
 		if home != "" && strings.HasPrefix(p, home+string(os.PathSeparator)) {
@@ -311,5 +318,26 @@ func printSkillRoots(w io.Writer, views []host.SkillRootView) {
 	}
 	if anyVisible {
 		fmt.Fprintf(w, "  remedy: %s\n", host.SkillDuplicateRemedy)
+	}
+	if len(report.Skills) == 0 && len(report.Unreadable) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "  skills found on this machine:")
+	for _, s := range report.Skills {
+		state := ""
+		if !s.Enabled {
+			state = " (disabled)"
+		}
+		if s.Problem != "" {
+			state += " (" + s.Problem + ")"
+		}
+		desc := s.Description
+		if desc == "" {
+			desc = "no description"
+		}
+		fmt.Fprintf(w, "    %-24s %-10s %s%s\n           %s\n", s.Name, s.Host, short(s.Root), state, desc)
+	}
+	for _, p := range report.Unreadable {
+		fmt.Fprintf(w, "    unreadable: %s [%s] %s\n", short(p.Path), p.Via, p.Error)
 	}
 }

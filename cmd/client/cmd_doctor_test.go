@@ -39,8 +39,12 @@ func TestDoctorListsSkillRootsAndFlagsDuplicate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		scan, err := host.DiscoverSkills([]string{"claude", "omp"}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
 		var out bytes.Buffer
-		printSkillRoots(&out, views)
+		printSkillRoots(&out, views, scan)
 		return out.String()
 	}
 

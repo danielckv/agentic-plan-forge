@@ -225,6 +225,11 @@ func NewBridge(cfg BridgeConfig) (*Bridge, error) {
 	b.mux.HandleFunc("POST /api/session", b.handleSession)
 	b.mux.HandleFunc("GET /ws", b.handleWS)
 	b.mux.HandleFunc("POST /api/open-url", b.authed(b.handleOpenURL))
+	// A fresh launch URL for a browser tab that can reopen this session: the
+	// nonce model makes a stored URL useless after ten seconds and one
+	// redemption, so a link has to be minted when it is needed. This route is
+	// authenticated because minting invalidates the previous nonce.
+	b.mux.HandleFunc("POST /api/launch-url", b.authed(b.handleLaunchURL))
 	if cfg.Upload != nil {
 		b.mux.HandleFunc("POST /api/upload", b.authed(b.handleUpload))
 	}
@@ -632,6 +637,25 @@ func setAssetCacheHeaders(w http.ResponseWriter, name string) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store, must-revalidate")
+}
+
+// --- launch-url ----------------------------------------------------------------------------------
+
+// handleLaunchURL mints a fresh single-use launch URL for this session. The
+// caller must already hold the bridge token; minting invalidates the previous
+// nonce, which is the same rule LaunchURL documents.
+func (b *Bridge) handleLaunchURL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	url, err := b.LaunchURL()
+	if err != nil {
+		http.Error(w, "could not mint a launch url", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"url": url})
 }
 
 // --- open-url ----------------------------------------------------------------------------------------

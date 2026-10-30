@@ -9,11 +9,13 @@ import { Page2AvatarCanvas } from "./pages/Page2AvatarCanvas";
 import { Page3SynthesisConfluence } from "./pages/Page3SynthesisConfluence";
 import { Page4Build } from "./pages/Page4Build";
 import { CapabilitiesDialog } from "./pages/CapabilitiesDialog";
+import { ComponentGraphDialog } from "./components/ComponentGraphDialog";
 import { shouldOfferSetup } from "./ui/capabilities";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { prefs, usePrefs } from "./ui/prefs";
 import { ShortcutHelp } from "./ui/ShortcutHelp";
+import { DecisionDrawer } from "./components/DecisionDrawer";
 import { Toaster } from "./ui/Toaster";
 import { useGlobalShortcuts } from "./ui/useShortcuts";
 
@@ -137,6 +139,12 @@ export function App(): React.ReactElement {
       <Toaster />
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <CapabilitiesDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
+      {/* Mounted at the root so it survives a page switch: the drawer's own
+          open state lives in the store, not in this component. */}
+      <DecisionDrawer />
+      {/* The 2D codebase graph: same reason as the drawer, mounted once so a
+          page switch cannot unmount what the reader opened. */}
+      <ComponentGraphDialog />
     </div>
   );
 }

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "specialist.v1",
+  "title": "Domain Specialist output",
+  "description": "One specialist's concrete draft for one workstream. The same schema serves a temporary gap agent drafting into its lane.",
+  "type": "object",
+  "properties": {
+    "workstream_id": { "type": "string" },
+    "summary": { "type": "string" },
+    "data_models": { "type": "array", "items": { "type": "string" } },
+    "implements": { "$ref": "#/$defs/claims" },
+    "consumes": { "$ref": "#/$defs/claims" },
+    "tasks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/task" }
+    },
+    "accepted_tradeoffs": { "$ref": "#/$defs/tradeoffs" }
+  },
+  "required": ["workstream_id", "summary", "tasks"],
+  "additionalProperties": false,
+  "$defs": {
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "contract_id": { "type": "string", "minLength": 1 },
+          "version_hash": { "type": "string", "minLength": 1 },
+          "input_schema": { "type": "string" },
+          "output_schema": { "type": "string" },
+          "errors": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["contract_id", "version_hash"],
+        "additionalProperties": false
+      }
+    },
+    "task": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "epic_id": { "type": "string", "minLength": 1 },
+        "story_id": { "type": "string" },
+        "workstream_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "steps": { "type": "array", "items": { "type": "string" } },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "operation": { "type": "string", "enum": ["add", "modify", "remove", "document"] },
+              "symbol_id": { "type": "string" },
+              "expected_signature_sha256": { "type": "string" }
+            },
+            "required": ["path", "operation"],
+            "additionalProperties": false
+          }
+        },
+        "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+        "verification": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "argv": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+              "cwd": { "type": "string" },
+              "timeout_seconds": { "type": "integer", "minimum": 1 },
+              "expected_exit_code": { "type": "integer" }
+            },
+            "required": ["id", "argv"],
+            "additionalProperties": false
+          }
+        },
+        "doc_drift_ids": { "type": "array", "items": { "type": "string" } },
+        "human_estimate": { "$ref": "#/$defs/estimate" },
+        "agent_estimate": { "$ref": "#/$defs/estimate" }
+      },
+      "required": ["id", "epic_id", "workstream_id", "title", "targets", "acceptance_criteria", "verification", "human_estimate", "agent_estimate"],
+      "additionalProperties": false
+    },
+    "estimate": {
+      "type": "object",
+      "properties": {
+        "optimistic": { "type": "number", "minimum": 0 },
+        "likely": { "type": "number", "minimum": 0 },
+        "pessimistic": { "type": "number", "minimum": 0 },
+        "basis": { "type": "string" }
+      },
+      "required": ["optimistic", "likely", "pessimistic", "basis"],
+      "additionalProperties": false
+    },
+    "tradeoffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "critique_id": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 1 }
+        },
+        "required": ["critique_id", "rationale"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -30,6 +30,7 @@ import { validate } from "../protocol/schema";
 import { insertAllowed, textSha256 } from "../collab/model";
 import { isHeartbeat } from "../ui/room";
 import { toastStore } from "../ui/toasts";
+import { ambiguityAnswer, ambiguityResolveRefusal, decisionAnswer } from "../ui/decisionDrawer";
 
 export type ConnState = "connecting" | "open" | "resyncing" | "offline" | "closed";
 
@@ -83,16 +84,39 @@ export interface DecisionOption {
   optionId: string;
   label: string;
   tradeoff: string;
+  /** What choosing this option changes; absent when the model sent none. */
+  impact?: string | undefined;
 }
 
 export interface DecisionCard {
   decisionId: string;
   question: string;
   options: DecisionOption[];
+  /**
+   * The revision the card was opened at. `DECISION_RESOLVE` carries it back and
+   * the authority rejects an answer whose revision is no longer current, so a
+   * card without one cannot be answered.
+   */
+  inputRevision?: number | undefined;
   recommendedOptionId?: string;
   resolvedOptionId?: string;
   resolvedBy?: string;
   stale: boolean;
+}
+
+/**
+ * One answer this window submitted for a decision card. It records an attempt,
+ * not a settlement: the authority's `DECISION_RESOLVE` / `ALREADY_RESOLVED` /
+ * `ERROR` reply decides what is settled, and the entry is dropped then.
+ */
+export interface DecisionAnswer {
+  optionId: string;
+  /** True until the authority answers this window's command. */
+  pending: boolean;
+  /** Event id of the command in flight, to correlate the authority's reply. */
+  eventId: string;
+  /** The last rejection the authority sent for this card, shown in the drawer. */
+  error?: string | undefined;
 }
 
 /** Public avatar activity (status + public summary; never raw reasoning). */
@@ -258,6 +282,26 @@ export interface SyncState {
    * AMBIGUITY_RESOLVE / ALREADY_RESOLVED answer decides what is settled.
    */
   ambiguityAnswers: Record<string, AmbiguityAnswer>;
+  /**
+   * Decision answers this window has submitted, keyed by decision id. Same
+   * rule as `ambiguityAnswers`: an attempt, cleared by the authority's reply.
+   */
+  decisionAnswers: Record<string, DecisionAnswer>;
+  /**
+   * Whether the question drawer is open. It lives here, not in a page, so a
+   * question stays reachable across page switches and a reconnect.
+   */
+  decisionDrawerOpen: boolean;
+  /**
+   * The 2D component graph overlay. Store-level, so opening it, changing the
+   * depth and closing it all survive a page switch; the overlay is mounted
+   * once at the app root.
+   */
+  graphOpen: boolean;
+  /** Hop count from the focus node: 1..4. */
+  graphDepth: number;
+  /** The node the graph is centred on; "" draws the whole repository. */
+  graphFocus: string;
 }
 
 /** One submitted answer to a classification question. */
@@ -301,6 +345,11 @@ let state: SyncState = {
   statusLoaded: false,
   status: STATUS_UNKNOWN,
   ambiguityAnswers: {},
+  decisionAnswers: {},
+  decisionDrawerOpen: false,
+  graphOpen: false,
+  graphDepth: 2,
+  graphFocus: "",
 };
 
 let ws: WebSocket | null = null;
@@ -437,7 +486,46 @@ interface TextUpdatesPayload {
   updates?: Array<{ client_id?: string; changes: ChangeDesc }>;
 }
 
+/** The `CODE: message` text of an ERROR frame. */
+function errorText(payload: unknown): string {
+  const p = payload as { code?: string; message?: string };
+  return `${p.code ?? "ERROR"}: ${p.message ?? ""}`.trim();
+}
+
+/**
+ * Ends the wait for a decision answer the authority has already refused.
+ *
+ * A unicast reply echoes the event id of the command it answers (hub.go's
+ * `unicast`), so an ERROR frame carrying a pending command's id is that
+ * command's answer: without this the refused options would stay disabled for
+ * the rest of the run. The attempt is kept with the rejection attached, and a
+ * `STALE_RUN` refusal also marks the card stale — the revision moved, so the
+ * window must refresh the card before it can answer again.
+ */
+function settleInFlight(env: WSEnvelope): void {
+  const settled = Object.entries(state.decisionAnswers).filter(
+    ([, answer]) => answer.pending && answer.eventId === env.event_id,
+  );
+  if (settled.length === 0) return;
+  const frame = env.payload as { code?: string };
+  const rejection = env.event_type === "ERROR" ? errorText(frame) : null;
+  const stale = rejection !== null && frame.code === "STALE_RUN";
+  const answers = { ...state.decisionAnswers };
+  for (const [id, answer] of settled) {
+    if (rejection === null) delete answers[id];
+    else answers[id] = { ...answer, pending: false, error: rejection };
+  }
+  const ids = settled.map(([id]) => id);
+  setState({
+    decisionAnswers: answers,
+    ...(stale
+      ? { decisions: state.decisions.map((d) => (ids.includes(d.decisionId) ? { ...d, stale: true } : d)) }
+      : {}),
+  });
+}
+
 function handleEnvelope(env: WSEnvelope): void {
+  settleInFlight(env);
   switch (env.event_type as WSEventType) {
     case "STATE_SNAPSHOT": {
       const p = env.payload as SnapshotPayload;
@@ -614,27 +702,38 @@ function handleEnvelope(env: WSEnvelope): void {
     case "DECISION_PROMPT": {
       const p = env.payload as {
         decision_id?: string;
+        input_revision?: string;
         question?: string;
-        options?: Array<{ id: string; label: string; tradeoff: string }>;
+        options?: Array<{ id: string; label: string; tradeoff: string; impact?: string }>;
         recommended_option_id?: string;
       };
+      const decisionId = p.decision_id ?? "?";
+      const revision = Number(p.input_revision);
+      const otherAnswers = Object.fromEntries(
+        Object.entries(state.decisionAnswers).filter(([id]) => id !== decisionId),
+      );
       setState({
         timeline: appendTimeline(env, {
           kind: "decision",
           at: Date.now(),
-          decisionId: p.decision_id ?? "?",
+          decisionId,
           question: p.question ?? "",
         }),
+        // A fresh prompt for the same id is a new revision: the previous
+        // attempt and its rejection no longer describe this card.
+        decisionAnswers: otherAnswers,
         decisions: [
-          ...state.decisions.filter((d) => d.decisionId !== p.decision_id),
+          ...state.decisions.filter((d) => d.decisionId !== decisionId),
           {
-            decisionId: p.decision_id ?? "?",
+            decisionId,
             question: p.question ?? "",
             options: (p.options ?? []).map((o) => ({
               optionId: o.id,
               label: o.label,
               tradeoff: o.tradeoff,
+              ...(o.impact !== undefined ? { impact: o.impact } : {}),
             })),
+            ...(Number.isFinite(revision) && revision >= 0 ? { inputRevision: revision } : {}),
             ...(p.recommended_option_id !== undefined
               ? { recommendedOptionId: p.recommended_option_id }
               : {}),
@@ -666,6 +765,11 @@ function handleEnvelope(env: WSEnvelope): void {
     case "DECISION_RESOLVE": {
       const p = env.payload as { decision_id?: string; option_id?: string; actor_id?: string };
       setState({
+        // The authority answered this window's command (or another member's):
+        // either way the card is settled and nothing is in flight any more.
+        decisionAnswers: Object.fromEntries(
+          Object.entries(state.decisionAnswers).filter(([id]) => id !== p.decision_id),
+        ),
         timeline: appendTimeline(env, {
           kind: "resolved",
           at: Date.now(),
@@ -690,6 +794,9 @@ function handleEnvelope(env: WSEnvelope): void {
       const p = env.payload as { decision_id?: string; option_id?: string };
       toastStore.push("info", "Decision already resolved by another member");
       setState({
+        decisionAnswers: Object.fromEntries(
+          Object.entries(state.decisionAnswers).filter(([id]) => id !== p.decision_id),
+        ),
         decisions: state.decisions.map((d) =>
           d.decisionId === p.decision_id
             ? { ...d, stale: true, ...(p.option_id !== undefined ? { resolvedOptionId: p.option_id } : {}) }
@@ -713,7 +820,7 @@ function handleEnvelope(env: WSEnvelope): void {
     }
     case "ERROR": {
       const p = env.payload as { code?: string; message?: string };
-      const text = `${p.code ?? "ERROR"}: ${p.message ?? ""}`.trim();
+      const text = errorText(p);
       // A version mismatch is a standing condition of the window (banner);
       // every other error is an event about one request (toast).
       if (p.code === "UNSUPPORTED_VERSION") setState({ errorMessage: text });
@@ -949,9 +1056,76 @@ export function freezeRequest(): void {
   send(commandEnvelope("FREEZE_REQUEST", {}));
 }
 
-/** Decision resolution (owner and editors). */
-export function resolveDecision(decisionId: string, optionId: string): void {
-  send(commandEnvelope("DECISION_RESOLVE", { decision_id: decisionId, option_id: optionId }));
+/** The question drawer is open; a page switch must not close it. */
+/** Opens the 2D component graph overlay, keeping the last focus and depth. */
+export function openGraph(focus?: string, depth?: number): void {
+  setState({
+    graphOpen: true,
+    graphFocus: focus ?? state.graphFocus,
+    graphDepth: depth ?? state.graphDepth,
+  });
+}
+
+/** Closes the graph overlay. Focus and depth are kept for the next open. */
+export function closeGraph(): void {
+  setState({ graphOpen: false });
+}
+
+/** Centres the graph on one node and opens it. */
+export function focusGraphNode(id: string): void {
+  setState({ graphOpen: true, graphFocus: id });
+}
+
+/** Changes the walk depth, clamped to the documented range. */
+export function setGraphDepth(depth: number): void {
+  const clamped = Math.min(4, Math.max(1, Math.round(depth)));
+  setState({ graphDepth: clamped });
+}
+
+export function openDecisionDrawer(): void {
+  setState({ decisionDrawerOpen: true });
+}
+
+/**
+ * Close the drawer. Closing is not answering: nothing is sent, and the
+ * unresolved-count action reopens the same list.
+ */
+export function closeDecisionDrawer(): void {
+  setState({ decisionDrawerOpen: false });
+}
+
+/**
+ * Decision resolution (owner and editors).
+ *
+ * The answer carries the revision the card was opened at, because the
+ * authority rejects a `DECISION_RESOLVE` whose revision is no longer current.
+ * A card without a revision, or one this window may not answer, is refused
+ * with a reason instead of sending a command the session will reject. The
+ * attempt is recorded as in flight until the authority answers it.
+ *
+ * Returns the refusal, or null when the command was sent.
+ */
+export function resolveDecision(decisionId: string, optionId: string): string | null {
+  const card = state.decisions.find((d) => d.decisionId === decisionId);
+  if (card === undefined) {
+    const missing = "This decision is not part of the current candidate.";
+    toastStore.push("error", missing);
+    return missing;
+  }
+  const verdict = decisionAnswer(card, optionId, state);
+  if (!verdict.ok) {
+    toastStore.push("error", verdict.reason);
+    return verdict.reason;
+  }
+  const command = commandEnvelope("DECISION_RESOLVE", verdict.payload);
+  setState({
+    decisionAnswers: {
+      ...state.decisionAnswers,
+      [decisionId]: { optionId, pending: true, eventId: command.event_id },
+    },
+  });
+  send(command);
+  return null;
 }
 
 /**
@@ -964,9 +1138,9 @@ export function resolveDecision(decisionId: string, optionId: string): void {
  * same id is refused locally rather than racing another member's.
  */
 export function resolveAmbiguity(id: string, choice: AmbiguityChoice, note = ""): void {
-  const refusal = ambiguityRefusal(id, note);
-  if (refusal !== null) {
-    toastStore.push("error", refusal);
+  const verdict = ambiguityAnswer(state, id, choice, note);
+  if (!verdict.ok) {
+    toastStore.push("error", verdict.reason);
     return;
   }
   setState({
@@ -975,28 +1149,19 @@ export function resolveAmbiguity(id: string, choice: AmbiguityChoice, note = "")
       [id]: { choice, note: note.trim() === "" ? undefined : note, pending: true, superseded: false },
     },
   });
-  send(
-    commandEnvelope("AMBIGUITY_RESOLVE", {
-      ambiguity_id: id,
-      choice,
-      ...(note.trim() === "" ? {} : { note }),
-    }),
-  );
+  send(commandEnvelope("AMBIGUITY_RESOLVE", verdict.payload));
 }
 
 /** Why this window may not answer, or null when the answer can be sent. */
 export function ambiguityRefusal(id: string, note: string): string | null {
-  if (id.trim() === "") return "A question needs its id before it can be answered.";
-  if (note.length > MAX_AMBIGUITY_NOTE) return `Keep a note under ${String(MAX_AMBIGUITY_NOTE)} characters.`;
-  if (state.role !== "owner") return "Only the session owner can answer the questions.";
-  if (state.conn !== "open") return "Answering needs a live connection to the session.";
-  if (state.phase !== "INGESTION") return "These questions were already answered; the plan has moved on.";
-  if (state.ambiguityAnswers[id] !== undefined) return "This question already has an answer from this window.";
-  return null;
+  return ambiguityResolveRefusal(state, id, note);
 }
 
-/** The longest note a question answer carries. */
-export const MAX_AMBIGUITY_NOTE = 500;
+/**
+ * The longest note a question answer carries. It is defined beside the refusal
+ * rule in `ui/decisionDrawer.ts` and re-exported here for the note input.
+ */
+export { MAX_AMBIGUITY_NOTE } from "../ui/decisionDrawer";
 
 /** Owner commands. */
 export function cancelSession(): void {

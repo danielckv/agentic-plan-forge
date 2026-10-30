@@ -1,10 +1,14 @@
 import { useState } from "react";
+import { CircleHelp } from "lucide-react";
+import { openDecisionDrawer, useSync } from "../../store/syncStore";
+import { pendingQuestionCount } from "../../ui/decisionDrawer";
 import { BookOpen, Boxes, ClipboardList, FolderTree, Layers, LoaderCircle, Waypoints } from "lucide-react";
 
 import { EpicCard } from "../../components/epics/EpicCard";
 import { EpicModal } from "../../components/epics/EpicModal";
 import type { ComponentRef, ComponentsView, ImpactMap, PlanFile, ProjectContext } from "../../protocol/api";
 import { componentTerm } from "../../ui/editor/markdownEdits";
+import { parseNormalizedPRD } from "../../protocol/drafts";
 import { BriefTab } from "./BriefTab";
 import { ComponentBrowser } from "./ComponentBrowser";
 import { ImpactPanel, VERDICT_TONE } from "./ImpactPanel";
@@ -40,6 +44,12 @@ export function PlanRail(props: {
   const [tab, setTab] = useState<RailTab>("brief");
   const [open, setOpen] = useState<number | null>(null);
   const noteCount = ctx?.hits.length ?? 0;
+  const sync = useSync();
+  const openQuestions = pendingQuestionCount(
+    sync.decisions,
+    parseNormalizedPRD(sync.drafts.find((d) => d.avatarId === "ingestion")?.data),
+    sync.ambiguityAnswers,
+  );
   const touchCount = (impact?.whole.length ?? 0) + (impact?.conflicts.length ?? 0);
 
   return (
@@ -51,6 +61,17 @@ export function PlanRail(props: {
         <RailTabButton id="epics" current={tab} onSelect={setTab} icon={Layers} label="Epics" count={files.length} />
         <RailTabButton id="code" current={tab} onSelect={setTab} icon={Boxes} label="Codebase" />
         <RailTabButton id="notes" current={tab} onSelect={setTab} icon={BookOpen} label="Notes" count={noteCount} />
+        <button
+          type="button"
+          className="pf-rail-tab"
+          onClick={() => openDecisionDrawer()}
+          title="Open the question drawer"
+          aria-label={openQuestions > 0 ? `Questions, ${String(openQuestions)} open` : "Questions"}
+        >
+          <CircleHelp size={15} aria-hidden="true" />
+          <span>Questions</span>
+          {openQuestions > 0 && <span className="pf-rail-count">{openQuestions}</span>}
+        </button>
       </div>
       <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
         {tab === "brief" && (

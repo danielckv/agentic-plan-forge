@@ -3,8 +3,13 @@
 // Package ast grounds the planning avatars in the repository. It parses source
 // files with Tree-sitter, extracts symbols, imports and route registrations
 // through declarative queries, selects files through git without ever running
-// repository-controlled code, and compares README and docs claims against the
+// repository-controlled code, and compares Markdown claims against the
 // resulting symbol graph.
+//
+// Its evidence is restricted on purpose. classifyContent accepts source code,
+// source in a language it cannot parse, Markdown and SVG; every other path is
+// counted and skipped unread. SVG is bounded UTF-8 markup, never an image, and
+// is never resolved or fetched. Nothing in the repository is executed.
 //
 // Every Tree-sitter parser, tree, cursor and query is closed explicitly: the
 // bindings warn that finalizers and CGO do not mix.
@@ -98,6 +103,56 @@ func LanguageForPath(p string) (language string, ok bool) {
 		}
 	}
 	return "", false
+}
+
+// contentKind is what a repository path may contribute to the graph. The graph
+// keeps the source it parses, the source it recognizes but cannot parse, and
+// the plain text it can read; every other file contributes nothing.
+type contentKind int
+
+const (
+	// contentExcluded is a path the graph ignores: images, archives, binaries,
+	// stylesheets, manifests and every other file that is neither source code,
+	// Markdown nor SVG. An excluded file is never opened.
+	contentExcluded contentKind = iota
+	// contentCode is source code this package parses with Tree-sitter.
+	contentCode
+	// contentUnsupportedCode is source code in a language this package does not
+	// parse. It is hashed and counted as a coverage gap; no symbol is ever
+	// claimed from it.
+	contentUnsupportedCode
+	// contentMarkdown is a Markdown document. It contributes bounded text.
+	contentMarkdown
+	// contentSVG is SVG markup, read as bounded UTF-8 text and never as an
+	// image.
+	contentSVG
+)
+
+// markdownExts and svgExts route the two text formats the graph keeps besides
+// source code.
+var (
+	markdownExts = map[string]bool{".md": true, ".markdown": true}
+	svgExts      = map[string]bool{".svg": true}
+)
+
+// classifyContent reports what a repository path may contribute to the graph.
+// Routing is by extension only and is case-insensitive: a grammar this package
+// parses wins first, then a recognized unsupported language, then Markdown and
+// SVG, and everything else is excluded. The scan classifies a path before it
+// opens or hashes it.
+func classifyContent(p string) contentKind {
+	ext := strings.ToLower(path.Ext(p))
+	switch {
+	case extToGrammar[ext] != "":
+		return contentCode
+	case otherSourceExts[ext]:
+		return contentUnsupportedCode
+	case markdownExts[ext]:
+		return contentMarkdown
+	case svgExts[ext]:
+		return contentSVG
+	}
+	return contentExcluded
 }
 
 // captureRole is what one query capture name means to the extractor.

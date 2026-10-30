@@ -18,6 +18,11 @@ const (
 	HardMaxCycles = 3
 	// HardMaxParallel is the ceiling on concurrent provider calls per stage.
 	HardMaxParallel = 4
+	// HardMaxGapAgents is the ceiling on admitted expertise-gap agents per
+	// run. Config clamps the setting to 0..3.
+	HardMaxGapAgents = 3
+	// DefaultGapAgents applies when the owner configured none.
+	DefaultGapAgents = 2
 	// DefaultRetryBackoff is the base of the exponential backoff before the one
 	// retry of a transient provider failure.
 	DefaultRetryBackoff = time.Second
@@ -72,6 +77,10 @@ type RunInput struct {
 	// MaxParallel bounds concurrent provider calls per stage; the effective
 	// value is min(MaxParallel, HardMaxParallel). Zero selects HardMaxParallel.
 	MaxParallel int
+	// MaxGapAgents bounds how many expertise-gap agents one run admits.
+	// Zero disables them; a negative value selects DefaultGapAgents, and
+	// HardMaxGapAgents is the ceiling.
+	MaxGapAgents int
 	// StartCycle is the cycle to enter (1-based). Zero or one starts at cycle
 	// one; a retry of a failed stage re-enters its cycle and resumes from the
 	// checkpoint.
@@ -109,6 +118,21 @@ func (in RunInput) maxCycles() int {
 		return HardMaxCycles
 	default:
 		return in.MaxCycles
+	}
+}
+
+// gapAgents clamps MaxGapAgents to 0..HardMaxGapAgents. Zero disables
+// expertise-gap agents, as the settings range zero through three requires. A
+// negative value is "unset" and selects DefaultGapAgents; a value above the
+// hard ceiling is clamped to it.
+func (in RunInput) gapAgents() int {
+	switch {
+	case in.MaxGapAgents < 0:
+		return DefaultGapAgents
+	case in.MaxGapAgents > HardMaxGapAgents:
+		return HardMaxGapAgents
+	default:
+		return in.MaxGapAgents
 	}
 }
 
