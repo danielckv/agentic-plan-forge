@@ -45,6 +45,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change and passes after. A critique must state a reproducible failure scenario, the inputs and the wrong result
   that follows, or it is dropped rather than filed at a lower severity.
 
+- A capped run produces a plan instead of ending with nothing (ADR 0023). Hitting the three-cycle cap used to strand
+  the run: every cycle had bought nothing, the only exit discarded all drafts, and the specification could never be
+  written. A blocker card now offers record-and-produce or pause. Recording waives the blocker with a visible
+  `accepted:` reference, the authority gate clears, and the run synthesizes a plan explicitly marked provisional;
+  pausing still pauses. A provisional plan names the waived findings it carries and the decisions still open.
+- The deliberation page shows the plan as a 3D node graph. Nodes are plan sections, rendered by diffing successive
+  drafts, so no new wire event was needed; a non-WebGL list renders from the same graph. Epics and Architecture tabs
+  merged into one Plan tab.
+- The terminal writes the brief. `plan-forge run --frontend terminal` opens an editor on the brief pane; printable
+  keys become text, Enter breaks a line, Backspace deletes, Ctrl-S appends the change, Esc cancels. The client now
+  sends HELLO right after authentication — the room refuses every other event until it arrives, and its answer
+  carries the document snapshot the editor needs, so without it a terminal connected and then saw nothing.
+- A saved config naming `omp` fails with migration guidance instead of a bare list of allowed hosts: `omp` is no
+  longer a generation host, the message says to set a provider and add its API key. The configuration docs dropped
+  their `omp` examples.
+- Stages run as one deliberation pass with at most one targeted repair, instead of automatic full-plan cycles.
+  Independent sections and documentation batches run concurrently under the shared call limit; a reviewer finding
+  repairs only its dependent section, and completed unrelated drafts are reused. Convergence asks for a cycle only
+  for a blocking finding. Reasoning: ADRs 0019, 0021.
+- Temporary expertise-gap agents: architecture proposes at most three per run alongside its output, each with a
+  purpose, requirement references, and a concrete deliverable; admission is verified server-side and duplicates and
+  recursion are rejected. A gap agent retires after its deliverable is fused or rejected with a recorded reason.
+
 ### Note
 
 - There is no subscription sign-in, and there will not be one. Anthropic's terms reserve Claude.ai OAuth for
@@ -376,8 +399,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...HEAD
-[0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...f91efbc
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...v0.8.0
