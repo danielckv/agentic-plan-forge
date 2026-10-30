@@ -413,7 +413,12 @@ func TestBlockingFindingsAtTheCapBecomeADecision(t *testing.T) {
 	}
 }
 
-func TestMediumFindingsAtTheCapBecomeADecision(t *testing.T) {
+// A MEDIUM finding never blocked a plan, but convergence used to demand zero
+// of them, so one nit bought another full cycle — the architect and up to four
+// specialists re-drafted, roughly ten provider calls, to settle something
+// nobody was going to reject. Only a blocker is worth a cycle now, so the
+// choice is offered on the first cycle that is otherwise clean.
+func TestMediumFindingsSettleWithoutBurningCycles(t *testing.T) {
 	fx := synthtest.Sample()
 	fx.Specialists[1].Accepted = nil // nothing is accepted, so MEDIUM C-2 stays open
 	for _, tc := range []struct {
@@ -423,8 +428,8 @@ func TestMediumFindingsAtTheCapBecomeADecision(t *testing.T) {
 		h := newHarness(t, fx)
 		ch := h.sink.resolver(func(p relay.DecisionPromptPayload) string { return tc.choice })
 		si, err := h.run(context.Background(), ch)
-		if got := h.sink.cycleStarts(); len(got) != 3 {
-			t.Fatalf("%s: cycle starts = %v, want 3 cycles of revision first", tc.choice, got)
+		if got := h.sink.cycleStarts(); len(got) != 1 {
+			t.Fatalf("%s: cycle starts = %v, want the choice offered after one cycle, not three", tc.choice, got)
 		}
 		prompts := h.sink.ofType(relay.EventDecisionPrompt)
 		if len(prompts) != 1 {
