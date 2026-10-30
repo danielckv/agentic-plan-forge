@@ -6,7 +6,6 @@ import {
   Crown,
   FileText,
   Gauge,
-  Layers,
   LoaderCircle,
   MessagesSquare,
   Network,
@@ -18,15 +17,11 @@ import {
 } from "lucide-react";
 
 import { AvatarBadge, MAIN_AVATARS, avatarSpec } from "../components/avatars/AvatarBadge";
-import { EpicCard } from "../components/epics/EpicCard";
-import { EpicModal } from "../components/epics/EpicModal";
-import { MermaidSvg } from "../components/MermaidSvg";
 import { UsagePanel } from "../components/UsagePanel";
+import { PlanGraphView } from "./PlanGraphView";
 import {
-  architectureMermaid,
   parseArchitectDraft,
   parsePMDraft,
-  pmEpicMarkdown,
   type ArchitectDraft,
   type PMDraft,
 } from "../protocol/drafts";
@@ -97,7 +92,10 @@ function humanStage(id: string): string {
   return id;
 }
 
-type PlanTab = "epics" | "architecture" | "findings" | "usage";
+// The graph absorbs what the Epics and Architecture tabs used to show: both
+// are the same plan at different depths, and splitting them across tabs hid
+// the shape of the work.
+type PlanTab = "graph" | "findings" | "usage";
 
 /**
  * What one avatar is running on and how far it has got: the host and model
@@ -152,7 +150,8 @@ export function Page2AvatarCanvas(): React.ReactElement {
   const cycle = sync.cycle;
   const runId = sync.runId;
   const [focus, setFocus] = useState<string | null>(null);
-  const [planTab, setPlanTab] = useState<PlanTab>("epics");
+  const [planTab, setPlanTab] = useState<PlanTab>("graph");
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   // A retry that has been sent but whose stage has not started yet. Without it
   // a second click cancels a call that is already paid for; the executor
   // refuses that, and the button says so rather than looking dead.
@@ -390,8 +389,14 @@ export function Page2AvatarCanvas(): React.ReactElement {
 
             <aside className="pf-room-plan" aria-label="Plan taking shape">
               <div className="pf-rail-tabs" role="tablist" aria-label="Plan views">
-                <PlanTabButton id="epics" current={planTab} onSelect={setPlanTab} icon={Layers} label="Epics" count={pm?.epics.length ?? 0} />
-                <PlanTabButton id="architecture" current={planTab} onSelect={setPlanTab} icon={Network} label="Architecture" />
+                <PlanTabButton
+                  id="graph"
+                  current={planTab}
+                  onSelect={setPlanTab}
+                  icon={Network}
+                  label="Plan"
+                  count={(pm?.epics.length ?? 0) + (pm?.stories.length ?? 0) + (arch?.workstreams.length ?? 0)}
+                />
                 <PlanTabButton
                   id="findings"
                   current={planTab}
@@ -403,8 +408,15 @@ export function Page2AvatarCanvas(): React.ReactElement {
                 <PlanTabButton id="usage" current={planTab} onSelect={setPlanTab} icon={Gauge} label="Usage" />
               </div>
               <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
-                {planTab === "epics" && <EpicsPanel pm={pm} />}
-                {planTab === "architecture" && <ArchitecturePanel arch={arch} />}
+                {planTab === "graph" && (
+                  <PlanGraphView
+                    pm={pm}
+                    architect={arch}
+                    critiques={sync.critiques}
+                    selectedId={selectedNode}
+                    onSelect={setSelectedNode}
+                  />
+                )}
                 {planTab === "findings" && <FindingsPanel findings={sync.critiques} />}
                 {planTab === "usage" && <UsagePanel live={workingCount > 0} />}
               </div>
@@ -640,7 +652,7 @@ function TimelineLine(props: {
           : e.schemaId === "synthesis.v1"
             ? "compiled the master specification"
             : `published draft ${e.revision}`;
-    const tab: PlanTab | null = e.avatarId === "pm" ? "epics" : e.avatarId === "architect" ? "architecture" : null;
+    const tab: PlanTab | null = e.avatarId === "pm" || e.avatarId === "architect" ? "graph" : null;
     body = (
       <p className="pf-line-text">
         <FileText size={13} aria-hidden="true" /> {what}.
@@ -675,92 +687,6 @@ function TimelineLine(props: {
         </div>
         {body}
       </div>
-    </div>
-  );
-}
-
-function EpicsPanel({ pm }: { pm: PMDraft | null }): React.ReactElement {
-  const [open, setOpen] = useState<number | null>(null);
-  if (pm === null) {
-    return (
-      <div className="pf-rail-empty">
-        <p className="pf-body">The Product Manager is drafting epics.</p>
-        <SkeletonCard lines={2} />
-      </div>
-    );
-  }
-  const docs = pm.epics.map((e) => ({
-    id: e.id,
-    title: e.title,
-    filename: `${e.id.toLowerCase()}-${e.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.md`,
-    markdown: pmEpicMarkdown(pm, e.id),
-  }));
-  return (
-    <div className="pf-epic-list">
-      {pm.epics.map((e, i) => {
-        const stories = pm.stories.filter((s) => s.epicId === e.id);
-        return (
-          <EpicCard
-            key={e.id}
-            id={e.id}
-            title={e.title}
-            goal={e.goal}
-            filename={docs[i]?.filename ?? e.id}
-            stats={[
-              { label: ["story", "stories"], value: stories.length },
-              { label: ["criterion", "criteria"], value: stories.reduce((n, s) => n + s.criteria.length, 0) },
-            ]}
-            tags={[...new Set(stories.map((s) => s.actor))].map((actor) => ({ text: actor }))}
-            onOpen={() => setOpen(i)}
-          />
-        );
-      })}
-      <EpicModal docs={docs} index={open} onIndex={setOpen} />
-    </div>
-  );
-}
-
-function ArchitecturePanel({ arch }: { arch: ArchitectDraft | null }): React.ReactElement {
-  if (arch === null) {
-    return (
-      <div className="pf-rail-empty">
-        <p className="pf-body">The architect drafts after the Product Manager.</p>
-        <SkeletonCard lines={3} />
-      </div>
-    );
-  }
-  const diagram = architectureMermaid(arch);
-  return (
-    <div className="pf-arch">
-      <p className="pf-body">{arch.summary}</p>
-      {diagram !== null && <MermaidSvg source={diagram} title="Proposed architecture" />}
-      <p className="pf-label">Workstreams</p>
-      <ul className="pf-arch-ws">
-        {arch.workstreams.map((w) => (
-          <li key={w.id}>
-            <span className="pf-arch-ws-id">{w.id}</span>
-            <span className="pf-caption">{w.role}</span>
-            <span className="pf-arch-ws-mods">
-              {w.modules.map((m) => (
-                <code key={m} className="pf-tag">
-                  {m}
-                </code>
-              ))}
-            </span>
-            {w.dependsOn.length > 0 && <span className="pf-caption">after {w.dependsOn.join(", ")}</span>}
-          </li>
-        ))}
-      </ul>
-      {arch.constraints.length > 0 && (
-        <>
-          <p className="pf-label">Constraints</p>
-          <ul className="pf-arch-constraints">
-            {arch.constraints.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        </>
-      )}
     </div>
   );
 }
