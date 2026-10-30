@@ -47,6 +47,21 @@ async function shot(page, name) {
   console.log(`captured ${name}`);
 }
 
+/**
+ * Records one frame of the demo GIF at 960px wide, device scale factor 1, so
+ * the assembled GIF stays small without shrinking text below legibility. Frames
+ * are ordinary PNGs; scripts/demo-gif.sh turns them into docs/images/demo.gif.
+ */
+async function frame(page, name) {
+  const width = 960;
+  const height = Math.round((width * 900) / 1440);
+  await page.setViewportSize({ width, height });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: `${outDir}/gif/${name}.png` });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  console.log(`frame ${name}`);
+}
+
 /** True when neither the document nor the page's scroll regions scroll sideways. */
 async function horizontalOverflow(page) {
   return page.evaluate(() => {
@@ -67,10 +82,13 @@ let browser;
 let exitCode = 0;
 try {
   mkdirSync(outDir, { recursive: true });
+  mkdirSync(`${outDir}/gif`, { recursive: true });
   for (const name of SHOTS) rmSync(`${outDir}/${name}.png`, { force: true });
 
   browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  // deviceScaleFactor 2: the README screenshot is captured at 2880x1800 so it
+  // stays sharp at display width without a second pass.
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: session.origin });
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
@@ -196,15 +214,19 @@ try {
   await page.waitForSelector('.pf-sidebar[data-collapsed="false"]');
 
   // ---- Page 2: the owner confirms; the avatars deliberate.
+  await frame(page, "gif-01-brief");
   await page.getByRole("button", { name: /Confirm Context/ }).click();
   // Page 2's heading is written from the run's outcome, so there is no fixed
   // string to wait for. The room's two-column grid is the stable landmark.
   await page.waitForSelector(".pf-room-grid", { state: "visible" });
   await page.waitForSelector("text=Where should a large export be written?", { state: "visible" });
   await page.waitForSelector(".pf-line", { state: "visible" });
-  check((await page.locator(".pf-roster-card").count()) === 4, "the room shows the four avatars");
-  // The Epics and Architecture tabs were one plan shown at two depths; the
-  // Plan tab now holds both as a single graph.
+  await frame(page, "gif-03-discussion");
+  // Six permanent avatars: the four original ones plus the Code Reviewer and
+  // the Technical Leader that run after synthesis.
+  check((await page.locator(".pf-roster-card").count()) === 6, "the room shows the six permanent avatars");
+  // The Team tab is the default view now; the Plan tab still holds the graph.
+  await page.getByRole("tab", { name: /Plan/ }).click();
   await page.waitForSelector(".pf-room-plan .pf-plangraph", { state: "visible" });
   const graphCanvases = await page.locator(".pf-plangraph3d canvas").count();
   const treeNodes = await page.locator(".pf-plantree-node").count();
@@ -217,6 +239,21 @@ try {
   await page.getByRole("tab", { name: /Plan/ }).click();
   await page.waitForTimeout(600);
   await shot(page, "page2-room");
+  // The Team tab is the shipped default view and the one the README shows.
+  await page.getByRole("tab", { name: "Team" }).click();
+  await page.waitForSelector(".pf-agentroom-face", { state: "visible" });
+  await frame(page, "gif-02-team");
+  // The README still: 1440 CSS px at device scale factor 2 (so 2880 real
+  // pixels), per the plan, so text stays readable at README display width.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: `${outDir}/workspace.png` });
+  console.log("captured workspace");
+  // The question drawer, opened from the rail on the page where decisions land.
+  await page.getByRole("button", { name: /^Questions/ }).click();
+  await page.waitForSelector(".pf-dialog[data-size=\"drawer\"]", { state: "visible" });
+  await frame(page, "gif-04-drawer");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(".pf-agentroom-face", { state: "visible" });
   // Filtering by an avatar narrows the discussion. The roster moved inside a
   // collapsed <details> after this harness was written, so its cards exist but
   // are not visible until it is opened.
@@ -259,6 +296,7 @@ try {
   await cta.waitFor({ state: "visible" });
   check(await cta.isEnabled(), "the owner sees the host-aware call to action");
   await shot(page, "page3-synthesis");
+  await frame(page, "gif-06-spec");
 
   await page.locator("#jira-matrix").scrollIntoViewIfNeeded();
   await page.getByRole("button", { name: "Expand all" }).click();
@@ -315,10 +353,13 @@ try {
   await page.locator(".pf-sidebar-nav").getByRole("button", { name: "Synthesis" }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // ---- Handoff: approve; the relay broadcasts PLAN_APPROVED.
+  // ---- Handoff: approve; the relay broadcasts PLAN_APPROVED, and the app
+  // moves to the build page, which is where the handoff panel lives.
   await page.getByRole("button", { name: "Approve & open in Claude Code Plan Mode" }).click();
+  await page.waitForSelector(".pf-build", { state: "visible" });
   await page.waitForSelector(".pf-handoff", { state: "visible" });
   await page.waitForSelector("text=This window closes in", { state: "visible" });
+  await frame(page, "gif-05-handoff");
   await shot(page, "page3-handoff");
   check(
     (await page.evaluate(() => document.querySelector('.pf-phase-step[aria-current="step"] .pf-phase-label')?.textContent)) === "Approved",

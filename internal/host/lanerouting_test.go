@@ -58,15 +58,15 @@ func TestSpecialistLaneKeepsItsHost(t *testing.T) {
 // owner chose nothing, never an override of what they did choose.
 func TestPinnedSpecialistHostCoversEveryLane(t *testing.T) {
 	r := readyRouter(t, config.Config{RoleModels: map[string]config.RoleBinding{
-		"specialist": {Host: "omp", Model: "claude-opus-5-5"},
+		"specialist": {Host: "gemini", Model: "claude-opus-5-5"},
 	}})
 	for _, lane := range []string{"billing-api", "web-ui", "ws-docs"} {
 		p, err := r.PlaceRole(context.Background(), contracts.RoleSpecialist, lane, contracts.SlotMain)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if p.Kind != KindOMP || p.Model != "claude-opus-5-5" {
-			t.Errorf("lane %s = %s/%s, want omp/claude-opus-5-5", lane, p.Kind, p.Model)
+		if p.Kind != KindGemini || p.Model != "claude-opus-5-5" {
+			t.Errorf("lane %s = %s/%s, want gemini/claude-opus-5-5", lane, p.Kind, p.Model)
 		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/host"
 )
 
@@ -74,10 +75,11 @@ func runInstall(ctx context.Context, args []string) int {
 	if dryRun {
 		return exitOK
 	}
-	// The final line depends on whether any generation host is signed in.
+	// The final line depends on whether any generation host is signed in:
+	// an API key counts as much as a CLI sign-in.
 	anyReady := false
 	for _, r := range reports {
-		if (r.Host == "claude" || r.Host == "omp") && r.Auth == "ready" {
+		if (r.Host == "claude" || r.Host == "omp" || config.IsAPIProvider(r.Host)) && r.Auth == "ready" {
 			anyReady = true
 		}
 	}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "critic.v1",
+  "title": "Red-Team Critic output",
+  "description": "Severity-ranked objections against the current drafts.",
+  "type": "object",
+  "properties": {
+    "critiques": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/critique" }
+    }
+  },
+  "required": ["critiques"],
+  "additionalProperties": false,
+  "$defs": {
+    "critique": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+        "target_ids": { "type": "array", "items": { "type": "string" } },
+        "evidence": { "type": "string" },
+        "impact": { "type": "string" },
+        "required_change": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "resolved", "accepted"] },
+        "resolution_ref": { "type": "string" }
+      },
+      "required": ["id", "severity", "evidence", "required_change", "status"],
+      "additionalProperties": false
+    }
+  }
+}

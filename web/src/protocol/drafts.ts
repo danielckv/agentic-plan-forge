@@ -142,6 +142,18 @@ export interface ArchitectDraft {
   summary: string;
   constraints: string[];
   workstreams: Array<{ id: string; role: string; modules: string[]; dependsOn: string[] }>;
+  /**
+   * Gaps the architect proposed. Admission is the server's decision, not this
+   * field's: a proposal here may still be rejected, and `status` says which.
+   */
+  proposedGaps?: Array<{
+    id: string;
+    specialty: string;
+    requirementIds: string[];
+    deliverable: string;
+    parentId: string;
+    status: string;
+  }>;
   nodes: Array<{ id: string; label: string }>;
   edges: Array<{ from: string; to: string; label: string }>;
 }
@@ -158,6 +170,14 @@ export function parseArchitectDraft(content: unknown): ArchitectDraft | null {
       role: str(w.role),
       modules: strs(w.module_paths),
       dependsOn: strs(w.depends_on),
+    })),
+    proposedGaps: list(o.proposed_gaps).map((g) => ({
+      id: str(g.id),
+      specialty: str(g.specialty),
+      requirementIds: strs(g.requirement_ids),
+      deliverable: str(g.deliverable),
+      parentId: str(g.parent_id),
+      status: str(g.status),
     })),
     nodes: list(arch?.nodes).map((n) => ({ id: str(n.id), label: str(n.label) })),
     edges: list(arch?.edges).map((e) => ({ from: str(e.from), to: str(e.to), label: str(e.label) })),

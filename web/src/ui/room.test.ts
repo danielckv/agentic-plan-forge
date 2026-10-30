@@ -10,7 +10,7 @@ import {
   type RoomThought,
 } from "./room";
 
-const MAIN = ["pm", "architect", "critic", "synthesizer"];
+const MAIN = ["pm", "architect", "critic", "synthesizer", "code_reviewer", "tech_lead"];
 
 function room(thoughts: RoomThought[], draftAvatars: string[] = [], runActive = true): RoomInput {
   const byId: Record<string, RoomThought> = {};

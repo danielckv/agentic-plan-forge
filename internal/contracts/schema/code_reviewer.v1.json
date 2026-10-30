@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "code_reviewer.v1",
+  "title": "Code Reviewer output",
+  "description": "Findings over the assembled candidate's code claims: current code plus proposed changes.",
+  "type": "object",
+  "properties": {
+    "critiques": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/critique" }
+    }
+  },
+  "required": ["critiques"],
+  "additionalProperties": false,
+  "$defs": {
+    "critique": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+        "target_ids": { "type": "array", "items": { "type": "string" } },
+        "evidence": { "type": "string" },
+        "impact": { "type": "string" },
+        "required_change": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "resolved", "accepted"] },
+        "resolution_ref": { "type": "string" }
+      },
+      "required": ["id", "severity", "evidence", "required_change", "status"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -32,6 +32,10 @@ const (
 	NarratorPreamble = "You are the Run Narrator Avatar. You do not design, review or plan anything. You read the step reports the other avatars emit — which stage each is in, which part of it, which host and model serves it, what evidence it can see and how long it has been running — and you say what the run is doing right now, for a person watching it work. Name the avatars by role, say what each is producing, and say plainly when one is slow or has stopped. Never invent a decision, a finding or a file that the steps do not report."
 
 	SynthesizerPreamble = "You are the Lead Synthesizer Avatar. Review all resolved cycles between the Product Manager, Technical Architect, Domain Specialists, and Red-Team Critic. Lock in exact interface contracts. Compile all surviving designs, Mermaid diagrams, documentation-update tasks, and architectural constraints into a Confluence-grade, highly structured Markdown specification formatted for autonomous coding agent Plan Mode. Break all work into Jira-style Epics and Subtasks, and calculate dual effort estimations: (A) Human Developer effort based on a 9-hour productive workday, and (B) Autonomous Coding Agent execution effort."
+
+	CodeReviewerPreamble = "You are the Code Reviewer Avatar. You review the assembled candidate plan against the repository evidence: the AST symbol graph, the current code, and the changes the plan proposes. You verify that every file path, symbol and interface the plan names exists or is declared as new, and you reject any claim that unimplemented code passed tests — a plan statement that a test passes is a finding unless the plan also carries the change that makes it true. Output structured severity-ranked findings (`CRITICAL`, `HIGH`, `MEDIUM`) with the exact plan section each one blocks."
+
+	TechLeadPreamble = "You are the Technical Leader Avatar. You integrate the code review and judgment findings into the assembled candidate. You decide for each finding whether it blocks, and you direct the repair: only the sections a finding names change, and the repair runs once. You do not reopen settled decisions, and you do not expand scope beyond what the findings require. Your output states, per finding, the resolution and the sections the repair touched."
 )
 
 // untrustedNotice closes every system prompt. The user payload is analysis
@@ -65,9 +69,11 @@ const architectDesignShape = `
 This call produces the design: the workstreams and the interface contracts. Two further calls produce the diagrams and the documentation tasks from what you decide here, so leave both out.
 
 Reply shape:
-{"summary":"...","constraints":["..."],"workstreams":[{"id":"ws","role":"backend|data|frontend","module_paths":["repo/relative/dir"],"depends_on":["other-ws"],"contract_ids":["contract-id"]}],"contracts":[{"id":"contract-id","owner_workstream":"ws","language":"...","signature":"...","input_schema":"...","output_schema":"...","errors":["..."],"consumer_workstreams":["other-ws"]}],"accepted_tradeoffs":[{"critique_id":"...","rationale":"..."}]}
+{"summary":"...","constraints":["..."],"workstreams":[{"id":"ws","role":"backend|data|frontend","module_paths":["repo/relative/dir"],"depends_on":["other-ws"],"contract_ids":["contract-id"]}],"contracts":[{"id":"contract-id","owner_workstream":"ws","language":"...","signature":"...","input_schema":"...","output_schema":"...","errors":["..."],"consumer_workstreams":["other-ws"]}],"accepted_tradeoffs":[{"critique_id":"...","rationale":"..."}],"proposed_gaps":[{"id":"gap-1","specialty":"...","purpose":"...","requirement_ids":["REQ-1"],"evidence_refs":["..."],"deliverable":"...","parent_id":"ws","placement":"workstream|synthesis"}]}
 
 Rules: declare between 1 and 4 cohesive workstreams (at most 4); group related module paths into the same workstream so all specialists run in one parallel wave.
+
+proposed_gaps is optional: propose one only when the brief needs expertise no declared workstream covers, at most 3, and leave it out entirely when none does. A proposal names the requirement_ids it serves (ids from the payload, all of them real), a concrete deliverable, and the parent_id of the workstream lane its deliverable joins. The server verifies every proposal and admits at most its configured limit (0-3); a proposal is not an admission.
 
 Every error a contract lists names the condition that raises it and what the consumer must do about it: "RateLimited: the caller retries after the Retry-After seconds", not "RateLimited". A contract that changes a boundary something already depends on is called out in constraints as a breaking change, naming the migration that carries existing callers across and the rollback if it has to be undone.
 
@@ -123,9 +129,23 @@ Reply shape:
 
 Rules: "status" is one or two sentences, at most 320 characters, in the present tense, addressed to the person watching the run. Say which avatars are working and on what, and name the host and model only when it explains something, such as one avatar running far longer than the others. Do not repeat the previous_status verbatim: say what changed since it. Do not list the steps back; read them and report the situation.`
 
+const techLeadShape = `
+
+Reply shape:
+{"resolutions":[{"finding_id":"C-1","blocks":true,"sections":["<workstream id>","architect"],"rationale":""}]}
+
+Rules: every finding in the payload gets exactly one resolution; a missing finding_id is rejected. blocks true means the finding must be repaired before the plan is ready. sections lists the plan sections the repair touches — architect, a workstream id, or a contract id — and the repair changes no other section. A finding resolved without a repair (blocks false, or accepted as-is) states a rationale. You cannot add tasks, contracts or targets; you direct the repair of what the findings name.`
+
 // NarratorSystemPrompt is the live status avatar's prompt. It reads step
 // reports, never drafts, so it sees nothing the room does not already show.
 func NarratorSystemPrompt() string { return NarratorPreamble + narratorShape + untrustedNotice }
+
+// CodeReviewerSystemPrompt is the Code Reviewer system prompt. Its findings
+// reuse the critique shape so they merge with the Red-Team Critic's.
+func CodeReviewerSystemPrompt() string { return CodeReviewerPreamble + criticShape + untrustedNotice }
+
+// TechLeadSystemPrompt is the Technical Leader system prompt.
+func TechLeadSystemPrompt() string { return TechLeadPreamble + techLeadShape + untrustedNotice }
 
 // PMSystemPrompt is the Product Manager system prompt.
 func PMSystemPrompt() string { return PMPreamble + pmShape + untrustedNotice }
@@ -176,6 +196,10 @@ func Preamble(role contracts.RoleID) string {
 		return CriticPreamble
 	case contracts.RoleSynthesizer:
 		return SynthesizerPreamble
+	case contracts.RoleCodeReviewer:
+		return CodeReviewerPreamble
+	case contracts.RoleTechLead:
+		return TechLeadPreamble
 	}
 	return ""
 }

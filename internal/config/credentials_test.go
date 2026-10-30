@@ -114,6 +114,9 @@ func TestSetRejectsAnUnknownProvider(t *testing.T) {
 	if err := creds.Set("gemini", "key", ""); err == nil {
 		t.Error("an unknown provider must be rejected, not stored")
 	}
+	if err := creds.Set(config.ProviderGoogle, "key", ""); err != nil {
+		t.Errorf("google is a registered provider: %v", err)
+	}
 }
 
 // A base URL carrying a query string or userinfo would push the key into

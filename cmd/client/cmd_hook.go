@@ -119,7 +119,15 @@ func runHook(ctx context.Context, args []string) int {
 		} else {
 			return exitOK // unchanged since the last notice: stay quiet
 		}
-		os.Stdout.Write(res.out)
+		_, _ = os.Stdout.Write(res.out)
+		// The skills note rides beside the plan banner, in text formats only:
+		// the Claude JSON shape carries one context string and must stay
+		// exactly what Claude Code expects.
+		if format != "claude" {
+			if hint := skillHint(); hint != "" {
+				fmt.Fprintln(os.Stdout, hint)
+			}
+		}
 		return exitOK
 	case <-time.After(2 * time.Second):
 		return exitOK

@@ -52,6 +52,9 @@ type orchestrator struct {
 	// a limit of par each would put 2*par calls in flight.
 	sem chan struct{}
 
+	// maxGapAgents is the admitted-gap cap of this run, clamped from config.
+	maxGapAgents int
+
 	emitMu sync.Mutex
 	// seen is the last status emitted per avatar, so a failed run can give the
 	// avatars that never ran a terminal status instead of leaving them queued.
@@ -279,7 +282,112 @@ func (o *orchestrator) publishCritique(ctx context.Context, cycle int, issues []
 func (o *orchestrator) save() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.st.Meta = o.metaLocked()
 	o.store.save(o.in.RunID, o.st)
+}
+
+// metaLocked builds the execution metadata the plan requires a checkpoint to
+// carry. Callers hold o.mu. It is derived from the run state on every save
+// rather than maintained by hand, so it cannot drift from what was saved.
+func (o *orchestrator) metaLocked() checkpointMeta {
+	m := checkpointMeta{
+		SchemaVersion:         CheckpointMetaSchema,
+		RunID:                 o.in.RunID,
+		InputRevision:         o.st.PRDRevision,
+		RepositoryFingerprint: o.in.GraphHash,
+		ContextHash:           o.in.ContextHash,
+		UnresolvedDecisions:   len(o.st.Pending),
+		CompletedWork:         o.completedWorkLocked(),
+		NextAction:            o.nextActionLocked(),
+		LastError:             o.st.Meta.LastError,
+	}
+	m.Models.Main, m.Models.Judge = o.in.Models.Main, o.in.Models.Judge
+	m.Phase = o.phaseLocked()
+	for key, rec := range o.st.Specs {
+		if rec.present() {
+			m.ValidatedOutputs = append(m.ValidatedOutputs, key)
+		}
+	}
+	if o.st.PM.present() {
+		m.ValidatedOutputs = append(m.ValidatedOutputs, "pm")
+	}
+	if o.st.Arch.present() {
+		m.ValidatedOutputs = append(m.ValidatedOutputs, "architect")
+	}
+	sort.Strings(m.ValidatedOutputs)
+	return m
+}
+
+// phaseLocked names what the run is doing, in the plan's vocabulary.
+func (o *orchestrator) phaseLocked() string {
+	switch {
+	// A waiting decision outranks everything: the run cannot advance without
+	// the owner, whatever else is finished.
+	case len(o.st.Pending) > 0:
+		return "awaiting_decisions"
+	case len(blockingOpen(o.st.Critiques)) > 0:
+		return "reviewing"
+	default:
+		return "drafting"
+	}
+}
+
+// specKeysLocked lists the workstream keys with a saved draft. Callers hold
+// o.mu.
+func (o *orchestrator) specKeysLocked() []string {
+	out := make([]string, 0, len(o.st.Specs))
+	for ws := range o.st.Specs {
+		out = append(out, ws)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// completedWorkLocked is the short list of finished steps a resumed run reads
+// first. It is facts, not narration: which drafts exist.
+func (o *orchestrator) completedWorkLocked() []string {
+	var done []string
+	if o.st.PM.present() {
+		done = append(done, "product manager: epics and stories")
+	}
+	if o.st.ArchDesign.present() {
+		done = append(done, "architect: design")
+	}
+	if o.st.ArchDiagrams.present() {
+		done = append(done, "architect: diagrams")
+	}
+	if n := len(o.st.ArchDocs); n > 0 {
+		done = append(done, fmt.Sprintf("architect: %d documentation batch(es)", n))
+	}
+	for _, ws := range o.specKeysLocked() {
+		if o.st.Specs[ws].present() {
+			done = append(done, "specialist: "+ws)
+		}
+	}
+	for _, g := range o.st.Gaps {
+		if g.Status == contracts.GapCompleted || g.Status == contracts.GapFused {
+			done = append(done, "gap agent: "+g.ID)
+		}
+	}
+	return done
+}
+
+// nextActionLocked is the one step a resumed run would take next.
+func (o *orchestrator) nextActionLocked() string {
+	switch {
+	case !o.st.PM.present():
+		return "run the product manager stage"
+	case !o.st.ArchDesign.present():
+		return "run the architect design part"
+	case len(o.st.Pending) > 0:
+		return "await the owner's decision"
+	case len(blockingOpen(o.st.Critiques)) > 0:
+		return "integrate the open blocking findings"
+	case len(o.st.Specs) == 0:
+		return "run the specialists"
+	default:
+		return "synthesize the specification"
+	}
 }
 
 // --- provider calls ---------------------------------------------------------------------------
@@ -320,11 +428,28 @@ func (o *orchestrator) request(sp stageSpec, payload json.RawMessage) contracts.
 	// No Model: the router decides it from role_models and what the serving
 	// host actually lists. A model id named here would win over both, which is
 	// how a `default_main_model` meant for one host reached every other one.
+	// Every avatar stage document has an embedded schema now, so the same id
+	// both constrains output at the provider and validates the terminal result.
 	return contracts.GenerateRequest{
 		Role: sp.role, Lane: sp.lane, ModelSlot: sp.slot, SystemPrompt: sp.system,
-		UserPayload: payload, SchemaID: requestSchemaID(sp.schema), RunID: o.in.RunID,
+		UserPayload: payload, SchemaID: requestSchemaID(sp.schema), OutputSchema: o.outputSchema(sp.schema), RunID: o.in.RunID,
 		Timeout: o.in.callTimeout(), MaxOutput: contracts.MaxStageOutputBytes,
 	}
+}
+
+// outputSchema returns the embedded schema bytes for a stage label, or nil
+// when the label names no embedded schema. A provider that cannot constrain
+// output ignores the field; the avatars-layer strict decode stays the gate.
+func (o *orchestrator) outputSchema(label string) json.RawMessage {
+	id := requestSchemaID(label)
+	if id == "" {
+		return nil
+	}
+	raw, err := contracts.SchemaBytes(id)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 // maxTimeoutShrinks bounds how often one stage call may be replaced by a
@@ -650,6 +775,10 @@ func (o *orchestrator) generate(ctx context.Context, sp stageSpec, in *stageInpu
 	}
 }
 
+// checkpointErrorLimit bounds the failure text a checkpoint keeps. A checkpoint
+// is a resume aid, not a log: the full error is already in the run's events.
+const checkpointErrorLimit = 600
+
 // failStage converts a failure into a StageError and tells the window. Context
 // and event-sink failures are not stage failures and pass through unchanged.
 func (o *orchestrator) failStage(ctx context.Context, sp stageSpec, err error) error {
@@ -665,7 +794,14 @@ func (o *orchestrator) failStage(ctx context.Context, sp stageSpec, err error) e
 	if errors.As(err, &gf) {
 		stage.Partial, stage.Err = gf.Partial, gf.Err
 	}
+	// The checkpoint carries the last failure, bounded and sanitized, so a
+	// resumed run can say what went wrong instead of only that it stopped.
+	o.mu.Lock()
+	o.st.Meta.Agent = sp.avatar
+	o.st.Meta.LastError = sanitize.Truncate(sanitize.Terminal(stage.Error()), checkpointErrorLimit)
+	o.mu.Unlock()
 	_ = o.thought(ctx, sp.avatar, sp.cycle, statusFailed, stage.Error())
+	o.save()
 	return stage
 }
 
@@ -796,6 +932,39 @@ type specialistPayload struct {
 	Decisions     []contracts.Decision          `json:"resolved_decisions,omitempty"`
 	Adopt         *adoptInput                   `json:"adopt_claim,omitempty"`
 	Revision      *revisionInput                `json:"revision,omitempty"`
+}
+
+// gapAgentPayload is a specialist payload scoped to one temporary agent. It
+// carries the descriptor instead of a workstream and never the architect's
+// gap proposals, so an agent cannot propose another.
+type gapAgentPayload struct {
+	Cycle         int                           `json:"cycle"`
+	Gap           contracts.GapAgentDescriptor  `json:"gap_agent"`
+	Lane          string                        `json:"lane"`
+	Workstreams   []contracts.Workstream        `json:"workstreams"`
+	Summary       string                        `json:"architecture_summary"`
+	Constraints   []string                      `json:"architecture_constraints"`
+	Contracts     []contracts.InterfaceContract `json:"contracts"`
+	Epics         []contracts.Epic              `json:"epics"`
+	Stories       []contracts.Story             `json:"stories"`
+	Graph         contracts.RepoContextGraph    `json:"repository_graph"`
+	Context       *contracts.ProjectContext     `json:"project_context,omitempty"`
+	EvidenceNotes []string                      `json:"evidence_notes,omitempty"`
+	Decisions     []contracts.Decision          `json:"resolved_decisions,omitempty"`
+}
+
+func (p *gapAgentPayload) addNote(note string) { p.EvidenceNotes = append(p.EvidenceNotes, note) }
+
+// trim gives up the project context, then the graph, like the specialist's.
+func (p *gapAgentPayload) trim() (string, bool) {
+	if c, note, ok := trimContext(p.Context); ok {
+		p.Context = c
+		return note, true
+	}
+	if note, ok := trimGraph(&p.Graph, p.Stories); ok {
+		return note, true
+	}
+	return "", false
 }
 
 type criticPayload struct {
@@ -938,6 +1107,46 @@ func (o *orchestrator) parseSpecialist(ws string) func(json.RawMessage) (synthes
 		}
 		return d, mustJSON(d), nil
 	}
+}
+
+// parseGapAgent validates one temporary agent's draft. The reply is a
+// specialist document for the agent's lane; it must not propose new gaps.
+func (o *orchestrator) parseGapAgent(g contracts.GapAgentDescriptor) func(json.RawMessage) (synthesizer.SpecialistDoc, json.RawMessage, error) {
+	return func(raw json.RawMessage) (synthesizer.SpecialistDoc, json.RawMessage, error) {
+		d, err := synthesizer.DecodeSpecialist(raw)
+		if err != nil {
+			return d, nil, err
+		}
+		var problems []string
+		if genesisHasGaps(raw) {
+			return d, nil, &synthesizer.ValidationError{Stage: "gap_agent", Problems: []string{"a temporary agent cannot propose further agents"}}
+		}
+		if d.WorkstreamID != "" && g.ParentID != "" && d.WorkstreamID != g.ParentID {
+			problems = append(problems, fmt.Sprintf("workstream_id is %q but the assigned lane is %q", d.WorkstreamID, g.ParentID))
+		}
+		o.mu.Lock()
+		arch := o.arch
+		o.mu.Unlock()
+		synthesizer.AlignSpecialistClaims(&d, arch)
+		if verr := d.Validate(arch, o.designContext()); verr != nil {
+			problems = append(problems, problemsOf(verr)...)
+		}
+		if len(problems) > 0 {
+			return d, nil, &synthesizer.ValidationError{Stage: "gap_agent", Problems: problems}
+		}
+		return d, mustJSON(d), nil
+	}
+}
+
+// genesisHasGaps reports whether raw carries a "proposed_gaps" key. A gap
+// agent's reply must never contain one: the agent fills a gap, it does not
+// create one. The strict decoder would reject the unknown key anyway, but
+// this names the real problem.
+func genesisHasGaps(raw json.RawMessage) bool {
+	var probe struct {
+		Gaps []json.RawMessage `json:"proposed_gaps"`
+	}
+	return json.Unmarshal(raw, &probe) == nil && len(probe.Gaps) > 0
 }
 
 func containsString(list []string, s string) bool {

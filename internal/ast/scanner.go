@@ -3,6 +3,7 @@
 package ast
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1" //nolint:gosec // git blob object IDs are SHA-1 by definition; used for comparison only
 	"crypto/sha256"
@@ -24,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
@@ -50,13 +52,18 @@ const (
 	maxDocBytes        = 1 << 20
 	maxDocFiles        = 200
 	maxCacheBytes      = 64 << 20
-	maxStackFiles      = 50
-	maxStackFileBytes  = 256 << 10
 	cacheSchemaVersion = 1
+	// maxSVGBytes bounds the SVG markup the scanner reads as text. SVG is
+	// evidence only as XML source, never as an image, so a larger file is
+	// hashed and skipped rather than loaded.
+	maxSVGBytes = 256 << 10
 	// extractorVersion invalidates cached parse results. Bump it when
-	// symbols.go changes what it extracts; query changes are detected from the
-	// embedded query text.
-	extractorVersion = 1
+	// symbols.go changes what it extracts, and when the hashing semantics
+	// change: the graph now hashes only the source code, Markdown and SVG it
+	// accepts, so a cache written under the old rules would report a
+	// WorktreeHash that covers a different file set. Query changes are detected
+	// from the embedded query text.
+	extractorVersion = 2
 	// racyWindow is how close to the scan start a file's mtime may be before its
 	// cached result is not trusted: a write inside the same timestamp tick would
 	// leave size and mtime unchanged.
@@ -80,6 +87,17 @@ const (
 	GapTooLarge = "TOO_LARGE"
 	// GapUnreadable marks a file that could not be opened or read.
 	GapUnreadable = "UNREADABLE"
+	// GapTextInvalid marks a Markdown or SVG file whose bytes are not valid
+	// UTF-8 text, or which is binary disguised under a text extension. Its
+	// hash is kept; its content is not.
+	GapTextInvalid = "TEXT_INVALID"
+	// GapTextTooLarge marks an SVG file above maxSVGBytes. Markdown keeps the
+	// existing GapTooLarge.
+	GapTextTooLarge = "TEXT_TOO_LARGE"
+	// GapTextExternalRef marks SVG markup that names another resource or
+	// declares an entity. The file is hashed and skipped: fetching or resolving
+	// it is forbidden.
+	GapTextExternalRef = "TEXT_EXTERNAL_REFERENCE"
 )
 
 // NoteFileListTruncated prefixes the Coverage.Notes entry written when the file
@@ -169,10 +187,18 @@ func (o ScanOptions) withDefaults() ScanOptions {
 // IsHardExcluded and every symbolic link are skipped. All Git access goes
 // through the Git type, which never runs repository-configured commands.
 //
+// Evidence is restricted by classifyContent: parsed source code, source in a
+// language this package does not parse, Markdown and SVG. Every other file is
+// counted and skipped without being opened, so it contributes nothing to
+// WorktreeHash. Markdown contributes bounded text evidence wherever it sits in
+// the repository; SVG is read as bounded UTF-8 markup, never as an image, and
+// markup naming an outside resource is hashed and skipped. Repository content is
+// never executed, resolved or fetched.
+//
 // WorktreeHash is the SHA-256 over the sorted lines "path\0sha256\n" of every
-// selected file. A scan that times out returns a partial graph with
-// Coverage.TimedOut set; a cancelled context returns the context error. Gaps
-// are recorded, never treated as the absence of a symbol.
+// file whose content the graph keeps. A scan that times out returns a partial
+// graph with Coverage.TimedOut set; a cancelled context returns the context
+// error. Gaps are recorded, never treated as the absence of a symbol.
 //
 // Symbol.Imports is populated on the first symbol of each file with the file's
 // import list.
@@ -606,6 +632,7 @@ func globToRegexp(pattern string) (*regexp.Regexp, error) {
 type fileResult struct {
 	processed   bool
 	skipped     bool
+	class       contentKind
 	size        int64
 	mtimeNS     int64
 	sha         string
@@ -616,6 +643,9 @@ type fileResult struct {
 	unsupported bool
 	parsed      bool
 	cached      bool
+	text        bool
+	textReason  string
+	textDetail  string
 	errorNodes  int
 	extract     fileExtract
 	gaps        []string
@@ -690,10 +720,20 @@ func newBlobHasher(oidLen int, size int64) hash.Hash {
 	return h
 }
 
-// process reads, hashes and parses one file. A result that is not marked
-// processed was abandoned because the scan ended.
+// process classifies, reads, hashes and parses one file. A result that is not
+// marked processed was abandoned because the scan ended.
+//
+// The path is classified before anything is read. An excluded file is never
+// opened, so it contributes no hash, no symbol and no document. Source code is
+// parsed. Source in a language this package does not parse is hashed and read as
+// bytes only. Markdown is hashed and read as bounded UTF-8 text. SVG is hashed
+// and read as bounded UTF-8 markup, never as an image and never through an XML
+// parser, so no entity is resolved and no linked resource is fetched.
 func (p *scanProc) process(ctx context.Context, qc *ts.QueryCursor, rel string) fileResult {
-	res := fileResult{processed: true}
+	res := fileResult{processed: true, class: classifyContent(rel)}
+	if res.class == contentExcluded {
+		return res
+	}
 	abs := filepath.Join(p.root, filepath.FromSlash(rel))
 	info, err := os.Lstat(abs)
 	if err != nil || !info.Mode().IsRegular() {
@@ -706,16 +746,21 @@ func (p *scanProc) process(ctx context.Context, qc *ts.QueryCursor, rel string) 
 		res.routed = true
 		res.lang = cl.spec.name
 	}
-	res.unsupported = cl == nil && otherSourceExts[strings.ToLower(path.Ext(rel))]
+	res.unsupported = res.class == contentUnsupportedCode
 	entry, tracked := p.index[rel]
 	res.tracked = tracked
 	tooLarge := cl != nil && res.size > p.maxBytes
 	if tooLarge {
 		res.gaps = append(res.gaps, gapString(rel, GapTooLarge, fmt.Sprintf("%d bytes exceeds the %d byte limit", res.size, p.maxBytes)))
 	}
+	limit := textLimit(res.class)
 
 	if ce, ok := p.cache[rel]; ok && ce.fresh(res.size, res.mtimeNS) && (!tracked || ce.OID != "") && (cl == nil || tooLarge || ce.Parsed) {
 		res.sha, res.oid, res.cached = ce.SHA256, ce.OID, true
+		res.text = ce.Text
+		if ce.TextReason != "" {
+			res.gaps = append(res.gaps, gapString(rel, ce.TextReason, ce.TextDetail))
+		}
 		if ce.Parsed && !tooLarge && ce.Extract != nil {
 			res.parsed, res.extract, res.errorNodes = true, *ce.Extract, ce.ErrorNodes
 			if ce.ErrorNodes > 0 {
@@ -746,18 +791,34 @@ func (p *scanProc) process(ctx context.Context, qc *ts.QueryCursor, rel string) 
 	}
 	w := io.MultiWriter(writers...)
 
+	// loadLimit is how much content the scan keeps in memory: the parse cap for
+	// code, the text cap for Markdown and SVG, and nothing at all for source it
+	// cannot parse. A file above its cap is still hashed, but only as a stream.
+	loadLimit := int64(-1)
+	switch {
+	case cl != nil && !tooLarge:
+		loadLimit = p.maxBytes
+	case limit > 0 && res.size <= limit:
+		loadLimit = limit
+	}
+
 	var src []byte
-	if cl != nil && !tooLarge {
-		src, err = io.ReadAll(io.LimitReader(f, p.maxBytes+1))
+	if loadLimit >= 0 {
+		src, err = io.ReadAll(io.LimitReader(f, loadLimit+1))
 		if err != nil {
 			res.gaps = append(res.gaps, gapString(rel, GapUnreadable, "read failed"))
 			return res
 		}
 		_, _ = w.Write(src)
-		if int64(len(src)) > p.maxBytes {
+		if int64(len(src)) > loadLimit {
 			src = nil
-			tooLarge = true
-			res.gaps = append(res.gaps, gapString(rel, GapTooLarge, fmt.Sprintf("file grew beyond the %d byte limit", p.maxBytes)))
+			reason, detail := tooLargeGap(res.class, loadLimit)
+			if res.class == contentCode {
+				tooLarge = true
+			} else {
+				res.textReason, res.textDetail = reason, detail
+			}
+			res.gaps = append(res.gaps, gapString(rel, reason, detail))
 		}
 	}
 	if src == nil {
@@ -775,6 +836,29 @@ func (p *scanProc) process(ctx context.Context, qc *ts.QueryCursor, rel string) 
 		res.oid = hex.EncodeToString(blob.Sum(nil))
 	}
 	if src == nil {
+		if limit > 0 && res.size > limit {
+			reason, detail := tooLargeGap(res.class, limit)
+			res.textReason, res.textDetail = reason, detail
+			res.gaps = append(res.gaps, gapString(rel, reason, detail))
+		}
+		return res
+	}
+	if cl == nil {
+		// Text evidence: the bytes must be UTF-8, and SVG markup must not name a
+		// resource to resolve. Either failure keeps the hash and drops the text.
+		if !utf8.Valid(src) || bytes.IndexByte(src, 0) >= 0 {
+			res.textReason, res.textDetail = GapTextInvalid, "not UTF-8 text"
+			res.gaps = append(res.gaps, gapString(rel, res.textReason, res.textDetail))
+			return res
+		}
+		if res.class == contentSVG {
+			if reason := svgExternalReference(src); reason != "" {
+				res.textReason, res.textDetail = GapTextExternalRef, reason
+				res.gaps = append(res.gaps, gapString(rel, res.textReason, res.textDetail))
+				return res
+			}
+		}
+		res.text = true
 		return res
 	}
 
@@ -793,6 +877,54 @@ func (p *scanProc) process(ctx context.Context, qc *ts.QueryCursor, rel string) 
 		}
 	}
 	return res
+}
+
+// textLimit is the largest content the scan keeps for a path's class: maxDocBytes
+// for Markdown and maxSVGBytes for SVG. Every other class reads no text.
+func textLimit(c contentKind) int64 {
+	switch c {
+	case contentMarkdown:
+		return maxDocBytes
+	case contentSVG:
+		return maxSVGBytes
+	}
+	return 0
+}
+
+// tooLargeGap names the gap and the detail for content above its limit. Code and
+// Markdown keep GapTooLarge; SVG states its own limit.
+func tooLargeGap(c contentKind, limit int64) (reason, detail string) {
+	reason = GapTooLarge
+	if c == contentSVG {
+		reason = GapTextTooLarge
+	}
+	return reason, fmt.Sprintf("exceeds the %d byte limit", limit)
+}
+
+// svgExternalReasons match the markup that would make reading an SVG file a
+// fetch or an entity resolution: a document type declaration, an entity
+// declaration, or a reference that names another resource.
+var svgExternalReasons = []struct {
+	re     *regexp.Regexp
+	reason string
+}{
+	{regexp.MustCompile(`(?i)<!DOCTYPE|<!ENTITY`), "declares an entity or document type"},
+	{regexp.MustCompile(`(?i)\bxlink:href\s*=\s*["']?\s*(?:[a-z][a-z0-9+.-]*:|//)`), "links another resource with xlink:href"},
+	{regexp.MustCompile(`(?i)\bhref\s*=\s*["']\s*(?:[a-z][a-z0-9+.-]*:|//)`), "links another resource with href"},
+	{regexp.MustCompile(`(?i)\burl\(\s*["']?\s*(?:[a-z][a-z0-9+.-]*:|//)`), "references another resource with url()"},
+	{regexp.MustCompile(`(?i)<(?:script|foreignObject)\b`), "embeds script or foreign markup"},
+}
+
+// svgExternalReference reports why SVG bytes name something outside the file,
+// or "" when they do not. The bytes are matched as text; nothing is parsed,
+// resolved or fetched.
+func svgExternalReference(src []byte) string {
+	for _, m := range svgExternalReasons {
+		if m.re.Match(src) {
+			return m.reason
+		}
+	}
+	return ""
 }
 
 // parseAndExtract parses one source file and runs the language query over it.
@@ -834,6 +966,8 @@ func assembleGraph(root string, sel selection, results []fileResult, timedOut bo
 	mods := map[moduleKey]*contracts.ModuleBoundary{}
 	var hashed []string
 	dirty, unprocessed := 0, 0
+	excludedClass := 0
+	mdRead, svgText, svgBad := 0, 0, 0
 
 	for i := range results {
 		rel := sel.files[i]
@@ -842,8 +976,13 @@ func assembleGraph(root string, sel selection, results []fileResult, timedOut bo
 			unprocessed++
 			continue
 		}
-		if r.skipped {
+		if r.skipped || r.class == contentExcluded {
+			// An excluded path is accounted by name only: it was never opened,
+			// so it holds no hash, no symbol and no document.
 			cov.FilesSkipped++
+			if r.class == contentExcluded && !r.skipped {
+				excludedClass++
+			}
 			continue
 		}
 		if r.sha != "" {
@@ -858,6 +997,18 @@ func assembleGraph(root string, sel selection, results []fileResult, timedOut bo
 			cov.UnsupportedFiles++
 		}
 		cov.ParseGaps = append(cov.ParseGaps, r.gaps...)
+		switch {
+		case r.class == contentMarkdown:
+			if r.text {
+				mdRead++
+			}
+		case r.class == contentSVG:
+			if r.text {
+				svgText++
+			} else {
+				svgBad++
+			}
+		}
 		if !r.parsed {
 			if r.routed {
 				cov.FilesSkipped++
@@ -921,6 +1072,19 @@ func assembleGraph(root string, sel selection, results []fileResult, timedOut bo
 	if sel.excluded > 0 {
 		notes = append(notes, fmt.Sprintf("%d files under excluded directories (.plan, .agents, .omp, .claude, .gemini, .agy, node_modules, vendor) were not scanned", sel.excluded))
 	}
+	if excludedClass > 0 {
+		notes = append(notes, fmt.Sprintf("%d files were skipped without being read: the graph keeps source code, Markdown and SVG only", excludedClass))
+	}
+	if mdRead > 0 || svgText > 0 {
+		notes = append(notes, fmt.Sprintf("%d Markdown and %d SVG files contributed text evidence; SVG is read as markup, never as an image", mdRead, svgText))
+	}
+	if svgBad > 0 {
+		notes = append(notes, fmt.Sprintf("%d SVG files were hashed but not read as text; each carries a parse gap stating why", svgBad))
+	}
+	stack := detectStack(sel.files, langCounts)
+	if len(stack) > 0 {
+		notes = append(notes, fmt.Sprintf("the detected stack (%s) is inferred from parsed file languages and file names; manifest contents were not read", strings.Join(stack, ", ")))
+	}
 	if dirty > 0 {
 		notes = append(notes, fmt.Sprintf("%d tracked files differ from the git index (advisory: clean filters can report false differences)", dirty))
 	}
@@ -935,7 +1099,7 @@ func assembleGraph(root string, sel selection, results []fileResult, timedOut bo
 		GitCommitHash:   sel.head,
 		GitBranch:       sel.branch,
 		WorktreeHash:    hex.EncodeToString(h.Sum(nil)),
-		DetectedStack:   detectStack(root, sel.files, langCounts),
+		DetectedStack:   stack,
 		Modules:         modules,
 		Symbols:         symbols,
 		Routes:          routes,
@@ -944,71 +1108,33 @@ func assembleGraph(root string, sel selection, results []fileResult, timedOut bo
 	}
 }
 
-// stackMarkers map root and nested build files to stack labels. A marker with
-// no needle fires on the file's presence.
-var stackMarkers = []struct{ file, needle, label string }{
-	{"go.mod", "", "go-modules"},
-	{"go.mod", "github.com/gin-gonic/gin", "gin"},
-	{"go.mod", "github.com/labstack/echo", "echo"},
-	{"go.mod", "github.com/go-chi/chi", "chi"},
-	{"package.json", "", "node"},
-	{"package.json", `"react"`, "react"},
-	{"package.json", `"vite"`, "vite"},
-	{"package.json", `"next"`, "next"},
-	{"package.json", `"express"`, "express"},
-	{"package.json", `"fastify"`, "fastify"},
-	{"package.json", `"vue"`, "vue"},
-	{"package.json", `"svelte"`, "svelte"},
-	{"tsconfig.json", "", "typescript-config"},
-	{"Cargo.toml", "", "cargo"},
-	{"Cargo.toml", "axum", "axum"},
-	{"Cargo.toml", "actix-web", "actix-web"},
-	{"pyproject.toml", "", "python-packaging"},
-	{"pyproject.toml", "fastapi", "fastapi"},
-	{"pyproject.toml", "flask", "flask"},
-	{"pyproject.toml", "django", "django"},
-	{"requirements.txt", "fastapi", "fastapi"},
-	{"requirements.txt", "flask", "flask"},
-	{"requirements.txt", "django", "django"},
-	{"Dockerfile", "", "docker"},
+// presenceMarkers map a build or packaging file name to the stack label its
+// presence implies. Nothing is read: a file name names a build system, never a
+// framework or a dependency.
+var presenceMarkers = map[string]string{
+	"go.mod":         "go-modules",
+	"package.json":   "node",
+	"tsconfig.json":  "typescript-config",
+	"cargo.toml":     "cargo",
+	"pyproject.toml": "python-packaging",
+	"dockerfile":     "docker",
 }
 
-// detectStack names the languages with parsed files and the frameworks and
-// build tools the repository's manifest files point at. The result is sorted
-// and free of duplicates.
-func detectStack(root string, files []string, langCounts map[string]int) []string {
+// detectStack names the languages with parsed files and the build systems the
+// repository's file names imply. The graph evidence path reads no manifest
+// content, so a framework such as React or FastAPI is never claimed here: the
+// result is inferred, and Coverage.Notes says so. The result is sorted and free
+// of duplicates.
+func detectStack(files []string, langCounts map[string]int) []string {
 	set := map[string]bool{}
 	for lang, n := range langCounts {
 		if n > 0 {
 			set[lang] = true
 		}
 	}
-	reads := 0
 	for _, rel := range files {
-		base := path.Base(rel)
-		var content string
-		loaded := false
-		for _, m := range stackMarkers {
-			if m.file != base {
-				continue
-			}
-			if m.needle == "" {
-				set[m.label] = true
-				continue
-			}
-			if !loaded {
-				if reads >= maxStackFiles {
-					break
-				}
-				reads++
-				loaded = true
-				if data, err := readSmall(root, rel, maxStackFileBytes); err == nil {
-					content = strings.ToLower(string(data))
-				}
-			}
-			if content != "" && strings.Contains(content, strings.ToLower(m.needle)) {
-				set[m.label] = true
-			}
+		if label, ok := presenceMarkers[strings.ToLower(path.Base(rel))]; ok {
+			set[label] = true
 		}
 	}
 	out := make([]string, 0, len(set))
@@ -1019,23 +1145,24 @@ func detectStack(root string, files []string, langCounts map[string]int) []strin
 	return out
 }
 
-// isDocPath selects the documentation files drift detection reads: the root
-// README.md and ARCHITECTURE.md and every Markdown file under docs/.
+// isDocPath reports whether documentation drift reads a path as text. Drift
+// inspects Markdown only; SVG is bounded text evidence for the scan, validated
+// in process, and carries no documentation claims.
 func isDocPath(rel string) bool {
-	lower := strings.ToLower(rel)
-	if lower == "readme.md" || lower == "architecture.md" {
-		return true
-	}
-	return strings.HasPrefix(lower, "docs/") && strings.HasSuffix(lower, ".md")
+	return classifyContent(rel) == contentMarkdown
 }
 
-// readDocs loads the documentation files among the scanned paths. Oversized or
-// unreadable documents are skipped with a note.
+// readDocs loads the Markdown documents of the repository, wherever they sit,
+// as bounded text evidence. The scan already classified and validated each file;
+// this pass re-reads the accepted ones sequentially under the byte and count
+// caps. A file the scan rejected as binary or invalid UTF-8 stays out, and its
+// gap is recorded once by the scan.
 func readDocs(root string, files []string, results []fileResult) ([]DocFile, []string) {
 	var docs []DocFile
 	var notes []string
 	for i, rel := range files {
-		if !isDocPath(rel) || !results[i].processed || results[i].skipped {
+		r := results[i]
+		if !isDocPath(rel) || !r.processed || r.skipped || !r.text {
 			continue
 		}
 		if len(docs) >= maxDocFiles {
@@ -1045,6 +1172,10 @@ func readDocs(root string, files []string, results []fileResult) ([]DocFile, []s
 		data, err := readSmall(root, rel, maxDocBytes)
 		if err != nil {
 			notes = append(notes, fmt.Sprintf("documentation file %s was not checked for drift: it is unreadable or larger than %d bytes", rel, maxDocBytes))
+			continue
+		}
+		if !utf8.Valid(data) {
+			notes = append(notes, fmt.Sprintf("documentation file %s was not checked for drift: it is not UTF-8 text", rel))
 			continue
 		}
 		docs = append(docs, DocFile{Path: rel, Content: data})
@@ -1061,6 +1192,9 @@ type cacheEntry struct {
 	Racy       bool         `json:"racy,omitempty"`
 	SHA256     string       `json:"sha256"`
 	OID        string       `json:"oid,omitempty"`
+	Text       bool         `json:"text,omitempty"`
+	TextReason string       `json:"text_reason,omitempty"`
+	TextDetail string       `json:"text_detail,omitempty"`
 	Parsed     bool         `json:"parsed,omitempty"`
 	ErrorNodes int          `json:"error_nodes,omitempty"`
 	Extract    *fileExtract `json:"extract,omitempty"`
@@ -1216,6 +1350,7 @@ func writeCache(root, digest string, started time.Time, files []string, results 
 		e := cacheEntry{
 			Size: r.size, MtimeNS: r.mtimeNS, Racy: r.mtimeNS >= racyAfter,
 			SHA256: r.sha, OID: r.oid, Parsed: r.parsed, ErrorNodes: r.errorNodes,
+			Text: r.text, TextReason: r.textReason, TextDetail: r.textDetail,
 		}
 		if r.parsed {
 			ex := r.extract

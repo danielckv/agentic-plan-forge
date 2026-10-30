@@ -13,11 +13,13 @@ import (
 
 func preambles() map[string]string {
 	return map[string]string{
-		"pm":          avatars.PMPreamble,
-		"architect":   avatars.ArchitectPreamble,
-		"specialist":  avatars.SpecialistPreamble,
-		"critic":      avatars.CriticPreamble,
-		"synthesizer": avatars.SynthesizerPreamble,
+		"pm":            avatars.PMPreamble,
+		"architect":     avatars.ArchitectPreamble,
+		"specialist":    avatars.SpecialistPreamble,
+		"critic":        avatars.CriticPreamble,
+		"synthesizer":   avatars.SynthesizerPreamble,
+		"code_reviewer": avatars.CodeReviewerPreamble,
+		"tech_lead":     avatars.TechLeadPreamble,
 	}
 }
 
@@ -72,6 +74,8 @@ func TestSystemPromptsStartWithTheirPreamble(t *testing.T) {
 		"specialist":          avatars.SpecialistSystemPrompt(),
 		"critic":              avatars.CriticSystemPrompt(),
 		"synthesizer":         avatars.SynthesizerSystemPrompt(),
+		"code_reviewer":       avatars.CodeReviewerSystemPrompt(),
+		"tech_lead":           avatars.TechLeadSystemPrompt(),
 		// The narrator is not one of the plan's five avatars, so it is absent
 		// from preambles() and from the plan-verbatim check. It holds the
 		// same boundary as the rest: its own preamble, the untrusted-input
@@ -98,6 +102,7 @@ func TestSystemPromptsStartWithTheirPreamble(t *testing.T) {
 	roles := []contracts.RoleID{
 		contracts.RoleProductManager, contracts.RoleArchitect, contracts.RoleSpecialist,
 		contracts.RoleCritic, contracts.RoleSynthesizer, contracts.RoleNarrator,
+		contracts.RoleCodeReviewer, contracts.RoleTechLead,
 	}
 	for _, r := range roles {
 		if avatars.Preamble(r) == "" {

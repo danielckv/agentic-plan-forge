@@ -70,6 +70,13 @@ func (i input) str(key string) string {
 	return s
 }
 
+// gapOf reads the temporary-agent descriptor out of a gap stage payload.
+func gapOf(i input) contracts.GapAgentDescriptor {
+	var g contracts.GapAgentDescriptor
+	_ = json.Unmarshal(i.Fields["gap_agent"], &g)
+	return g
+}
+
 func newStub(t *testing.T, fx synthtest.Fixture) *stub {
 	return &stub{t: t, fx: fx, counts: map[string]int{}, hooks: map[string]func(*call, input) (reply, bool){}}
 }
@@ -102,6 +109,13 @@ func keyOf(req contracts.GenerateRequest, in input) string {
 		return "architect"
 	case contracts.RoleCritic:
 		return "critic"
+	case contracts.RoleGapAgent:
+		// The payload carries the descriptor; key by its id so two agents on
+		// one parent lane stay distinguishable.
+		if g := gapOf(in); g.ID != "" {
+			return relay.StageGapAgentPrefix + g.ID
+		}
+		return relay.StageGapAgentPrefix + req.Lane
 	case contracts.RoleSynthesizer:
 		return "synthesizer"
 	}
@@ -222,12 +236,36 @@ func (s *stub) defaultReply(key string, in input) reply {
 			}
 		}
 		s.t.Errorf("stub has no specialist draft for %q", ws)
+	case strings.HasPrefix(key, relay.StageGapAgentPrefix):
+		return reply{Content: raw(s.gapDoc(gapOf(in)))}
 	case key == "critic":
 		return reply{Content: raw(synthesizer.CriticDoc{Critiques: s.fx.Critiques})}
+	case key == "code_reviewer":
+		// The default review finds nothing, so a synthesis test only counts
+		// the call. A test that needs findings installs an on() hook.
+		return reply{Content: raw(synthesizer.CriticDoc{})}
+	case key == "tech_lead":
+		return reply{Content: raw(synthesizer.TechLeadDoc{Resolutions: s.techLeadResolutions(in)})}
 	case key == "synthesizer":
 		return reply{Content: raw(synthesizer.SynthesisDoc{ExecutiveSummary: "Finance can export invoices safely.", CoverageCaveats: []string{"One MEDIUM tradeoff is accepted."}})}
 	}
 	return reply{Err: fmt.Errorf("stub has no answer for %q", key)}
+}
+
+// techLeadResolutions answers the integration stage: every finding in the
+// payload resolves without a repair, so the default synthesis path stays a
+// single pass with no extra specialist calls.
+func (s *stub) techLeadResolutions(in input) []synthesizer.TechLeadResolution {
+	var findings []contracts.Critique
+	_ = json.Unmarshal(in.Fields["findings"], &findings)
+	out := make([]synthesizer.TechLeadResolution, 0, len(findings))
+	for _, f := range findings {
+		out = append(out, synthesizer.TechLeadResolution{
+			FindingID: f.ID, Blocks: false,
+			Rationale: "accepted by the stub integration",
+		})
+	}
+	return out
 }
 
 // docTasks answers one documentation batch: the fixture task, repeated for
@@ -246,6 +284,39 @@ func (s *stub) docTasks(in input) []contracts.TechnicalTask {
 		out = append(out, t)
 	}
 	return out
+}
+
+// gapDoc is what a stub gap agent returns: the fixture's own document for the
+// parent workstream, with one documentation task appended and no gap proposals.
+// Reusing the lane's claims keeps the deterministic interface comparison honest,
+// which is exactly the constraint a real temporary agent works under.
+func (s *stub) gapDoc(g contracts.GapAgentDescriptor) synthesizer.SpecialistDoc {
+	var base synthesizer.SpecialistDoc
+	for _, sp := range s.fx.Specialists {
+		if sp.WorkstreamID == g.ParentID {
+			base = sp
+			break
+		}
+	}
+	doc := synthesizer.SpecialistDoc{
+		WorkstreamID: g.ParentID,
+		Summary:      "gap agent deliverable",
+		DataModels:   base.DataModels,
+		Implements:   base.Implements,
+		Consumes:     base.Consumes,
+		Tasks: []contracts.TechnicalTask{{
+			ID:     "T-GAP-1",
+			EpicID: base.Tasks[0].EpicID, StoryID: base.Tasks[0].StoryID,
+			WorkstreamID: g.ParentID, Title: "Record the " + g.Specialty + " deliverable",
+			Steps:              []string{"Write the deliverable the descriptor names"},
+			Targets:            []contracts.Target{{Path: "docs/security-model.md", Operation: contracts.OpAdd}},
+			AcceptanceCriteria: []string{"The deliverable exists and names its trust boundaries"},
+			Verification:       []contracts.VerificationCommand{{ID: "V-GAP-1", Argv: []string{"true"}, TimeoutSeconds: 60}},
+			HumanEstimate:      contracts.Estimate{Optimistic: 1, Likely: 2, Pessimistic: 4, Basis: "one document"},
+			AgentEstimate:      contracts.Estimate{Optimistic: 2, Likely: 3, Pessimistic: 6, Basis: "one document"},
+		}},
+	}
+	return doc
 }
 
 func (s *stub) count(key string) int {

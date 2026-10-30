@@ -9,10 +9,13 @@ import {
   useCapabilities,
 } from "../ui/capabilities";
 import { ProviderSetup } from "./ProviderSetup";
+import { RuntimeLimitsSection } from "./RuntimeLimitsSection";
+import { SkillsSection } from "./SkillsSection";
 
 /**
  * Setup: the hosts that serve this session's avatars, the tools its features
- * need, the skills installed into each agent, and the managed hooks.
+ * need, the skills installed into each agent, every skill the harnesses on this
+ * machine already have, the managed hooks, and the runtime limits a run obeys.
  *
  * Ordered by what can stop a run. Hosts first — with no serving host there is
  * no deliberation at all — then tools, then skills and hooks, which only
@@ -137,6 +140,9 @@ export function CapabilitiesDialog(props: {
             </ul>
           </section>
         )}
+
+        <SkillsSection report={view?.discovered_skills} />
+        <RuntimeLimitsSection />
       </div>
     </Dialog>
   );

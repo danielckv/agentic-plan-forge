@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "synthesizer.v1",
+  "title": "Lead Synthesizer lock",
+  "description": "The fused master specification header. It has no task or contract fields by construction.",
+  "type": "object",
+  "properties": {
+    "executive_summary": { "type": "string", "minLength": 1 },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "coverage_caveats": { "type": "array", "items": { "type": "string" } },
+    "estimate_assumptions": { "type": "array", "items": { "type": "string" } },
+    "verification_notes": { "type": "array", "items": { "type": "string" } },
+    "hours_per_day": { "type": "number", "exclusiveMinimum": 0, "maximum": 24 },
+    "max_parallel": { "type": "integer", "minimum": 1, "maximum": 4 },
+    "start_date": { "type": "string" }
+  },
+  "required": ["executive_summary"],
+  "additionalProperties": false
+}

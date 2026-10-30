@@ -17,7 +17,14 @@ const (
 	RoleSpecialist     RoleID = "specialist"
 	RoleCritic         RoleID = "critic"
 	RoleSynthesizer    RoleID = "synthesizer"
-	RoleIngestion      RoleID = "ingestion"
+	// RoleTechLead integrates the code review and judgment findings into the
+	// candidate, running the one bounded repair pass over affected sections.
+	RoleTechLead RoleID = "tech_lead"
+	// RoleCodeReviewer reviews the assembled candidate's code claims: current
+	// code plus proposed changes, never a claim that unimplemented code
+	// passed tests.
+	RoleCodeReviewer RoleID = "code_reviewer"
+	RoleIngestion    RoleID = "ingestion"
 	// RoleImpact maps the interpreted requirements onto the repository. It is
 	// its own role rather than a second ingestion call so a receipt names the
 	// prompt that actually ran.
@@ -30,7 +37,48 @@ const (
 	// gathered. It runs outside a deliberation run, on its own budget, and its
 	// output is a claim with a quoted source rather than a draft.
 	RoleResearch RoleID = "research"
+	// RoleGapAgent is a run-scoped temporary specialist. The architect proposes
+	// one when a brief needs expertise no workstream owner covers; the server
+	// admits at most MaxGapAgents per run. A gap agent is a descriptor in run
+	// history, never a persisted persona and never a source of new agents.
+	RoleGapAgent RoleID = "gap_agent"
 )
+
+// GapAgent statuses. The lifecycle is proposed → admitted → queued → running
+// → completed → fused → retired; rejected, failed and cancelled are terminal
+// alternatives. A retired agent stays inspectable in run history and never
+// becomes a settings entry.
+const (
+	GapProposed  = "proposed"
+	GapAdmitted  = "admitted"
+	GapQueued    = "queued"
+	GapRunning   = "running"
+	GapCompleted = "completed"
+	GapFused     = "fused"
+	GapRetired   = "retired"
+	GapRejected  = "rejected"
+	GapFailed    = "failed"
+	GapCancelled = "cancelled"
+)
+
+// GapAgentDescriptor describes one temporary agent. The architect proposes it
+// alongside the normal design; the server verifies and admits it. Placement
+// names where its deliverable lands: a parent workstream lane it joins, or the
+// synthesis.
+type GapAgentDescriptor struct {
+	ID             string   `json:"id"`
+	Specialty      string   `json:"specialty"`
+	Purpose        string   `json:"purpose"`
+	RequirementIDs []string `json:"requirement_ids"`
+	EvidenceRefs   []string `json:"evidence_refs"`
+	Deliverable    string   `json:"deliverable"`
+	ParentID       string   `json:"parent_id"`
+	Placement      string   `json:"placement"`
+	Status         string   `json:"status"`
+	// Reason records why the server rejected the proposal, retired the agent,
+	// or ended its run. It stays inspectable with the descriptor.
+	Reason string `json:"reason,omitempty"`
+}
 
 // Placement names the host and model that served, or will serve, one role.
 // Lane distinguishes two avatars of the same role, such as the Domain
@@ -51,6 +99,13 @@ type ModelSlot string
 const (
 	SlotMain  ModelSlot = "MAIN"
 	SlotJudge ModelSlot = "JUDGE"
+)
+
+// Effort hints for runtimes that take thinking effort as a request
+// parameter. Empty means the host default.
+const (
+	EffortMedium string = "medium"
+	EffortHigh   string = "high"
 )
 
 // DefaultGenerateTimeout is the budget one provider call gets when its caller
@@ -92,6 +147,9 @@ type GenerateRequest struct {
 	SystemPrompt string          `json:"system_prompt"`
 	UserPayload  json.RawMessage `json:"user_payload"`
 	SchemaID     string          `json:"schema_id"`
+	// Effort is the caller's thinking-effort hint for runtimes that expose
+	// one as a request parameter. Empty lets the host apply its own default.
+	Effort string `json:"effort,omitempty"`
 	// OutputSchema constrains the reply to a JSON Schema at the provider,
 	// where the provider supports it (Anthropic structured outputs, the
 	// OpenAI-compatible json_schema response format). It is independent of

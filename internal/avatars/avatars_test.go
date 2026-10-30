@@ -220,8 +220,11 @@ func TestRunHappyPathStageOrderAndModels(t *testing.T) {
 		if r.RunID != h.in.RunID || r.Timeout != avatars.DefaultStageTimeout || r.MaxOutput != contracts.MaxStageOutputBytes {
 			t.Errorf("%s request bounds = %q %v %d", c.Key, r.RunID, r.Timeout, r.MaxOutput)
 		}
-		if r.SchemaID != "" {
-			t.Errorf("%s requested schema %q, but no embedded schema exists for stage documents", c.Key, r.SchemaID)
+		if r.SchemaID == "" {
+			t.Errorf("%s requested no schema; every stage document has an embedded schema", c.Key)
+		}
+		if len(r.OutputSchema) == 0 {
+			t.Errorf("%s carries no OutputSchema; the provider must constrain stage output", c.Key)
 		}
 	}
 

@@ -12,7 +12,7 @@ Plan Forge reads the repository first, then argues with itself about the plan, t
 
 It ships as one Go binary with an embedded web UI, and an optional relay for team sessions.
 
-![Requirements, the real code and the team's recorded decisions go into a deliberation, and a specification comes out](docs/images/overview.png)
+![The deliberation page: the agent room on the right, the discussion in the middle, and the plan taking shape as a node graph](docs/images/workspace.png)
 
 ## Quickstart
 
@@ -21,8 +21,9 @@ curl -fsSL https://raw.githubusercontent.com/danielckv/agentic-plan-forge/main/s
 ```
 
 Restart your agent, then type `/plan-forge`. You need Git, a browser, and a way to reach a model — either a coding
-agent you are already signed in to (Claude Code, OMP) or an API key for Anthropic, OpenAI or Fireworks, which Setup
-asks for on a first run.
+agent you are already signed in to (Claude Code, oh-my-pi) or an API key for Anthropic, OpenAI, Fireworks or Google,
+which Setup asks for on a first run. `plan-forge run` opens the same workspace in a browser tab without an agent, and
+`plan-forge config skills` lists what the coding agents on this machine already offer.
 
 Both paths are first-class, and they are different credentials. A CLI host spends the subscription you already have;
 an API key is billed to you and is faster, because there is no process to start per call and the prompt prefix is
@@ -59,7 +60,7 @@ flowchart LR
         STORE["Artifact store<br/>atomic writes under .plan/"]
     end
 
-    HOSTS["Your choice of model<br/>Claude Code · OMP · agy<br/>or Anthropic · OpenAI · Fireworks over HTTP"]
+    HOSTS["Your choice of model<br/>Claude Code · oh-my-pi · agy<br/>or Anthropic · OpenAI · Fireworks · Google over their SDKs"]
     RELAY["Relay (optional)<br/>team sessions and followers"]
     REPO["Your repository<br/>read, never written without approval"]
 
@@ -83,31 +84,38 @@ returns a masked form, so a key cannot be lifted back out of the window or out o
 
 ## The flow
 
-One brief goes in. Grounding is deterministic and finishes before any model runs. The avatars argue in cycles until the
-critic has nothing left that is CRITICAL or HIGH. Then a specification is compiled, for you to approve.
+One brief goes in. Grounding is deterministic and finishes before any model runs. The avatars draft in cycles until the
+critic has nothing left that is CRITICAL or HIGH; two reviewers then read the assembled candidate at once, a Technical
+Leader integrates their findings, and one bounded repair pass answers the blocking ones. Then a specification is
+compiled, for you to approve.
 
 A run always ends with a plan. If the critic still has blocking findings when the cycle budget runs out, you are asked
 once whether to take the plan with those findings recorded on it or to pause and revise — and if you take it, the
-specification opens with a readiness verdict naming every one. Only a blocker is worth another cycle; a MEDIUM finding
+specification opens with a readiness verdict naming every one. The verdict is `ready`, `provisional` or `blocked`: a
+blocked plan is refused rather than written, `provisional` lists every finding that was recorded instead of fixed, and
+`ready` means every gate held. Only a blocker is worth another cycle; a MEDIUM finding
 is offered to you as a tradeoff rather than spending a round of calls on it.
 
 ```mermaid
 flowchart TD
     REQ["Your requirements<br/>Markdown composer"]
-    GROUND["Grounding — no model involved<br/>Tree-sitter AST · documentation drift · team decision records"]
+    GROUND["Grounding — no model involved<br/>AST scan · documentation drift · team decision records"]
 
-    subgraph CYCLE ["Deliberation — repeats until the critic is satisfied"]
+    subgraph CYCLE ["Deliberation — repeats while a blocker is open"]
         direction TB
         PM["Product Manager<br/>epics and user stories"]
         ARCH["Technical Architect<br/>contracts · diagrams · workstream DAG"]
+        TMP["Temporary agents<br/>only a gap the architect proposed and the server admitted"]
         SPEC["Domain Specialists<br/>one per workstream, in parallel"]
         CRIT["Red-Team Critic<br/>attacks every draft"]
         PM --> ARCH
+        ARCH --> TMP
         ARCH --> SPEC
         SPEC --> CRIT
-        CRIT -->|"open CRITICAL or HIGH<br/>and cycles left"| ARCH
+        CRIT -->|"a CRITICAL or HIGH finding<br/>and cycles left"| ARCH
     end
 
+    REVIEW["Code Reviewer and Technical Leader<br/>review the candidate, then one bounded repair"]
     SYNTH["Lead Synthesizer<br/>one specification, with a readiness verdict"]
     GATE{"You approve"}
     MODE["Your agent's Plan Mode<br/>executes the spec"]
@@ -115,8 +123,9 @@ flowchart TD
 
     REQ --> GROUND
     GROUND --> PM
-    CRIT -->|"all resolved"| SYNTH
-    CRIT -->|"cycles spent — you choose<br/>to record what is left"| SYNTH
+    CRIT -->|"no blocking finding"| REVIEW
+    CRIT -->|"cycles spent — you choose<br/>to record what is left"| REVIEW
+    REVIEW --> SYNTH
     SYNTH --> GATE
     GATE --> MODE
     GATE --> BUILD
@@ -140,7 +149,19 @@ They do not all see the same thing, and that is the point.
 | Technical Architect | The code graph, contracts, recorded decisions | Interfaces, diagrams, a workstream DAG |
 | Domain Specialists | Their own workstream and its evidence | Tasks with checks, in parallel |
 | Red-Team Critic | Every draft, plus the evidence behind it | Findings, each with a severity |
-| Lead Synthesizer | The resolved drafts | One specification and manifest |
+| Code Reviewer | The assembled candidate and the repository | Findings about code claims: paths, symbols, "this passes" |
+| Technical Leader | Both reviewers' findings | One resolution per finding, and the repair sections to fix |
+| Lead Synthesizer | The reviewed drafts | One specification and manifest |
+
+Two of those are permanent and new: the **Code Reviewer** reads the assembled candidate the way a reader of the diff
+would, and the **Technical Leader** either closes each finding or directs one bounded repair. Neither can approve its
+own work: the reviewer never drafts, and the leader's repair is re-checked by the deterministic validators.
+
+**Temporary agents** exist for the expertise a brief needs and no workstream owns — a security boundary, a data
+migration, an accessibility review. The architect may propose them in the same reply that carries its design; Plan
+Forge verifies each one and admits at most `max_gap_agents` (default 2, ceiling 3, `0` disables and records every
+proposal with its reason). An admitted agent drafts on its parent workstream's lane, cannot propose another agent, and
+its deliverable either joins the plan or retires with a recorded reason. None of them becomes a settings entry.
 
 Three deliberate asymmetries:
 
@@ -148,8 +169,6 @@ Three deliberate asymmetries:
   consequences of an interface.
 - **A specialist sees only its own workstream.** It cannot quietly re-plan the whole system.
 - **The critic sees everything and owns nothing.** It has no draft to protect.
-
-![The avatar room: avatars with their status, a discussion timeline, and the Product Manager's epics forming](docs/images/avatars.png)
 
 ## A look inside
 
@@ -164,29 +183,15 @@ then at 30, 60 and 120 more words, always after you stop typing. Four reads carr
 **See what it touches.** The Impact tab names the parts of your project the work affects and what happens to each:
 changes, new, already there, or clashes with a decision the team recorded.
 
-![The composer: a Markdown editor with the requirements on the left and epic files on the right](docs/images/composer.png)
+The demo GIF shows one brief from submission to the question drawer and the handoff, at 1× speed with no cuts:
 
-| Open an epic as a document | Browse the codebase while you write |
-| :---: | :---: |
-| ![An epic opened as a document](docs/images/epic-modal.png) | ![Searching the codebase for a component](docs/images/codebase-palette.png) |
+![A brief submitted, the agents working, a fusion, and the question drawer answering one decision](docs/images/demo.gif)
 
-**Watch them plan.** Every status, draft, finding and decision lands in one discussion, and the plan takes shape beside
-it as a clustered node graph: epics, the stories under them and the architect's workstreams, drawn as a tree you can
-orbit and click. Nodes appear as the avatars draft, so the plan visibly grows while the run works, and a node carrying
-a critic finding is coloured by the worst severity against it. Each card names the host and model serving it, the part
-of the stage in flight, and the evidence that call can see.
-
-**You always get a plan.** If the critic still has blocking findings when the cycle budget runs out, you are asked once
-whether to take the plan with them recorded on it or to pause and revise. Take it and the specification opens with a
-readiness verdict — `complete` or `provisional` — naming every finding that is still open, with the change it asks for.
-A plan is never quietly clean.
-
-| Review the specification | Light or dark |
-| :---: | :---: |
-| ![The compiled specification with its table of contents](docs/images/synthesis.png) | ![The composer in dark mode](docs/images/composer-dark.png) |
-
-The screenshots are captured from the real UI driving a seeded sample session, not from a live model run. CI rebuilds
-them on every change (`promo-shots` job in [.github/workflows/ci.yml](.github/workflows/ci.yml)).
+The screenshot at the top of this page is the static alternative to the animation. Both come from the real UI driving a
+seeded sample session, never from a live model run, so no credentials, personal paths or private repository details can
+appear in them. `node web/scripts/preview.mjs` recaptures the frames and `scripts/demo-gif.sh` assembles the GIF, both
+from the built bundle; CI publishes the same capture as the `promo-shots` artifact rather than committing over the
+tracked files.
 
 ## Why
 
@@ -221,13 +226,39 @@ acceptance binds one head commit, one recipe and one bundle of evidence, and nee
 approval of that same commit from GitHub. A bot, the pull request's own author, a stale review or a degraded API never
 counts.
 
+## Also in the binary
+
+**The question drawer.** When the avatars cannot decide something the owner must, the decision waits in a drawer on the
+right of the workspace rather than blocking a modal over it: each card names the options, the tradeoff each carries, and
+the one the model recommends as a hint rather than an answer. Brief ambiguities get their own classification buttons.
+The drawer survives a page switch, and a rejected answer says why rather than looking like it worked.
+
+**The component graph.** A graph button in the top bar opens the codebase as a flat diagram on any page: files and
+folders, with the imports the scanner recorded between them. Selecting a node shows its path, language, declaration
+count and neighbours; selecting it again centres the graph on it. The depth control chooses how many hops out to draw.
+
+**Skills already on this machine.** Plan Forge reads the skill directories the installed coding agents actually read —
+`~/.claude/skills`, `~/.omp/agent/skills`, `~/.agents/skills`, `~/.codex/skills` and the two Antigravity roots — and
+shows each skill with the one-line description from its `SKILL.md`. `plan-forge config skills` prints the same list in
+the terminal, `--json` for a script. The scan is shallow and read-only: one level below each named root, never a walk of
+your home directory, and it never edits a foreign skill. At session start the hook adds one line naming what it found,
+with no instruction to act on it.
+
+**Checkpoint recovery.** An unfinished run is written to `docs/plans/.plan/run.json` after every validated draft, with
+the PRD revision, the repository fingerprint, the context hash, the model slots, the validated outputs, the completed
+work, the next action and the last error. The next run over the same baseline adopts those drafts instead of paying for
+them twice; a changed brief, changed code or changed models invalidate the record, and the page says so.
+
+**The handoff.** An approved plan compiles to a specification and a manifest with phases, dependency-ordered tasks and
+executable verification commands. The handoff points a coding agent at that spec rather than at a flat task list.
+
 ## Documentation
 
 | Guide | What it covers |
 | :--- | :--- |
 | [docs/install.md](docs/install.md) | Every host, Windows, version pinning, uninstall |
 | [docs/usage.md](docs/usage.md) | The window, page by page |
-| [docs/configuration.md](docs/configuration.md) | Hosts, models, storage, sandbox and repository settings |
+| [docs/configuration.md](docs/configuration.md) | Hosts, models, `max_gap_agents`, storage, sandbox and repository settings |
 | [docs/adrs/](docs/adrs/README.md) | Why each boundary sits where it does — indexed, with the threads worth following |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test and pull request workflow |
 

@@ -464,6 +464,11 @@ const (
 	StageArchitect   = "architect"
 	StageCritic      = "critic"
 	StageSynthesizer = "synthesizer"
+	// StageTechLead integrates review and judgment findings into the
+	// candidate; StageCodeReviewer reviews the assembled candidate's code
+	// claims. Both run after the synthesizer assembles one candidate.
+	StageTechLead     = "tech_lead"
+	StageCodeReviewer = "code_reviewer"
 	// StageNarrator is the avatar that watches the others and says what the
 	// run is doing. It produces no draft and is never retried.
 	StageNarrator = "narrator"
@@ -471,6 +476,10 @@ const (
 
 // StageSpecialistPrefix prefixes specialist stage IDs: specialist:<workstream>.
 const StageSpecialistPrefix = "specialist:"
+
+// StageGapAgentPrefix prefixes gap-agent stage IDs: gap:<descriptor id>. A gap
+// agent is a run-scoped temporary specialist with its own lane.
+const StageGapAgentPrefix = "gap:"
 
 // SynthesizeRequestPayload asks for the master specification.
 type SynthesizeRequestPayload struct {

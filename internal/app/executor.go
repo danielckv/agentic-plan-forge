@@ -1011,7 +1011,7 @@ func (e *executor) stageFailed(runID, avatar string, err error) {
 // failure that stopped the run before they could start. Without it their cards
 // stay queued for a run that is over.
 func (e *executor) cancelDeliberation(runID, failed string) {
-	for _, avatar := range []string{avatarPM, relay.StageArchitect, relay.StageCritic, avatarSynthesizer} {
+	for _, avatar := range []string{avatarPM, relay.StageArchitect, relay.StageCritic, avatarSynthesizer, relay.StageCodeReviewer, relay.StageTechLead} {
 		if avatar == failed {
 			continue
 		}
@@ -1084,7 +1084,7 @@ func (e *executor) deliberate(ctx context.Context, gen int, runID string, startC
 		RunID: runID, PRD: norm, Graph: snap, GraphHash: hashJSON(snap), DocDrift: drift,
 		EvidenceNotes: notes, Context: pc, ContextHash: hashJSON(pc),
 		Models:    avatars.ModelSlots{Main: cfg.DefaultMainModel, Judge: cfg.DefaultJudgeModel},
-		MaxCycles: cfg.MaxCycles, MaxParallel: cfg.MaxParallel, StartCycle: startCycle,
+		MaxCycles: cfg.MaxCycles, MaxParallel: cfg.MaxParallel, MaxGapAgents: cfg.MaxGapAgents, StartCycle: startCycle,
 		// The stages get their own budget, not contracts.DefaultGenerateTimeout:
 		// the architect design part alone was measured at 110 seconds on opus
 		// with a minimal payload (ADR 0009).
