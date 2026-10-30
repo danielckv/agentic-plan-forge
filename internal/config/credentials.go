@@ -23,18 +23,19 @@ const (
 	ProviderAnthropic = "anthropic"
 	ProviderOpenAI    = "openai"
 	ProviderFireworks = "fireworks"
+	ProviderGoogle    = "google"
 )
 
 // ProviderNames lists the API providers in the order the setup window offers
 // them: most capable planning model first.
 func ProviderNames() []string {
-	return []string{ProviderAnthropic, ProviderOpenAI, ProviderFireworks}
+	return []string{ProviderAnthropic, ProviderGoogle, ProviderOpenAI, ProviderFireworks}
 }
 
 // IsAPIProvider reports whether name identifies an HTTP generation provider.
 func IsAPIProvider(name string) bool {
 	switch name {
-	case ProviderAnthropic, ProviderOpenAI, ProviderFireworks:
+	case ProviderAnthropic, ProviderOpenAI, ProviderFireworks, ProviderGoogle:
 		return true
 	}
 	return false
@@ -49,6 +50,8 @@ func ProviderLabel(name string) string {
 		return "OpenAI"
 	case ProviderFireworks:
 		return "Fireworks"
+	case ProviderGoogle:
+		return "Google"
 	}
 	return name
 }
@@ -64,6 +67,8 @@ func ProviderKeyEnv(name string) string {
 		return "OPENAI_API_KEY"
 	case ProviderFireworks:
 		return "FIREWORKS_API_KEY"
+	case ProviderGoogle:
+		return "GEMINI_API_KEY"
 	}
 	return ""
 }
@@ -77,6 +82,8 @@ func ProviderConsoleURL(name string) string {
 		return "https://platform.openai.com/api-keys"
 	case ProviderFireworks:
 		return "https://app.fireworks.ai/settings/users/api-keys"
+	case ProviderGoogle:
+		return "https://aistudio.google.com/apikey"
 	}
 	return ""
 }

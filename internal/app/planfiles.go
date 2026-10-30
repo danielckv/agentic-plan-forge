@@ -8,6 +8,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/danielckv/agentic-plan-forge/internal/ast"
@@ -438,6 +439,31 @@ func (s *appSession) handleComponents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.exec.Components(module, query))
+}
+
+// GET /api/component-graph — modules and files as a 2D graph. focus names a
+// node id to start from; depth bounds the walk (1..4, default 2).
+func (s *appSession) handleComponentGraph(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	focus := q.Get("focus")
+	if len(focus) > 1024 {
+		writeAPIError(w, http.StatusBadRequest, "focus is too long")
+		return
+	}
+	depth := 0
+	if raw := q.Get("depth"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > maxGraphDepth {
+			writeAPIError(w, http.StatusBadRequest, "depth must be an integer between 1 and 4")
+			return
+		}
+		depth = n
+	}
+	if s.exec == nil {
+		writeJSON(w, http.StatusOK, GraphView{Stack: []string{}, Nodes: []GraphNode{}, Edges: []GraphEdge{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.exec.ComponentGraph(focus, depth))
 }
 
 // GET /api/plan-files — the draft epics as Markdown files.

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tech_lead.v1",
+  "title": "Technical Leader integration record",
+  "description": "One entry per finding with its resolution and the plan sections the repair touched.",
+  "type": "object",
+  "properties": {
+    "resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "finding_id": { "type": "string", "minLength": 1 },
+          "blocks": { "type": "boolean" },
+          "sections": { "type": "array", "items": { "type": "string" } },
+          "rationale": { "type": "string" }
+        },
+        "required": ["finding_id", "blocks"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["resolutions"],
+  "additionalProperties": false
+}

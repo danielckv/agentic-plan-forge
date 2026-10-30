@@ -51,8 +51,8 @@ type DocFile struct {
 
 // DriftInput is everything DetectDocDrift needs. It performs no file access.
 type DriftInput struct {
-	// Docs are README.md, ARCHITECTURE.md and docs/**/*.md, already selected
-	// with the scanner's hard excludes applied.
+	// Docs are every Markdown file the scan accepted, in any directory, already
+	// selected with the scanner's hard excludes applied and validated as UTF-8.
 	Docs []DocFile
 	// Graph is the scanned repository. Its Coverage decides which claims are
 	// refutable and which are only UNVERIFIABLE.

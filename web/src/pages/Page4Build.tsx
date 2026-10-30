@@ -23,6 +23,8 @@ import {
   useBuild,
 } from "../ui/build";
 import type { BuildView, DeployTargetView, FileContent } from "../ui/build";
+import { HandoffPanel } from "./HandoffPanel";
+import { useSync } from "../store/syncStore";
 import { Dialog } from "../ui/Dialog";
 import { toastStore } from "../ui/toasts";
 
@@ -36,6 +38,7 @@ import { toastStore } from "../ui/toasts";
  * also the only directory the coding agent is given.
  */
 export function Page4Build(): React.ReactElement {
+  const sync = useSync();
   const { view, refresh } = useBuild(true);
   const [tab, setTab] = useState<"code" | "preview" | "documents">("code");
   const [target, setTarget] = useState<DeployTargetView | null>(null);
@@ -107,6 +110,11 @@ export function Page4Build(): React.ReactElement {
           <code className="pf-mono">{view.branch}</code>
         </p>
       )}
+
+      {/* Approval lands here: the plan is frozen and written, and this is what
+          the window says about the handoff. It sits above the build tabs
+          because it explains where the work goes next. */}
+      <HandoffPanel requestedHost={sync.status.requestedHost} members={sync.members} />
 
       <nav className="pf-build-tabs" role="tablist" aria-label="Build view">
         <button

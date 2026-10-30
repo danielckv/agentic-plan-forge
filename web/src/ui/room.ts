@@ -99,12 +99,18 @@ export function avatarStatus(input: RoomInput, avatarId: string): AvatarStatus {
 
 /**
  * The avatars still working this cycle. The synthesizer is excluded: it is
- * queued by design until the user starts synthesis.
+ * queued by design until the user starts synthesis. The code reviewer and the
+ * technical leader are excluded too: they run after synthesis, on the
+ * assembled candidate, so they can never keep a design cycle open.
  */
+const POST_SYNTHESIS = new Set([SYNTHESIZER_ID, "code_reviewer", "tech_lead"]);
+
 export function workingAvatars(input: RoomInput, avatarIds: readonly string[]): string[] {
-  const out = avatarIds.filter((id) => id !== SYNTHESIZER_ID && WORKING_STATUS.has(avatarStatus(input, id)));
+  const out = avatarIds.filter((id) => !POST_SYNTHESIS.has(id) && WORKING_STATUS.has(avatarStatus(input, id)));
   for (const t of Object.values(input.thoughts)) {
     if (t.avatarId.startsWith("specialist:") && WORKING_STATUS.has(t.status)) out.push(t.avatarId);
+    // A gap agent is a run-scoped specialist on its own lane: gap:<id>.
+    if (t.avatarId.startsWith("gap:") && WORKING_STATUS.has(t.status)) out.push(t.avatarId);
   }
   return out;
 }

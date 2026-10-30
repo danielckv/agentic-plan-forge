@@ -52,7 +52,11 @@ type CapabilitiesView struct {
 	Hosts  []CapabilityHost     `json:"hosts"`
 	Tools  []CapabilityTool     `json:"tools"`
 	Skills []host.SkillRootView `json:"skills"`
-	Hooks  []host.HookStatus    `json:"hooks"`
+	// Discovered lists every skill on disk in a harness root with its
+	// one-line description, so the owner can see what a harness already
+	// offers. It is read-only: Plan Forge never edits a foreign skill.
+	Discovered host.SkillScanReport `json:"discovered_skills"`
+	Hooks      []host.HookStatus    `json:"hooks"`
 	// CLIs is the first-run scan of installed coding agents. A tool that is
 	// found but has no adapter says so; only a host whose preflight passes is
 	// reported usable.
@@ -197,6 +201,9 @@ func Capabilities(ctx context.Context, cfg config.Config, repo, version string) 
 	// only failed once it left the machine it was written on.
 	if views, err := host.InspectSkillRoots(detected, repo); err == nil && views != nil {
 		view.Skills = views
+	}
+	if report, err := host.DiscoverSkills(detected, repo); err == nil {
+		view.Discovered = report
 	}
 	if in, err := host.NewInstaller(version); err == nil {
 		if statuses, herr := in.InspectHooks(host.HookHosts(detected), repo); herr == nil && statuses != nil {

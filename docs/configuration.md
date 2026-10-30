@@ -84,9 +84,10 @@ retry, a resumed run and a second window all place it the same way. Reasoning:
 
 | Key | Default | Effect |
 | :--- | :--- | :--- |
-| `role_models` | unset | Pins a role to a host, a model, or both. Keys: `pm`, `architect`, `specialist`, `critic`, `synthesizer`, `narrator`. A role with no entry is spread across the ready hosts. Pinning `specialist` pins every workstream. |
+| `role_models` | unset | Pins a role to a host, a model, or both. Keys: `pm`, `architect`, `specialist`, `critic`, `synthesizer`, `narrator`, `tech_lead`, `code_reviewer`, `gap_agent`. A role with no entry is spread across the ready hosts. Pinning `specialist` pins every workstream; pinning `gap_agent` pins every temporary agent. |
 | `main_host` / `judge_host` | unset | Naming one forces every role on that slot onto it. This is how you turn the spread off. A host that cannot serve is skipped; `plan-forge doctor` says so rather than leaving it silent. |
 | `max_parallel` | `4` | Maximum concurrent deliberation calls (1..4), matching the 4-workstream cap so all specialists run in one wave. |
+| `max_gap_agents` | `2` | How many temporary expertise-gap agents one run may admit, 0..3. `0` disables them and still records every proposal as rejected with its reason. See [ADR 0024](adrs/0024-temporary-gap-agents-and-embedded-stage-schemas.md). |
 | `stage_timeout_seconds` | `600` | What one deliberation call may take, 60..1800. The old 180-second cap killed every architect run; see below. |
 | `disable_narrator` | `true` | Turns off the avatar that narrates the run. Set to `false` to enable periodic narration on step transitions ([ADR 0016](adrs/0016-five-minute-deliberation-budget.md)). |
 

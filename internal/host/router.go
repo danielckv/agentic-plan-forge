@@ -54,14 +54,14 @@ type Resolution struct {
 // because it writes a status line that gates nothing and is dropped on
 // failure.
 var roleHostOrder = map[contracts.RoleID][]Kind{
-	contracts.RoleProductManager: {KindAnthropic, KindOpenAI, KindClaude, KindOMP, KindAGY},
-	contracts.RoleArchitect:      {KindAnthropic, KindOpenAI, KindClaude, KindAGY, KindOMP},
-	contracts.RoleSpecialist:     {KindOpenAI, KindAnthropic, KindFireworks, KindOMP, KindAGY, KindClaude},
-	contracts.RoleCritic:         {KindOpenAI, KindAnthropic, KindFireworks, KindAGY, KindOMP, KindClaude},
-	contracts.RoleSynthesizer:    {KindAnthropic, KindOpenAI, KindClaude, KindOMP, KindAGY},
-	contracts.RoleNarrator:       {KindFireworks, KindOpenAI, KindAnthropic, KindAGY, KindOMP, KindClaude},
-	contracts.RoleIngestion:      {KindAnthropic, KindOpenAI, KindFireworks, KindClaude, KindOMP, KindAGY},
-	contracts.RoleImpact:         {KindOpenAI, KindAnthropic, KindFireworks, KindOMP, KindClaude, KindAGY},
+	contracts.RoleProductManager: {KindAnthropic, KindGemini, KindOpenAI, KindAntigravity},
+	contracts.RoleArchitect:      {KindAnthropic, KindGemini, KindOpenAI, KindAntigravity},
+	contracts.RoleSpecialist:     {KindOpenAI, KindGemini, KindAnthropic, KindFireworks, KindAntigravity},
+	contracts.RoleCritic:         {KindOpenAI, KindGemini, KindAnthropic, KindFireworks, KindAntigravity},
+	contracts.RoleSynthesizer:    {KindAnthropic, KindGemini, KindOpenAI, KindAntigravity},
+	contracts.RoleNarrator:       {KindFireworks, KindGemini, KindOpenAI, KindAnthropic},
+	contracts.RoleIngestion:      {KindAnthropic, KindGemini, KindOpenAI, KindFireworks},
+	contracts.RoleImpact:         {KindOpenAI, KindGemini, KindAnthropic, KindFireworks},
 }
 
 // NoHostError means no authenticated adapter satisfied the tool-free gate. CLI
@@ -76,7 +76,7 @@ func (e *NoHostError) Error() string {
 	for _, reason := range e.Reasons {
 		details = append(details, fmt.Sprintf("%s %s: %s", reason.Kind, reason.Probe, reason.Reason))
 	}
-	message := "no usable generation host; run `claude auth login`, `omp login`, or start `agy` once interactively to sign in"
+	message := "no usable generation host; add an API key in Setup (Anthropic, Google, OpenAI or Fireworks)"
 	if len(details) != 0 {
 		message += " (" + strings.Join(details, "; ") + ")"
 	}
@@ -414,7 +414,7 @@ func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.Mode
 }
 
 func (r *Router) mainCandidates() []Kind {
-	return []Kind{Kind(r.cfg.MainHost), r.invokedHost, KindClaude, KindOMP, KindAGY}
+	return []Kind{Kind(r.cfg.MainHost), r.invokedHost, KindAnthropic, KindGemini, KindOpenAI}
 }
 
 // roleCandidates orders the adapters one avatar tries. A role_models host comes
@@ -438,7 +438,7 @@ func (r *Router) roleCandidates(role contracts.RoleID, lane string, slot contrac
 		out = append(out, Kind(r.cfg.MainHost))
 	}
 	out = append(out, rotate(roleHostOrder[role], laneOffset(lane))...)
-	return append(out, r.invokedHost, KindClaude, KindOMP, KindAGY)
+	return append(out, r.invokedHost, KindAnthropic, KindGemini, KindOpenAI)
 }
 
 // laneOffset turns a lane name into a stable rotation. It is FNV-1a rather
@@ -529,7 +529,7 @@ func (r *Router) hostListsModelLocked(ctx context.Context, kind Kind, id string)
 }
 
 func (r *Router) judgeCandidates() []Kind {
-	return []Kind{Kind(r.cfg.JudgeHost), r.invokedHost, KindClaude, KindOMP, KindAGY}
+	return []Kind{Kind(r.cfg.JudgeHost), r.invokedHost, KindAnthropic, KindGemini, KindOpenAI}
 }
 
 func (r *Router) modelForSlot(slot contracts.ModelSlot) string {

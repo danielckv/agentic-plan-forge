@@ -36,6 +36,8 @@ func providerOf(k Kind) string {
 		return config.ProviderOpenAI
 	case KindFireworks:
 		return config.ProviderFireworks
+	case KindGemini, KindAntigravity:
+		return config.ProviderGoogle
 	}
 	return ""
 }
@@ -181,8 +183,43 @@ func modelCatalogue(k Kind) []ModelRef {
 		return []ModelRef{{ID: openAIDefaultModel, Label: openAIDefaultModel}}
 	case KindFireworks:
 		return []ModelRef{{ID: fireworksDefaultModel, Label: "Fireworks " + fireworksDefaultModel}}
+	case KindGemini, KindAntigravity:
+		return []ModelRef{
+			{ID: geminiModelPreference[0], Label: "Gemini " + geminiModelPreference[0]},
+			{ID: geminiDefaultModel, Label: "Gemini " + geminiDefaultModel},
+		}
 	}
 	return nil
+}
+
+// ModelCatalogue is the exported fallback catalogue for the settings window:
+// the same short list, served when a host's live list cannot be fetched.
+func ModelCatalogue(k Kind) []ModelRef { return modelCatalogue(k) }
+
+// apiKindLabels are the display names the settings window shows per
+// generation host.
+var apiKindLabels = map[Kind]string{
+	KindAnthropic:   "Anthropic API",
+	KindOpenAI:      "OpenAI-compatible API",
+	KindFireworks:   "Fireworks API",
+	KindGemini:      "Google Gemini API",
+	KindAntigravity: "Google Antigravity (managed)",
+}
+
+// APIKinds lists the SDK generation hosts in display order. CLI
+// integrations (claude, agy) are not generation candidates, and OMP is
+// removed this release.
+func APIKinds() []Kind {
+	return []Kind{KindAnthropic, KindGemini, KindAntigravity, KindOpenAI, KindFireworks}
+}
+
+// KindLabel is the display name for one generation host, or the kind itself
+// when the host has no friendlier name.
+func KindLabel(k Kind) string {
+	if label, ok := apiKindLabels[k]; ok {
+		return label
+	}
+	return string(k)
 }
 
 // anthropicSlotModel picks the Anthropic model for one request: the caller's

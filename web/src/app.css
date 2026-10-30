@@ -1529,6 +1529,108 @@ body {
   width: min(1240px, 100%);
 }
 
+/*
+ * The graph overlay: as large as the viewport allows, because the point of it
+ * is reading a diagram. It keeps a small inset so the panel still reads as a
+ * dialog rather than a new page.
+ */
+.pf-dialog[data-size="full"] {
+  width: min(1600px, calc(100vw - 32px));
+  height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+}
+
+/*
+ * The question drawer: the same dialog, docked to the right edge at half the
+ * viewport and full height, so the workspace stays visible beside it. It is the
+ * only layout that leaves the panel open instead of asking for a decision on
+ * top of the work.
+ */
+.pf-overlay[data-layout="drawer"] {
+  place-items: stretch end;
+  padding: 0;
+}
+
+.pf-dialog[data-size="drawer"] {
+  width: min(720px, 50vw);
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  animation-name: pf-drawer-in;
+}
+
+@keyframes pf-drawer-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 900px) {
+  .pf-dialog[data-size="drawer"] { width: 100%; }
+}
+
+.pf-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pf-drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-drawer-section .pf-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pf-drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-drawer-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pf-drawer-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-drawer-impact { color: var(--pf-muted); }
+
+.pf-drawer-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.pf-drawer-note .pf-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--pf-border);
+  border-radius: 6px;
+  background: var(--pf-panel-subtle);
+  color: var(--pf-ink);
+}
+
+.pf-drawer-empty { margin: 0; }
+
 .pf-dialog-head {
   display: flex;
   align-items: flex-start;
@@ -4959,4 +5061,260 @@ figure > .pf-diagram-source { border-top: none; }
   align-items: center;
   font-size: 10px;
   color: var(--pf-danger);
+}
+
+/*
+ * The 2D component graph overlay: a large diagram beside a context panel. The
+ * drawing is SVG so it scales to any viewport without a renderer, and a node is
+ * a real focus stop rather than a canvas hit test.
+ */
+.pf-graph {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-sp-3);
+  height: 100%;
+  min-height: 0;
+}
+
+.pf-graph-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-sp-3);
+  flex: none;
+}
+
+.pf-graph-depth {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-sp-2);
+  font-size: var(--pf-fs-sm);
+  color: var(--pf-fg-muted);
+}
+
+.pf-graph-depth input[type="range"] { width: 160px; }
+
+.pf-graph-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--pf-sp-3);
+  min-height: 0;
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .pf-graph-body { grid-template-columns: 1fr; }
+  .pf-graph-detail { max-height: 40%; }
+}
+
+.pf-graph-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--pf-bg-sunken);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-r-md);
+}
+
+.pf-graph-edge {
+  stroke: var(--pf-border-strong);
+  stroke-width: 1.2;
+  opacity: 0.7;
+}
+
+.pf-graph-edge--contains {
+  stroke-dasharray: 3 3;
+  opacity: 0.45;
+}
+
+.pf-graph-node { cursor: pointer; }
+
+.pf-graph-node circle,
+.pf-graph-node rect {
+  fill: var(--pf-bg-raised);
+  stroke: var(--pf-border-strong);
+  stroke-width: 1.5;
+}
+
+.pf-graph-node--module rect { fill: var(--pf-accent-soft); }
+
+.pf-graph-node text {
+  font-size: 11px;
+  fill: var(--pf-fg-muted);
+  pointer-events: none;
+}
+
+.pf-graph-node.is-selected circle,
+.pf-graph-node.is-selected rect {
+  stroke: var(--pf-accent);
+  stroke-width: 2.5;
+}
+
+.pf-graph-detail {
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-r-md);
+  padding: var(--pf-sp-3);
+  overflow: auto;
+  min-height: 0;
+}
+
+.pf-graph-context-title {
+  font-size: var(--pf-fs-md);
+  font-weight: 600;
+  margin: 0 0 var(--pf-sp-1);
+}
+
+.pf-graph-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-sp-1);
+  margin: var(--pf-sp-3) 0;
+}
+
+.pf-graph-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: var(--pf-sp-2);
+  font-size: var(--pf-fs-sm);
+}
+
+.pf-graph-row dt { color: var(--pf-fg-muted); }
+.pf-graph-row dd { margin: 0; overflow-wrap: anywhere; }
+
+.pf-graph-empty {
+  color: var(--pf-fg-muted);
+  padding: var(--pf-sp-6);
+  text-align: center;
+}
+
+/*
+ * The agent room: permanent avatars on a fixed inner ring, specialists just
+ * outside them, temporary agents on the spoke of the workstream they serve.
+ * Drawn with SVG rings plus DOM buttons so every face stays focusable.
+ */
+.pf-agentroom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-sp-2);
+  height: 100%;
+  min-height: 0;
+}
+
+.pf-agentroom-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pf-sp-2);
+}
+
+.pf-agentroom-stage {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-r-md);
+  background: var(--pf-bg-sunken);
+  overflow: hidden;
+}
+
+.pf-agentroom-rings {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pf-agentroom-ring {
+  fill: none;
+  stroke: var(--pf-border);
+  stroke-width: 0.002;
+  stroke-dasharray: 0.012 0.012;
+}
+
+.pf-agentroom-link {
+  stroke: var(--pf-border-strong);
+  stroke-width: 0.003;
+  opacity: 0.7;
+}
+
+.pf-agentroom-centre {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--pf-sp-2);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-r-md);
+  background: var(--pf-bg-raised);
+  text-align: center;
+  max-width: 34%;
+}
+
+.pf-agentroom-centre[data-present="true"] {
+  border-color: var(--pf-ok);
+}
+
+.pf-agentroom-centre-label {
+  font-size: var(--pf-fs-sm);
+  font-weight: 600;
+}
+
+.pf-agentroom-face {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: 0;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: var(--pf-r-sm);
+}
+
+.pf-agentroom-face[data-status="failed"] { opacity: 0.9; }
+.pf-agentroom-face[data-status="cancelled"] { opacity: 0.45; }
+.pf-agentroom-face[data-status="idle"] { opacity: 0.6; }
+.pf-agentroom-face[data-kind="temporary"] .pf-agentroom-name { font-style: italic; }
+
+.pf-agentroom-face:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
+.pf-agentroom-name {
+  font-size: 10px;
+  color: var(--pf-fg-muted);
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-agentroom-detail {
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-r-md);
+  padding: var(--pf-sp-2);
+  overflow: auto;
+  min-height: 0;
+}
+
+.pf-room-agent-head {
+  display: flex;
+  gap: var(--pf-sp-2);
+  align-items: flex-start;
+}
+
+.pf-room-agent-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex: none;
 }

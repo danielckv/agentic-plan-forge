@@ -241,6 +241,11 @@ var roleSlots = []struct {
 	{contracts.RoleCritic, contracts.SlotJudge},
 	{contracts.RoleSynthesizer, contracts.SlotMain},
 	{contracts.RoleNarrator, contracts.SlotMain},
+	// The code reviewer judges the assembled candidate, so it runs on JUDGE
+	// and cannot simply agree with the draft. The technical leader edits on
+	// MAIN, the slot the draft was written with.
+	{contracts.RoleCodeReviewer, contracts.SlotJudge},
+	{contracts.RoleTechLead, contracts.SlotMain},
 }
 
 // wireSolo connects a Solo room to its executor: every document change

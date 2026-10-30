@@ -30,7 +30,12 @@ export interface DialogProps {
   title: string;
   /** Sub-heading under the title. */
   description?: string;
-  size?: "md" | "doc" | "wide";
+  /**
+   * `md`/`doc`/`wide` centre the panel; `drawer` docks it to the right edge at
+   * half the viewport, for a panel that stays open beside the workspace; `full`
+   * fills the viewport, for a diagram that needs the room.
+   */
+  size?: "md" | "doc" | "wide" | "drawer" | "full";
   children: React.ReactNode;
 }
 
@@ -82,6 +87,7 @@ function DialogPanel({ onClose, title, description, size = "md", children }: Dia
   return createPortal(
     <div
       className="pf-overlay"
+      data-layout={size === "drawer" ? "drawer" : "center"}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

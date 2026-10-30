@@ -22,6 +22,9 @@ const (
 	DefaultWorkdayHours = 9
 	DefaultMaxCycles    = 3
 	DefaultMaxParallel  = 4
+	// DefaultMaxGapAgents admits up to two expertise-gap agents per run. The
+	// plan bounds the setting from zero through three (MaxGapAgents).
+	DefaultMaxGapAgents = 2
 	DefaultOCRLanguage  = "eng"
 	// DefaultStageTimeoutSeconds is the budget one deliberation call gets. The
 	// architect design part was measured at 110 seconds on opus with a minimal
@@ -74,11 +77,12 @@ func (c Config) AgentBoxEndpoint() string {
 var validRoles = map[string]bool{
 	"pm": true, "architect": true, "specialist": true,
 	"critic": true, "synthesizer": true, "narrator": true,
+	"tech_lead": true, "code_reviewer": true, "gap_agent": true,
 }
 
 // RoleNames lists the pinnable roles in the order a run uses them.
 func RoleNames() []string {
-	return []string{"pm", "architect", "specialist", "critic", "synthesizer", "narrator"}
+	return []string{"pm", "architect", "specialist", "critic", "synthesizer", "narrator", "tech_lead", "code_reviewer", "gap_agent"}
 }
 
 // RoleBinding pins one avatar role to a host, a model, or both. An empty Host
@@ -101,6 +105,10 @@ type Config struct {
 	HumanWorkdayHours float64 `json:"human_workday_hours"`
 	MaxCycles         int     `json:"max_cycles"`
 	MaxParallel       int     `json:"max_parallel"`
+	// MaxGapAgents bounds how many expertise-gap agents one run may admit,
+	// beyond the required workstream owners. Zero through three; zero
+	// disables the gap selection entirely.
+	MaxGapAgents int `json:"max_gap_agents"`
 	// StageTimeoutSeconds bounds one deliberation call. Zero selects
 	// DefaultStageTimeoutSeconds.
 	StageTimeoutSeconds int `json:"stage_timeout_seconds"`
@@ -136,10 +144,13 @@ type Config struct {
 	unknown map[string]json.RawMessage
 }
 
-// Valid host identifiers. An empty value means "not configured yet".
+// Valid host identifiers. An empty value means "not configured yet". The CLI
+// hosts claude and agy stay for generation only through an explicit pin;
+// omp is removed as a generation host. The SDK hosts are the defaults.
 var validHosts = map[string]bool{
-	"": true, "claude": true, "omp": true, "agy": true,
+	"": true, "claude": true, "agy": true,
 	ProviderAnthropic: true, ProviderOpenAI: true, ProviderFireworks: true,
+	"gemini": true, "antigravity": true,
 }
 
 // IsValidHost reports whether h names a supported host adapter.
@@ -152,6 +163,7 @@ func Default() Config {
 		HumanWorkdayHours:   DefaultWorkdayHours,
 		MaxCycles:           DefaultMaxCycles,
 		MaxParallel:         DefaultMaxParallel,
+		MaxGapAgents:        DefaultMaxGapAgents,
 		DisableNarrator:     true,
 		OCRLanguage:         DefaultOCRLanguage,
 		StageTimeoutSeconds: DefaultStageTimeoutSeconds,
@@ -220,7 +232,8 @@ var knownKeys = map[string]bool{
 	"schema_version": true, "relay_server_url": true, "default_main_model": true,
 	"default_judge_model": true, "main_host": true, "judge_host": true,
 	"human_workday_hours": true, "max_cycles": true, "max_parallel": true,
-	"browser_path": true, "ocr_language": true, "host_env_allow": true,
+	"max_gap_agents": true,
+	"browser_path":   true, "ocr_language": true, "host_env_allow": true,
 	"stage_timeout_seconds": true, "role_models": true, "disable_narrator": true,
 	"deploy_target": true, "agent_box_url": true,
 	"repository_work_roots": true, "sandbox": true, "github_api_url": true,
@@ -305,11 +318,14 @@ func Validate(cfg Config) error {
 	if cfg.MaxParallel < 1 || cfg.MaxParallel > 4 {
 		return fmt.Errorf("max_parallel must be between 1 and 4, got %d", cfg.MaxParallel)
 	}
+	if cfg.MaxGapAgents < 0 || cfg.MaxGapAgents > 3 {
+		return fmt.Errorf("max_gap_agents must be between 0 and 3, got %d", cfg.MaxGapAgents)
+	}
 	if !IsValidHost(cfg.MainHost) {
-		return fmt.Errorf("main_host %q is not one of claude, omp, agy", cfg.MainHost)
+		return fmt.Errorf("main_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", cfg.MainHost)
 	}
 	if !IsValidHost(cfg.JudgeHost) {
-		return fmt.Errorf("judge_host %q is not one of claude, omp, agy", cfg.JudgeHost)
+		return fmt.Errorf("judge_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", cfg.JudgeHost)
 	}
 	if cfg.StageTimeoutSeconds != 0 &&
 		(cfg.StageTimeoutSeconds < MinStageTimeoutSeconds || cfg.StageTimeoutSeconds > MaxStageTimeoutSeconds) {
@@ -322,7 +338,7 @@ func Validate(cfg Config) error {
 				role, strings.Join(RoleNames(), ", "))
 		}
 		if !IsValidHost(binding.Host) {
-			return fmt.Errorf("role_models[%q].host %q is not one of claude, omp, agy", role, binding.Host)
+			return fmt.Errorf("role_models[%q].host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", role, binding.Host)
 		}
 	}
 	if cfg.RelayServerURL != "" {
@@ -532,6 +548,7 @@ func (c Config) Redacted() map[string]any {
 		"human_workday_hours":   c.HumanWorkdayHours,
 		"max_cycles":            c.MaxCycles,
 		"max_parallel":          c.MaxParallel,
+		"max_gap_agents":        c.MaxGapAgents,
 		"stage_timeout_seconds": c.StageTimeout(),
 		"role_models":           c.RoleModels,
 		"disable_narrator":      c.DisableNarrator,

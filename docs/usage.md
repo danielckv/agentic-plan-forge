@@ -227,6 +227,37 @@ again with half its evidence, and says in the payload what it gave up. See
 [ADR 0011](adrs/0011-the-documentation-batches-leave-the-critical-path.md) and
 [ADR 0016](adrs/0016-five-minute-deliberation-budget.md).
 
+**Temporary agents.** Sometimes the brief needs expertise no workstream owns — a security boundary, a data migration,
+an accessibility review. The architect may propose such gaps in the same reply that carries the design, naming a
+specialty, a purpose, the requirement ids it serves and a concrete deliverable. It never hires anyone directly: the
+server decides.
+
+- Each proposal is checked before it can run. The referenced requirement ids must exist in the PM draft, the
+  deliverable must be named, a named parent workstream must be declared, and the specialty must not already be owned by
+  a workstream or an earlier admitted agent (case, hyphens and the words *specialist*, *expertise* and *expert* are
+  folded away before comparing).
+- At most `max_gap_agents` are admitted, in proposal order; the default is 2 and the ceiling is 3. Set it to `0` to
+  disable the feature: every proposal is then recorded as rejected with its reason, so the room still explains why
+  nobody was hired.
+- An admitted agent runs as its own stage, `gap:<id>`, on its parent workstream's lane, with the specialist prompt.
+  It carries its own descriptor and never the architect's proposals, and its reply may not propose another agent, so
+  agents cannot multiply.
+- Its deliverable joins the synthesis input when it validates, and the agent is marked fused. One that never validated
+  is retired with a reason. Retired agents stay in the run history; none of them becomes a permanent setting.
+
+**How a plan is judged ready.** The specification opens with a verdict.
+
+- `ready` — requirement coverage, interface agreement, dependency order and the validators all held, and no finding is
+  outstanding.
+- `provisional` — the plan is complete enough to build from, and it carries findings that were recorded rather than
+  fixed: waived by you, or integrated by the Technical Leader with a rationale. Each one is listed in full in the
+  readiness section, so the risk is read before the phases rather than after shipping.
+- `blocked` — an unresolved blocking finding or an unanswered material decision. A blocked plan is refused, not
+  written: the run says which conditions must clear.
+
+Verification commands are specified by the plan; compilation executes none of them, so the readiness section never
+reports a command as run.
+
 **When you come back.** An unfinished run is kept in `docs/plans/.plan/run.json`, so closing the window or losing the
 process does not throw away work a model was already paid for. The next run over the same requirements picks the drafts
 up and puts the epics and the architecture straight back on the board; only the stages that never finished run again.
@@ -253,10 +284,14 @@ file. Diagrams expand to full screen.
 
 **Plan readiness** is the first thing under the executive summary, and it is the section to read before you build.
 
-- **Verdict: complete** means every finding raised against this plan was fixed by a revision. Nothing was waived.
-- **Verdict: provisional** means the deliberation ran out of cycles with blocking findings still open and you chose to
-  take the plan anyway. Each one is listed in full — severity, what it affects, the evidence, and the change it still
-  asks for — along with the decision that recorded it.
+- **Verdict: ready** means every gate held: requirements are covered, the interfaces agree, the dependency order
+  resolves, and no finding is outstanding. Nothing was waived.
+- **Verdict: provisional** means the plan is complete enough to build from, and it carries findings that were recorded
+  rather than fixed — waived by you, or integrated by the Technical Leader with a rationale. Each one is listed in full:
+  severity, what it affects, the evidence, and the change it still asks for, along with how it was closed.
+- **Verdict: blocked** means an unresolved blocking finding or an unanswered material decision. A blocked plan is
+  refused rather than written, and the run names the conditions that must clear. Only a blocker is worth another
+  cycle.
 
 A run always produces a plan now. Earlier a run that hit the cycle cap with a CRITICAL or HIGH finding open could
 neither continue nor finish, and the only way out discarded every draft, so three cycles of work produced nothing. The
@@ -299,6 +334,34 @@ pi, OpenCode, Gemini and Cursor Agent. Presence is not capability. A tool Plan F
 is reported as detected and **not usable**, with a line saying so, because reporting it as available
 would repeat the "signed in but cannot serve" confusion above. The scan only checks `PATH`; it runs
 nothing.
+
+### Skills on this machine
+
+Settings → Skills shows what the harnesses on this computer already know how to do, read from the skill directories
+they actually read:
+
+| Harness | Roots |
+| --- | --- |
+| Claude Code | `~/.claude/skills`, and `.claude/skills` in the repository |
+| OMP | `~/.omp/agent/skills`, `.omp/skills`, and the foreign roots its settings opt into (`~/.agents/skills`, `~/.codex/skills`, `.agents/skills`, plus `skills.customDirectories`) |
+| Antigravity / Gemini | `~/.gemini/antigravity-cli/skills` (CLI), `~/.gemini/config/skills` (app), and `.agents/skills` in the repository |
+
+Each entry shows the skill's name, the one-line `description` from its `SKILL.md` frontmatter, the harness and root it
+came from, and whether that root is a user directory, a project directory or one the OMP settings opted into. The point
+is judgement before a run: a skill that already encodes how this project handles PDFs, migrations or a vendor API is
+often the reason a plan should name that tool rather than invent a task.
+
+The scan is shallow and read-only. It lists the named roots one level deep, never walks your home directory, and never
+edits a foreign skill. A directory with no `SKILL.md` is listed with the reason instead of being hidden; a skill whose
+frontmatter sets `enabled: false` is shown as disabled; a root that cannot be read is reported while the rest of the
+list still loads. A harness you never used simply has no root, which is an empty list rather than an error. Skills Plan
+Forge writes itself are marked as managed and can be enabled or disabled; foreign ones cannot, because they belong to
+the harness that owns them.
+
+The same data is on the terminal: `plan-forge config skills` lists every skill grouped by harness, with its
+description and root, and `--json` prints the same for a script. `plan-forge doctor` shows it inside its skill-root
+report. At session start the hook appends one line naming the first few skills it found — information only, with no
+instruction to act on it.
 
 ## Project context
 

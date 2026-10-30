@@ -55,6 +55,15 @@ type runState struct {
 	Arch  draftRec
 	Specs map[string]draftRec
 
+	// Gaps holds every gap descriptor of the run with its current status,
+	// admitted and rejected alike; GapDocs the completed agents' drafts.
+	// GapsAdmitted records that admission already ran, so a resumed run does
+	// not re-admit proposals against an architect draft that already went
+	// through it.
+	Gaps         []contracts.GapAgentDescriptor
+	GapDocs      map[string]draftRec
+	GapsAdmitted bool
+
 	// The architect stage answers in parts (see architect.go). A part that
 	// finished is kept, so a retry re-runs only the part that failed.
 	ArchDesign   draftRec
@@ -76,11 +85,57 @@ type runState struct {
 	Seq               int
 
 	Revs map[string]uint64
+
+	// Meta is the execution metadata the plan requires a checkpoint to carry:
+	// what ran, where, against which inputs, what finished, what comes next and
+	// what failed last. It is written on every save so a resumed run can rebuild
+	// its working context without guessing.
+	Meta checkpointMeta
+}
+
+// CheckpointMetaSchema is the version of the metadata block below. It is
+// separate from the storage snapshot's schema version because this block can
+// gain a field without changing how a snapshot is read.
+const CheckpointMetaSchema = 1
+
+// checkpointMeta is the per-run execution record: identity, inputs, placement,
+// progress and the last error. It holds no reasoning and no credentials.
+type checkpointMeta struct {
+	SchemaVersion int    `json:"schema_version"`
+	RunID         string `json:"run_id,omitempty"`
+	// Agent is the avatar whose stage last advanced the record.
+	Agent string `json:"agent,omitempty"`
+	// Phase names what the run is doing: drafting, reviewing, repairing, fused.
+	Phase string `json:"phase,omitempty"`
+	// InputRevision is the PRD revision the drafts answer.
+	InputRevision uint64 `json:"input_revision,omitempty"`
+	// RepositoryFingerprint is the worktree hash the design was read from.
+	RepositoryFingerprint string `json:"repository_fingerprint,omitempty"`
+	// ContextHash fingerprints the project context handed to the stages.
+	ContextHash string `json:"context_hash,omitempty"`
+	// Models records the main and judge slots the run was planned with. Host
+	// placement is per call, so it is recorded on the placements, not here.
+	Models struct {
+		Main  string `json:"main,omitempty"`
+		Judge string `json:"judge,omitempty"`
+	} `json:"models"`
+	// ValidatedOutputs lists the stage keys with a validated draft, in stable
+	// order, so a reader knows what is already paid for.
+	ValidatedOutputs []string `json:"validated_outputs,omitempty"`
+	// CompletedWork is the concise prose summary a resumed agent reads first.
+	CompletedWork []string `json:"completed_work,omitempty"`
+	// UnresolvedDecisions counts the decisions still waiting for the owner.
+	UnresolvedDecisions int `json:"unresolved_decisions,omitempty"`
+	// NextAction is the one sentence a resumed run acts on.
+	NextAction string `json:"next_action,omitempty"`
+	// LastError is the last stage failure, bounded and already sanitized.
+	LastError string `json:"last_error,omitempty"`
 }
 
 func newRunState() *runState {
 	return &runState{
 		Specs:             map[string]draftRec{},
+		GapDocs:           map[string]draftRec{},
 		DecisionContracts: map[string]string{},
 		Applied:           map[string]bool{},
 		Revs:              map[string]uint64{},
@@ -105,6 +160,11 @@ func (s *runState) clone() *runState {
 	for k, v := range s.Revs {
 		c.Revs[k] = v
 	}
+	c.GapDocs = make(map[string]draftRec, len(s.GapDocs))
+	for k, v := range s.GapDocs {
+		c.GapDocs[k] = v
+	}
+	c.Gaps = append([]contracts.GapAgentDescriptor(nil), s.Gaps...)
 	c.ArchDocs = append([]docBatchRec(nil), s.ArchDocs...)
 	c.Critiques = append([]contracts.Critique(nil), s.Critiques...)
 	c.Decisions = append([]contracts.Decision(nil), s.Decisions...)
@@ -224,6 +284,17 @@ func (s *runState) afterDecode() {
 			continue
 		}
 		s.Specs[ws] = rec
+	}
+	if s.GapDocs == nil {
+		s.GapDocs = map[string]draftRec{}
+	}
+	for id, rec := range s.GapDocs {
+		rec.Raw = definedRaw(rec.Raw)
+		if !rec.present() {
+			delete(s.GapDocs, id)
+			continue
+		}
+		s.GapDocs[id] = rec
 	}
 	if s.DecisionContracts == nil {
 		s.DecisionContracts = map[string]string{}

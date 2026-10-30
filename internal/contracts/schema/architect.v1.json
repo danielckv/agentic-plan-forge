@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architect.v1",
+  "title": "Technical Architect design output",
+  "description": "Workstreams, frozen interface contracts and accepted tradeoffs. Diagrams and doc tasks arrive in separate calls.",
+  "type": "object",
+  "properties": {
+    "summary": { "type": "string", "minLength": 1 },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "workstreams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "role": { "type": "string", "enum": ["backend", "data", "frontend"] },
+          "module_paths": { "type": "array", "items": { "type": "string" } },
+          "depends_on": { "type": "array", "items": { "type": "string" } },
+          "contract_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["id", "role", "module_paths"],
+        "additionalProperties": false
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "owner_workstream": { "type": "string", "minLength": 1 },
+          "language": { "type": "string" },
+          "signature": { "type": "string", "minLength": 1 },
+          "input_schema": { "type": "string" },
+          "output_schema": { "type": "string" },
+          "errors": { "type": "array", "items": { "type": "string" } },
+          "consumer_workstreams": { "type": "array", "items": { "type": "string" } },
+          "version_hash": { "type": "string" }
+        },
+        "required": ["id", "owner_workstream", "signature"],
+        "additionalProperties": false
+      }
+    },
+    "accepted_tradeoffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "critique_id": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 1 }
+        },
+        "required": ["critique_id", "rationale"],
+        "additionalProperties": false
+      }
+    },
+    "proposed_gaps": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "specialty": { "type": "string", "minLength": 1 },
+          "purpose": { "type": "string", "minLength": 1 },
+          "requirement_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "evidence_refs": { "type": "array", "items": { "type": "string" } },
+          "deliverable": { "type": "string", "minLength": 1 },
+          "parent_id": { "type": "string" },
+          "placement": { "type": "string", "enum": ["workstream", "synthesis"] },
+          "status": { "type": "string" }
+        },
+        "required": ["id", "specialty", "purpose", "requirement_ids", "deliverable"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["summary", "constraints", "workstreams", "contracts"],
+  "additionalProperties": false
+}

@@ -14,18 +14,23 @@ import {
   TriangleAlert,
   WifiOff,
   X,
+  CircleHelp,
+  Users,
 } from "lucide-react";
 
 import { AvatarBadge, MAIN_AVATARS, avatarSpec } from "../components/avatars/AvatarBadge";
+import { AgentRoom } from "./composer/AgentRoom";
 import { UsagePanel } from "../components/UsagePanel";
 import { PlanGraphView } from "./PlanGraphView";
 import {
   parseArchitectDraft,
   parsePMDraft,
+  parseNormalizedPRD,
   type ArchitectDraft,
   type PMDraft,
 } from "../protocol/drafts";
-import { cancelSession, editBaseline, resolveDecision, retryStage, synthesize, useSync } from "../store/syncStore";
+import { cancelSession, editBaseline, openDecisionDrawer, resolveDecision, retryStage, synthesize, useSync } from "../store/syncStore";
+import { pendingQuestionCount } from "../ui/decisionDrawer";
 import {
   avatarStatus,
   runFailure,
@@ -95,7 +100,7 @@ function humanStage(id: string): string {
 // The graph absorbs what the Epics and Architecture tabs used to show: both
 // are the same plan at different depths, and splitting them across tabs hid
 // the shape of the work.
-type PlanTab = "graph" | "findings" | "usage";
+type PlanTab = "room" | "graph" | "findings" | "usage";
 
 /**
  * What one avatar is running on and how far it has got: the host and model
@@ -150,7 +155,7 @@ export function Page2AvatarCanvas(): React.ReactElement {
   const cycle = sync.cycle;
   const runId = sync.runId;
   const [focus, setFocus] = useState<string | null>(null);
-  const [planTab, setPlanTab] = useState<PlanTab>("graph");
+  const [planTab, setPlanTab] = useState<PlanTab>("room");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   // A retry that has been sent but whose stage has not started yet. Without it
   // a second click cancels a call that is already paid for; the executor
@@ -208,6 +213,26 @@ export function Page2AvatarCanvas(): React.ReactElement {
 
   const pm = useMemo(() => parsePMDraft(sync.drafts.find((d) => d.avatarId === "pm")?.data), [sync.drafts]);
   const arch = useMemo(() => parseArchitectDraft(sync.drafts.find((d) => d.avatarId === "architect")?.data), [sync.drafts]);
+  // Temporary agents come from the architect's proposals. Their status is the
+  // lifecycle the server recorded, so a rejected proposal still shows, with its
+  // reason, instead of vanishing from the room.
+  // Decisions and unanswered brief questions, for the rail's Questions badge.
+  const openQuestions = useMemo(
+    () => pendingQuestionCount(sync.decisions, parseNormalizedPRD(sync.drafts.find((d) => d.avatarId === "ingestion")?.data), sync.ambiguityAnswers),
+    [sync.decisions, sync.drafts, sync.ambiguityAnswers],
+  );
+  const roomGaps = useMemo(
+    () =>
+      (arch?.proposedGaps ?? []).map((g) => ({
+        id: g.id,
+        specialty: g.specialty,
+        purpose: "",
+        deliverable: g.deliverable,
+        parentId: g.parentId,
+        status: g.status === "" ? "proposed" : g.status,
+      })),
+    [arch],
+  );
 
   const active = activeStage(sync.status.stages);
   const completed = completedStages(sync.status.stages);
@@ -389,6 +414,7 @@ export function Page2AvatarCanvas(): React.ReactElement {
 
             <aside className="pf-room-plan" aria-label="Plan taking shape">
               <div className="pf-rail-tabs" role="tablist" aria-label="Plan views">
+                <PlanTabButton id="room" current={planTab} onSelect={setPlanTab} icon={Users} label="Team" />
                 <PlanTabButton
                   id="graph"
                   current={planTab}
@@ -406,8 +432,20 @@ export function Page2AvatarCanvas(): React.ReactElement {
                   count={sync.critiques.filter((c) => !c.resolved).length}
                 />
                 <PlanTabButton id="usage" current={planTab} onSelect={setPlanTab} icon={Gauge} label="Usage" />
+                <button
+                  type="button"
+                  className="pf-rail-tab"
+                  onClick={() => openDecisionDrawer()}
+                  aria-label={openQuestions > 0 ? `Questions, ${String(openQuestions)} open` : "Questions"}
+                  title="Open the question drawer"
+                >
+                  <CircleHelp size={15} aria-hidden="true" />
+                  <span>Questions</span>
+                  {openQuestions > 0 && <span className="pf-rail-count">{openQuestions}</span>}
+                </button>
               </div>
               <div className="pf-rail-body pf-scroll-thin" role="tabpanel">
+                {planTab === "room" && <AgentRoom gaps={roomGaps} />}
                 {planTab === "graph" && (
                   <PlanGraphView
                     pm={pm}

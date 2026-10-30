@@ -29,6 +29,14 @@ const (
 	SchemaSpecialist  = "specialist.v1"
 	SchemaCritic      = "critic.v1"
 	SchemaSynthesizer = "synthesizer.v1"
+	// SchemaCodeReviewer labels the code reviewer's findings over the
+	// assembled candidate; SchemaTechLead labels the technical leader's
+	// integration record with per-finding resolutions.
+	SchemaCodeReviewer = "code_reviewer.v1"
+	SchemaTechLead     = "tech_lead.v1"
+	// SchemaGapAgent labels the architect's expertise-gap proposals and the
+	// server's admission record over them.
+	SchemaGapAgent = "gap_agent.v1"
 )
 
 // Requirement and acceptance IDs handed to the Product Manager are positional:
@@ -107,6 +115,10 @@ type ArchitectDoc struct {
 	DocTasks    []contracts.TechnicalTask     `json:"doc_tasks"`
 	Accepted    []AcceptedTradeoff            `json:"accepted_tradeoffs,omitempty"`
 	Synthesis   *SynthesisDoc                 `json:"synthesis,omitempty"`
+	// ProposedGaps lists expertise the design needs that no workstream owner
+	// covers. The server verifies and admits at most MaxGapAgents of them;
+	// a proposal here is not an admission.
+	ProposedGaps []contracts.GapAgentDescriptor `json:"proposed_gaps,omitempty"`
 }
 
 // InterfaceClaim is what a specialist declares about one contract it produces
@@ -133,6 +145,30 @@ type SpecialistDoc struct {
 // CriticDoc is the Red-Team Critic output.
 type CriticDoc struct {
 	Critiques []contracts.Critique `json:"critiques"`
+}
+
+// CodeReviewDoc is the Code Reviewer's output over the assembled candidate:
+// the same critique shape as the Red-Team Critic, so findings merge into one
+// set, but scoped to code claims — file paths, symbols, interfaces, and any
+// statement that unimplemented code passes tests.
+type CodeReviewDoc struct {
+	Critiques []contracts.Critique `json:"critiques"`
+}
+
+// TechLeadDoc is the Technical Leader's integration record: one entry per
+// finding with its resolution and the plan sections the repair touched.
+type TechLeadDoc struct {
+	Resolutions []TechLeadResolution `json:"resolutions"`
+}
+
+// TechLeadResolution integrates one finding. An empty Sections with a
+// blocking resolution means the finding was accepted without a repair, which
+// requires a rationale.
+type TechLeadResolution struct {
+	FindingID string   `json:"finding_id"`
+	Blocks    bool     `json:"blocks"`
+	Sections  []string `json:"sections,omitempty"`
+	Rationale string   `json:"rationale,omitempty"`
 }
 
 // SynthesisDoc is the Lead Synthesizer lock. It has no task or contract fields
@@ -235,6 +271,24 @@ func DecodeCritic(raw []byte) (CriticDoc, error) {
 	var d CriticDoc
 	if err := decodeStrict(raw, &d); err != nil {
 		return d, &ValidationError{Stage: "critic", Problems: []string{err.Error()}}
+	}
+	return d, nil
+}
+
+// DecodeCodeReview strictly decodes Code Reviewer output.
+func DecodeCodeReview(raw []byte) (CodeReviewDoc, error) {
+	var d CodeReviewDoc
+	if err := decodeStrict(raw, &d); err != nil {
+		return d, &ValidationError{Stage: "code_reviewer", Problems: []string{err.Error()}}
+	}
+	return d, nil
+}
+
+// DecodeTechLead strictly decodes Technical Leader output.
+func DecodeTechLead(raw []byte) (TechLeadDoc, error) {
+	var d TechLeadDoc
+	if err := decodeStrict(raw, &d); err != nil {
+		return d, &ValidationError{Stage: "tech_lead", Problems: []string{err.Error()}}
 	}
 	return d, nil
 }

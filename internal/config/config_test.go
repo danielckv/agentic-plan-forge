@@ -182,7 +182,7 @@ func TestValidateBounds(t *testing.T) {
 		func(c *config.Config) { c.HumanWorkdayHours = 25 },
 		func(c *config.Config) { c.MaxCycles = 4 },
 		func(c *config.Config) { c.MaxParallel = 9 },
-		func(c *config.Config) { c.MainHost = "gemini" },
+		func(c *config.Config) { c.MainHost = "rt-7" },
 		func(c *config.Config) { c.HostEnvAllow = []string{"BAD=1"} },
 		func(c *config.Config) { c.StageTimeoutSeconds = 30 },
 		func(c *config.Config) { c.StageTimeoutSeconds = 3601 },
@@ -190,7 +190,7 @@ func TestValidateBounds(t *testing.T) {
 			c.RoleModels = map[string]config.RoleBinding{"designer": {Host: "claude"}}
 		},
 		func(c *config.Config) {
-			c.RoleModels = map[string]config.RoleBinding{"architect": {Host: "gemini"}}
+			c.RoleModels = map[string]config.RoleBinding{"architect": {Host: "omp"}}
 		},
 	}
 	for i, mutate := range bad {
