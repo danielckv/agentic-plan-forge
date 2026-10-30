@@ -470,9 +470,42 @@ func dial(ctx context.Context, opts Options) (*socket, error) {
 		return nil, fmt.Errorf("tui: authenticate: %w", err)
 	}
 
+	// HELLO is not optional: the hub refuses every other event until it arrives
+	// (hub.go: `!hc.hello.Load() && env.EventType != EventHello`), and the room
+	// answers it with the state snapshot and the document text. Without it the
+	// terminal connects, authenticates, and then never receives a session.
+	//
+	// The envelope needs a session_id, and on the loopback bridge the value is
+	// the socket URL: that is what the page puts there (syncStore.ts sends
+	// state.serverUrl). The local bridge never compares it — only the remote hub
+	// does, against its own room id.
+	hello, err := command(u.String(), relay.EventHello, relay.HelloPayload{
+		Proto:      contracts.ProtocolVersion,
+		LastSeq:    0,
+		DocVersion: 0,
+		CanExecute: true,
+	})
+	if err != nil {
+		_ = conn.Close(websocket.StatusInternalError, "hello build failed")
+		return nil, fmt.Errorf("tui: hello: %w", err)
+	}
+	if err := conn.Write(dialCtx, websocket.MessageText, mustJSON(hello)); err != nil {
+		_ = conn.Close(websocket.StatusInternalError, "hello write failed")
+		return nil, fmt.Errorf("tui: hello: %w", err)
+	}
+
 	s := &socket{conn: conn, frames: make(chan relay.WSEnvelope, 64)}
 	go s.read(ctx)
 	return s, nil
+}
+
+// mustJSON marshals a value built by command, which cannot fail here.
+func mustJSON(v any) []byte {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 // read pumps frames until the socket closes.

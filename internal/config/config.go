@@ -307,6 +307,21 @@ func Save(path string, cfg Config) error {
 	return nil
 }
 
+// hostError explains an unsupported host. A host that used to work gets its own
+// message: removing it without saying what to do instead left a saved config
+// failing at startup with a list of names and no path forward.
+func hostError(field, host string) error {
+	const supported = "anthropic, gemini, openai, fireworks, antigravity, claude, agy"
+	switch host {
+	case "omp":
+		return fmt.Errorf("%s is %q, which is no longer a generation host: this release generates through "+
+			"provider APIs, not a local agent CLI. Set %s to anthropic or gemini and add that provider's API key "+
+			"(plan-forge config). The supported hosts are %s", field, host, field, supported)
+	default:
+		return fmt.Errorf("%s is %q, which is not a supported host. The supported hosts are %s", field, host, supported)
+	}
+}
+
 // Validate reports the first configuration problem. It never mutates cfg.
 func Validate(cfg Config) error {
 	if cfg.HumanWorkdayHours <= 0 || cfg.HumanWorkdayHours > 24 {
@@ -322,10 +337,10 @@ func Validate(cfg Config) error {
 		return fmt.Errorf("max_gap_agents must be between 0 and 3, got %d", cfg.MaxGapAgents)
 	}
 	if !IsValidHost(cfg.MainHost) {
-		return fmt.Errorf("main_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", cfg.MainHost)
+		return hostError("main_host", cfg.MainHost)
 	}
 	if !IsValidHost(cfg.JudgeHost) {
-		return fmt.Errorf("judge_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", cfg.JudgeHost)
+		return hostError("judge_host", cfg.JudgeHost)
 	}
 	if cfg.StageTimeoutSeconds != 0 &&
 		(cfg.StageTimeoutSeconds < MinStageTimeoutSeconds || cfg.StageTimeoutSeconds > MaxStageTimeoutSeconds) {
@@ -338,7 +353,7 @@ func Validate(cfg Config) error {
 				role, strings.Join(RoleNames(), ", "))
 		}
 		if !IsValidHost(binding.Host) {
-			return fmt.Errorf("role_models[%q].host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", role, binding.Host)
+			return hostError(fmt.Sprintf("role_models[%q].host", role), binding.Host)
 		}
 	}
 	if cfg.RelayServerURL != "" {

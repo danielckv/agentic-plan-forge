@@ -33,6 +33,7 @@ type authBridge struct {
 
 	mu       sync.Mutex
 	commands []relay.WSEnvelope
+	refused  []string
 	authOK   chan struct{}
 }
 
@@ -91,8 +92,11 @@ func (f *authBridge) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		env, derr := relay.DecodeEnvelope(data)
 		if derr != nil {
-			// A frame the authority would refuse never reaches the recorder:
-			// that is the point of decoding here with the same decoder.
+			// Record the failure so a test can see that a frame was sent but
+			// would be refused, instead of the frame vanishing silently.
+			f.mu.Lock()
+			f.refused = append(f.refused, derr.Error())
+			f.mu.Unlock()
 			continue
 		}
 		f.mu.Lock()
@@ -324,6 +328,33 @@ func TestEveryCommandIsAWellFormedEnvelope(t *testing.T) {
 	}
 }
 
+// HELLO must be the first frame after auth. The hub refuses every other event
+// until it arrives, and the room answers it with the state snapshot and the
+// document; without it a terminal authenticates and then sees nothing. This was
+// absent, so the editor would have had no document to edit.
+func TestDialSendsHelloFirst(t *testing.T) {
+	b, _, _, _ := startView(t, "tok")
+	// startView returns when the bridge reports auth, which happens before it
+	// reads the next frame, so wait for the HELLO rather than sampling.
+	hello := b.waitCommand(t, relay.EventHello)
+	sent := b.sent()
+	if sent[0].EventType != relay.EventHello {
+		t.Fatalf("first frame = %s, want HELLO", sent[0].EventType)
+	}
+	var p relay.HelloPayload
+	if err := json.Unmarshal(hello.Payload, &p); err != nil {
+		t.Fatalf("HELLO payload: %v", err)
+	}
+	if p.Proto != contracts.ProtocolVersion {
+		t.Fatalf("HELLO proto = %d, want %d", p.Proto, contracts.ProtocolVersion)
+	}
+	// The envelope needs a session id, and a terminal can only know the socket
+	// URL: that is what the page sends too.
+	if hello.SessionID == "" {
+		t.Fatal("HELLO carries no session id; the envelope decoder rejects it")
+	}
+}
+
 // The brief can be written from the terminal. Before this, the pane said to
 // write it in the browser, so a headless machine could only run with --brief.
 func TestBriefCanBeTypedAndAppended(t *testing.T) {
@@ -444,8 +475,15 @@ func TestEmptyBriefSendsNothing(t *testing.T) {
 	if !strings.Contains(next.Notice, "Nothing to add") {
 		t.Fatalf("notice = %q", next.Notice)
 	}
-	if got := b.sent(); len(got) != 0 {
-		t.Fatalf("sent %d frames for an empty brief", len(got))
+	// HELLO is sent by dial, so count only what the editor produced.
+	var briefs []relay.WSEnvelope
+	for _, f := range b.sent() {
+		if f.EventType == relay.EventTextDelta {
+			briefs = append(briefs, f)
+		}
+	}
+	if len(briefs) != 0 {
+		t.Fatalf("sent %d text frames for an empty brief", len(briefs))
 	}
 }
 

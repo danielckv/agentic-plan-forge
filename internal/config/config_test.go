@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/danielckv/agentic-plan-forge/internal/config"
@@ -77,6 +78,36 @@ func TestLoadMalformedFileIsReportedAndNotOverwritten(t *testing.T) {
 	}
 	if string(after) != string(original) {
 		t.Fatal("malformed config was modified")
+	}
+}
+
+// A saved config naming a removed host must say what to do about it. The first
+// release that dropped omp reported only "is not one of ...", which lists names
+// without a next step, and the owner's existing config failed at startup.
+//
+// claude and agy remain valid hosts, so they are not asserted here: they pass
+// validation, and a note about preferring the API belongs in `config`, where a
+// pin is chosen.
+func TestValidateExplainsRemovedAndPinnedHosts(t *testing.T) {
+	cases := []struct {
+		host string
+		want []string
+	}{
+		{"omp", []string{"no longer a generation host", "anthropic or gemini", "API key"}},
+		{"nonsense", []string{"not a supported host"}},
+	}
+	for _, c := range cases {
+		cfg := config.Default()
+		cfg.MainHost = c.host
+		err := config.Validate(cfg)
+		if err == nil {
+			t.Fatalf("main_host %q was accepted", c.host)
+		}
+		for _, want := range c.want {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("main_host %q message %q does not mention %q", c.host, err, want)
+			}
+		}
 	}
 }
 

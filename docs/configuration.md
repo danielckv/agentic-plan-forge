@@ -97,19 +97,21 @@ A binding takes a host, a model, or both:
 {
   "role_models": {
     "architect":   { "host": "claude", "model": "opus" },
-    "specialist":  { "host": "omp", "model": "claude-sonnet-5-5" },
+    "specialist":  { "host": "anthropic", "model": "claude-sonnet-5-5" },
     "narrator":    { "model": "claude-haiku-5-5" }
   }
 }
 ```
 
+`omp` is no longer a generation host. A saved config that names it fails validation with a message
+saying so and what to do instead. The hosts are `anthropic`, `gemini`, `openai`, `fireworks`, and the
+pinned CLI hosts `claude` and `agy`; rewrite `"host": "omp"` to a provider and add that provider's
+API key.
+
 A model id reaches a host only if that host lists it. `default_main_model` and `default_judge_model` are slot-wide,
 so they are dropped for any host that does not advertise them and that host's own default is used instead — naming
 `claude-opus-5-5-high`, which is an Antigravity id, does not send it to Claude Code. A `role_models` model is taken as
-written: you named the role and the host together, so it is your choice to make. When an avatar runs on `omp` with no
-explicit model in `config.json`, Plan Forge maps the avatar role to your `~/.omp/agent/config.yml` `modelRoles` (`plan`
-for `architect`, `judge` for `critic`, `advisor` for `pm`, `smol` for `ingestion`/`impact`/`narrator`, and rotating
-`task`/`worker`/`slow`/`explore` across concurrent `specialist` lanes).
+written: you named the role and the host together, so it is your choice to make.
 
 Pick the architect's model for reasoning, not for price. Measured on one design call with a 206 KiB payload: `opus`
 finished in 110s using 5,960 thinking tokens; `sonnet` took 282s using 34,287 for the same answer. The cheaper model
