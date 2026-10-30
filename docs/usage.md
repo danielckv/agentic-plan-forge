@@ -239,7 +239,22 @@ A Confluence-style specification with diagrams, Jira-style epics and subtasks, d
 effort schedules. The table of contents follows your scroll. The task matrix can be filtered by ID, title or target
 file. Diagrams expand to full screen.
 
-**Implementation phases** sit directly under the executive summary: the work split into ordered waves, each listing its
+**Plan readiness** is the first thing under the executive summary, and it is the section to read before you build.
+
+- **Verdict: complete** means every finding raised against this plan was fixed by a revision. Nothing was waived.
+- **Verdict: provisional** means the deliberation ran out of cycles with blocking findings still open and you chose to
+  take the plan anyway. Each one is listed in full — severity, what it affects, the evidence, and the change it still
+  asks for — along with the decision that recorded it.
+
+A run always produces a plan now. Earlier a run that hit the cycle cap with a CRITICAL or HIGH finding open could
+neither continue nor finish, and the only way out discarded every draft, so three cycles of work produced nothing. The
+findings are real and are not hidden; they are written onto the plan and you decide, once, whether to go ahead.
+
+Only a blocker is worth another cycle. A MEDIUM finding is offered to you as a tradeoff on the first otherwise-clean
+cycle rather than spending a full round of calls — the architect and every specialist re-drafting — on something that
+was never going to stop the plan.
+
+**Implementation phases** sit directly under the readiness verdict: the work split into ordered waves, each listing its
 tasks, its workstreams, its PERT effort in human hours and agent minutes, and the gate — the verification commands that
 must pass before the next phase starts. Tasks inside a phase have no dependency on each other, so they can be worked at
 the same time; the phases themselves are strictly sequenced.

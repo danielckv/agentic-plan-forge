@@ -142,6 +142,9 @@ func PurgeTargets() ([]string, error) {
 	targets := []string{
 		filepath.Join(home, "config.json"),
 		filepath.Join(home, "relay-token.json"),
+		// API provider keys. A purge that left these behind would leave live
+		// credentials on a machine the owner believes they have cleaned.
+		filepath.Join(home, "credentials.json"),
 		filepath.Join(home, "install-manifest.json"),
 		filepath.Join(home, "backups"),
 		filepath.Join(home, "approvals.json"),

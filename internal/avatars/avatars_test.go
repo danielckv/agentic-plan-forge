@@ -293,7 +293,12 @@ func TestCycleCapPausesAndNeverStartsAFourthCycle(t *testing.T) {
 	h := newHarness(t, synthtest.Sample())
 	h.stub.on("critic", func(c *call, in input) (reply, bool) { return reply{Content: raw(openHigh("C-9"))}, true })
 
-	_, err := h.run(context.Background(), nil)
+	// A capped run with blockers open now asks the owner whether to record them
+	// and take the plan, instead of dead-ending. Pausing is still available and
+	// is what this test covers; recording is covered by
+	// TestBlockingFindingsAtTheCapBecomeADecision.
+	ch := h.sink.resolver(func(relay.DecisionPromptPayload) string { return "pause" })
+	_, err := h.run(context.Background(), ch)
 	var paused *avatars.PausedError
 	if !errors.As(err, &paused) {
 		t.Fatalf("Run error = %v, want *PausedError", err)
@@ -346,7 +351,74 @@ func TestCycleCapPausesAndNeverStartsAFourthCycle(t *testing.T) {
 	}
 }
 
-func TestMediumFindingsAtTheCapBecomeADecision(t *testing.T) {
+// A capped run used to end with nothing: the authority refused a fourth cycle
+// and refused synthesis, and the only way out discarded every draft. The owner
+// now chooses, and choosing to record produces a plan carrying the findings.
+func TestBlockingFindingsAtTheCapBecomeADecision(t *testing.T) {
+	for _, tc := range []struct {
+		choice string
+		paused bool
+	}{{"record", false}, {"pause", true}} {
+		t.Run(tc.choice, func(t *testing.T) {
+			h := newHarness(t, synthtest.Sample())
+			h.stub.on("critic", func(c *call, in input) (reply, bool) {
+				return reply{Content: raw(openHigh("C-9"))}, true
+			})
+			ch := h.sink.resolver(func(relay.DecisionPromptPayload) string { return tc.choice })
+			si, err := h.run(context.Background(), ch)
+
+			if got := h.sink.cycleStarts(); len(got) != 3 {
+				t.Fatalf("cycle starts = %v, want three cycles of revision before the choice", got)
+			}
+			prompts := h.sink.ofType(relay.EventDecisionPrompt)
+			if len(prompts) != 1 {
+				t.Fatalf("decision prompts = %d, want exactly one", len(prompts))
+			}
+			p := prompts[0].Payload.(relay.DecisionPromptPayload)
+			if len(p.Options) != 2 || p.RecommendedOptionID != "record" {
+				t.Fatalf("prompt = %+v, want two options recommending record", p)
+			}
+
+			if tc.paused {
+				var paused *avatars.PausedError
+				if !errors.As(err, &paused) || len(paused.Blockers) != 1 || paused.Blockers[0].ID != "C-9" {
+					t.Fatalf("pause: error = %v", err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("record: %v", err)
+			}
+			var found bool
+			for _, c := range si.Critiques {
+				if c.ID != "C-9" {
+					continue
+				}
+				found = true
+				if c.Status != contracts.CritiqueResolved {
+					t.Errorf("C-9 status = %q, want resolved so the gates let the plan through", c.Status)
+				}
+				if !c.IsRecorded() || c.ResolutionRef != contracts.RecordedRefPrefix+p.DecisionID {
+					t.Errorf("C-9 ref = %q, want %q — a recorded finding must stay distinguishable from a fixed one",
+						c.ResolutionRef, contracts.RecordedRefPrefix+p.DecisionID)
+				}
+			}
+			if !found {
+				t.Fatal("C-9 is missing from the synthesis input; a recorded finding must survive into the plan")
+			}
+			// The point of the whole change: a plan actually exists.
+			mustCompile(t, si)
+		})
+	}
+}
+
+// A MEDIUM finding never blocked a plan, but convergence used to demand zero
+// of them, so one nit bought another full cycle — the architect and up to four
+// specialists re-drafted, roughly ten provider calls, to settle something
+// nobody was going to reject. Only a blocker is worth a cycle now, so the
+// choice is offered on the first cycle that is otherwise clean.
+func TestMediumFindingsSettleWithoutBurningCycles(t *testing.T) {
 	fx := synthtest.Sample()
 	fx.Specialists[1].Accepted = nil // nothing is accepted, so MEDIUM C-2 stays open
 	for _, tc := range []struct {
@@ -356,8 +428,8 @@ func TestMediumFindingsAtTheCapBecomeADecision(t *testing.T) {
 		h := newHarness(t, fx)
 		ch := h.sink.resolver(func(p relay.DecisionPromptPayload) string { return tc.choice })
 		si, err := h.run(context.Background(), ch)
-		if got := h.sink.cycleStarts(); len(got) != 3 {
-			t.Fatalf("%s: cycle starts = %v, want 3 cycles of revision first", tc.choice, got)
+		if got := h.sink.cycleStarts(); len(got) != 1 {
+			t.Fatalf("%s: cycle starts = %v, want the choice offered after one cycle, not three", tc.choice, got)
 		}
 		prompts := h.sink.ofType(relay.EventDecisionPrompt)
 		if len(prompts) != 1 {

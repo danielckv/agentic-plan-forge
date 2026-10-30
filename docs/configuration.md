@@ -115,6 +115,28 @@ finished in 110s using 5,960 thinking tokens; `sonnet` took 282s using 34,287 fo
 is the slower one here. Spread load by moving the *parallel* roles — the specialists, the documentation batches, the
 narrator — not the design.
 
+### The two settings that quietly undo everything above
+
+`main_host` and `default_main_model` are slot-wide, and the MAIN slot is almost every avatar: the Product Manager, the
+architect, **every specialist, and the Lead Synthesizer**. Setting them is not a preference, it is an override of the
+whole placement system.
+
+```json
+{ "main_host": "omp", "default_main_model": "together/some-flash-model" }
+```
+
+That configuration sends the architect's design and the synthesizer's compilation to one host on a fast, cheap model,
+leaves `judge_host` as the only place a strong model is used — on reviewing, not on planning — and bypasses any API
+provider key you have configured, because the rotation that would have reached it never runs.
+
+It also makes a specific failure likely. The five deliberation stages have no embedded JSON schema, so their replies
+are strict-decoded in Go with unknown fields rejected and exactly **one** repair retry. `SynthesisDoc` permits seven
+keys; a model that adds an eighth fails the stage with `synthesizer output invalid: json: unknown field "…"`. A
+weaker model fails that gate far more often, which reads as "the synthesizer is broken" when it is a model choice.
+
+If a run is slow and ends without a plan, check these two keys and `stage_timeout_seconds` before anything else.
+Leaving all three unset is the supported configuration.
+
 ## What a stage is allowed to take
 
 One deliberation call gets `stage_timeout_seconds`, default 600. The architect design part reads the whole repository
@@ -124,6 +146,15 @@ cycle no room, and every run died at `architect stage failed: context deadline e
 
 Interpretation and impact mapping still use the 180-second budget their input sizing was measured against. Reasoning:
 [ADR 0009](adrs/0009-one-budget-per-stage-roles-across-hosts-and-a-live-room.md).
+
+**Do not lower it below about 600 on a real repository.** 110 seconds was a floor measured on a minimal payload. On an
+actual codebase the same call has been measured at **8m16s**, and a specialist at **6m14s**
+([ADR 0011](adrs/0011-the-documentation-batches-leave-the-critical-path.md)). A budget under those numbers kills the
+call that was going to succeed, and it is expensive to be wrong: when the architect's design part times out it retries
+by halving its payload, up to twice, and each attempt spends the **full** budget first. At 360 seconds that is roughly
+eighteen minutes before the run reports anything. Symptoms of a budget set too low are `architect stage failed:
+context deadline exceeded`, runs that feel slow and then produce nothing, and a synthesizer that fails — the
+synthesizer cannot shrink its payload at all, so one timeout there ends the stage.
 
 ## What the room shows while it works
 

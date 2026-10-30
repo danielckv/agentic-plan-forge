@@ -22,6 +22,9 @@ const (
 	adoptPrefix       = "adopt:"
 	optionAccept      = "accept"
 	optionPause       = "pause"
+	// optionRecord takes the plan with its open blockers written onto it,
+	// rather than ending the run with no plan at all.
+	optionRecord = "record"
 	maxCardRunes      = 300
 )
 
@@ -409,6 +412,82 @@ func (o *orchestrator) settleMediums(ctx context.Context, c int, mediums []contr
 		if cr.Status != contracts.CritiqueResolved && cr.Severity == contracts.SeverityMedium {
 			cr.Status, cr.ResolutionRef = contracts.CritiqueResolved, "accepted:"+resolved.ID
 		}
+	}
+	o.mu.Unlock()
+	o.save()
+	if err := o.publishCritique(ctx, c, o.critiqueSnapshot()); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// settleBlockers is the last gate of a capped run, and the reason a run can no
+// longer end with nothing.
+//
+// A run that reached the cycle cap with CRITICAL or HIGH findings open used to
+// dead-end: the authority refused another cycle ("run is paused at the cycle
+// cap") and refused synthesis (CodeBlockersOpen), and the only way out threw
+// the whole run away and restarted it at cycle 1. Three cycles of avatar work
+// bought nothing and the owner never saw a plan.
+//
+// The findings are real, so they are not dropped. They are recorded: the owner
+// decides once whether to take the plan with them written on it, and the spec
+// carries a readiness verdict naming every one. This mirrors settleMediums,
+// which already does exactly this for MEDIUM findings.
+//
+// Every open critique is settled here, not only the blocking ones, because the
+// plan is gated twice: the authority counts CRITICAL/HIGH into openBlockers,
+// and the compiler's Validate rejects any unresolved critique, with a MEDIUM
+// needing an "accepted:" reference. Settling only the blockers would clear the
+// first gate and fail the second.
+func (o *orchestrator) settleBlockers(ctx context.Context, c int, blockers []contracts.Critique) (bool, error) {
+	prefix := fmt.Sprintf("dec-blockers-c%d-", c)
+	resolved, pending := o.decisionWithPrefix(prefix)
+	if resolved == nil && pending == nil {
+		d := contracts.Decision{
+			ID: fmt.Sprintf("%s%d", prefix, o.nextSeq()),
+			Question: fmt.Sprintf("%d blocking finding(s) are still open after the final automatic cycle. Record them on the plan and produce it, or pause for manual revision?",
+				len(blockers)),
+			Options: []contracts.DecisionOption{
+				{
+					ID: optionRecord, Label: "Record them and produce the plan",
+					Tradeoff: "The plan is produced and marked provisional. Every open finding is written into its readiness section with the evidence and the change it asks for.",
+					Impact:   "You get a complete plan to work from; the listed findings stay unresolved and visible until a later run closes them.",
+				},
+				{
+					ID: optionPause, Label: "Pause for manual revision",
+					Tradeoff: "No plan is produced. The run stops here and waits for the baseline to be revised or a new run to be started.",
+					Impact:   "This cycle's work is kept, but nothing is delivered until you come back to it.",
+				},
+			},
+			RecommendedOptionID: optionRecord,
+		}
+		if err := o.promptDecision(ctx, d, ""); err != nil {
+			return false, err
+		}
+	}
+	if err := o.awaitPending(ctx); err != nil {
+		return false, err
+	}
+	resolved, _ = o.decisionWithPrefix(prefix)
+	if resolved == nil || resolved.ResolvedOptionID != optionRecord {
+		return false, o.pause(ctx, c, blockers)
+	}
+	o.mu.Lock()
+	for i := range o.st.Critiques {
+		cr := &o.st.Critiques[i]
+		if cr.Status == contracts.CritiqueResolved {
+			continue
+		}
+		// The prefix is load-bearing. RecordedRefPrefix marks a finding the
+		// owner took knowingly, and is what the readiness section lists;
+		// "accepted:" is the reference the compiler already requires of an
+		// unresolved MEDIUM.
+		if cr.Severity == contracts.SeverityCritical || cr.Severity == contracts.SeverityHigh {
+			cr.Status, cr.ResolutionRef = contracts.CritiqueResolved, contracts.RecordedRefPrefix+resolved.ID
+			continue
+		}
+		cr.Status, cr.ResolutionRef = contracts.CritiqueResolved, "accepted:"+resolved.ID
 	}
 	o.mu.Unlock()
 	o.save()

@@ -266,12 +266,23 @@ func (o *orchestrator) cycle(ctx context.Context, c int) (bool, error) {
 	switch {
 	case len(blockers) == 0 && len(mediums) == 0:
 		return true, nil
+	case len(blockers) == 0:
+		// MEDIUM findings never blocked a plan, yet convergence used to demand
+		// zero of them, so one non-blocking nit bought another full cycle:
+		// re-drafting the architect and up to four specialists, roughly ten
+		// provider calls, to settle something nobody was going to reject. Only
+		// a blocker is worth a cycle now. The owner still chooses through
+		// settleMediums, which offers the same revision it always did.
+		return o.settleMediums(ctx, c, mediums)
 	case c < o.maxC:
 		return false, nil
-	case len(blockers) > 0:
-		return false, o.pause(ctx, c, blockers)
 	default:
-		return o.settleMediums(ctx, c, mediums)
+		// Not o.pause any more. A capped run with blockers open could neither
+		// cycle again nor synthesize, and the only way out discarded every
+		// avatar's work — so the run ended with no plan. The owner now decides
+		// once whether to take the plan with the findings recorded on it, and
+		// choosing to pause still reaches o.pause from inside settleBlockers.
+		return o.settleBlockers(ctx, c, blockers)
 	}
 }
 

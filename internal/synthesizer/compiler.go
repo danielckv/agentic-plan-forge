@@ -21,6 +21,7 @@ const SynthesisSchemaID = "synthesis.v1"
 // contract with the Page 3 renderer and the tests.
 const (
 	SectionExecutive     = "Executive summary"
+	SectionReadiness     = "Plan readiness"
 	SectionPhases        = "Implementation phases"
 	SectionProduct       = "Product requirements and acceptance"
 	SectionConstraints   = "Immutable constraints"
@@ -36,7 +37,7 @@ const (
 
 // SectionOrder lists the level-2 headings of a compiled spec in order.
 var SectionOrder = []string{
-	SectionExecutive, SectionPhases, SectionProduct, SectionConstraints, SectionDiagrams, SectionInterfaces,
+	SectionExecutive, SectionReadiness, SectionPhases, SectionProduct, SectionConstraints, SectionDiagrams, SectionInterfaces,
 	SectionEpics, SectionDocSync, SectionDAG, SectionVerification, SectionEstimates, SectionDecisionsCave,
 }
 
