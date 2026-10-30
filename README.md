@@ -75,7 +75,12 @@ credentials and never calls a model itself.
 ## The flow
 
 One brief goes in. Grounding is deterministic and finishes before any model runs. The avatars argue in cycles until the
-critic has nothing left that is CRITICAL or HIGH. Only then is a specification compiled, for you to approve.
+critic has nothing left that is CRITICAL or HIGH. Then a specification is compiled, for you to approve.
+
+A run always ends with a plan. If the critic still has blocking findings when the cycle budget runs out, you are asked
+once whether to take the plan with those findings recorded on it or to pause and revise — and if you take it, the
+specification opens with a readiness verdict naming every one. Only a blocker is worth another cycle; a MEDIUM finding
+is offered to you as a tradeoff rather than spending a round of calls on it.
 
 ```mermaid
 flowchart TD
@@ -91,10 +96,10 @@ flowchart TD
         PM --> ARCH
         ARCH --> SPEC
         SPEC --> CRIT
-        CRIT -->|"open CRITICAL or HIGH"| ARCH
+        CRIT -->|"open CRITICAL or HIGH<br/>and cycles left"| ARCH
     end
 
-    SYNTH["Lead Synthesizer<br/>one verified specification"]
+    SYNTH["Lead Synthesizer<br/>one specification, with a readiness verdict"]
     GATE{"You approve"}
     MODE["Your agent's Plan Mode<br/>executes the spec"]
     BUILD["Build in an isolated worktree<br/>review the diff · run it in a container · deploy"]
@@ -102,13 +107,15 @@ flowchart TD
     REQ --> GROUND
     GROUND --> PM
     CRIT -->|"all resolved"| SYNTH
+    CRIT -->|"cycles spent — you choose<br/>to record what is left"| SYNTH
     SYNTH --> GATE
     GATE --> MODE
     GATE --> BUILD
 ```
 
-Nothing reaches a model until grounding is done, and nothing reaches you until the critic is out of blocking findings.
-A run that stops gives every avatar a terminal state rather than leaving a card spinning.
+Nothing reaches a model until grounding is done, and nothing reaches you without the critic having had its say. A run
+that stops gives every avatar a terminal state rather than leaving a card spinning, and a run that runs out of cycles
+hands you a plan that is honest about what is still open rather than nothing at all.
 
 ## The avatars
 
