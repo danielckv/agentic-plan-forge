@@ -89,6 +89,11 @@ try {
   // ---- Page 1: the composer, the epic rail, the codebase browser.
   await page.goto(`${session.origin}/`);
   await page.waitForSelector(".pf-composer .cm-content", { state: "visible" });
+  // The rail opens on the Brief tab, so the epic cards are not on screen until
+  // Epics is selected. This harness predates the Work tab that changed which
+  // tab opens, and had been waiting for a card that could never appear — the
+  // same trap already recorded against promo.mjs.
+  await page.getByRole("tab", { name: /Epics/ }).click();
   await page.waitForSelector(".pf-epic-card", { state: "visible" });
   await page.waitForSelector("text=Code indexed", { state: "visible" });
   await shot(page, "page1-composer");
@@ -174,6 +179,9 @@ try {
   await page.waitForTimeout(250);
   await shot(page, "page1-dark");
   await page.reload();
+  // A reload puts the rail back on its Brief tab, so Epics has to be selected
+  // again before a card can be waited for.
+  await page.getByRole("tab", { name: /Epics/ }).click();
   await page.waitForSelector(".pf-epic-card", { state: "visible" });
   check((await page.evaluate(() => document.documentElement.getAttribute("data-theme"))) === "dark", "dark survives a reload");
   await page.locator(".pf-topbar").getByRole("button", { name: "Light", exact: true }).click();
@@ -189,18 +197,30 @@ try {
 
   // ---- Page 2: the owner confirms; the avatars deliberate.
   await page.getByRole("button", { name: /Confirm Context/ }).click();
-  await page.waitForSelector("h1:has-text('Avatar deliberation')", { state: "visible" });
+  // Page 2's heading is written from the run's outcome, so there is no fixed
+  // string to wait for. The room's two-column grid is the stable landmark.
+  await page.waitForSelector(".pf-room-grid", { state: "visible" });
   await page.waitForSelector("text=Where should a large export be written?", { state: "visible" });
   await page.waitForSelector(".pf-line", { state: "visible" });
   check((await page.locator(".pf-roster-card").count()) === 4, "the room shows the four avatars");
-  check((await page.locator(".pf-room-plan .pf-epic-card").count()) === 3, "the PM's three epics render from its pm.v1 draft");
+  // The Epics and Architecture tabs were one plan shown at two depths; the
+  // Plan tab now holds both as a single graph.
+  await page.waitForSelector(".pf-room-plan .pf-plangraph", { state: "visible" });
+  const graphCanvases = await page.locator(".pf-plangraph3d canvas").count();
+  const treeNodes = await page.locator(".pf-plantree-node").count();
+  // Headless Chromium has WebGL through SwiftShader, so the canvas is what is
+  // expected here — but the tree is the documented fallback and reads the same
+  // plan, so either satisfies the check rather than tying it to the GPU stack.
+  check(graphCanvases > 0 || treeNodes > 0, "the plan graph renders, in 3D or as its tree fallback");
   await page.getByRole("tab", { name: /Findings/ }).click();
   check((await page.locator(".pf-finding").count()) === 3, "the critic's three findings render from AVATAR_CRITIQUE.issues");
-  await page.getByRole("tab", { name: /Architecture/ }).click();
-  await page.locator(".pf-room-plan figure.pf-mermaid svg").first().waitFor({ state: "visible" });
-  await page.waitForTimeout(400);
+  await page.getByRole("tab", { name: /Plan/ }).click();
+  await page.waitForTimeout(600);
   await shot(page, "page2-room");
-  // Filtering by an avatar narrows the discussion.
+  // Filtering by an avatar narrows the discussion. The roster moved inside a
+  // collapsed <details> after this harness was written, so its cards exist but
+  // are not visible until it is opened.
+  await page.locator(".pf-roster-details > summary").click();
   const allLines = await page.locator(".pf-line").count();
   await page.locator(".pf-roster-card", { hasText: "Red-Team Critic" }).click();
   const criticLines = await page.locator(".pf-line").count();

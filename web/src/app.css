@@ -4873,3 +4873,90 @@ figure > .pf-diagram-source { border-top: none; }
 .pf-docs-warn {
   color: var(--pf-warn);
 }
+
+/*
+ * The plan graph. The 3D canvas fills its rail; the tree is the same plan for
+ * a browser without WebGL, so both are styled to read as one view.
+ */
+.pf-plangraph {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 320px;
+  height: 100%;
+}
+
+.pf-plangraph3d {
+  flex: 1;
+  min-height: 300px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 30%, rgb(255 255 255 / 6%), transparent 70%);
+  cursor: grab;
+}
+
+.pf-plangraph3d:active {
+  cursor: grabbing;
+}
+
+.pf-plantree,
+.pf-plantree ul {
+  margin: 0;
+  padding: 0 0 0 12px;
+  list-style: none;
+}
+
+.pf-plantree-item {
+  position: relative;
+}
+
+.pf-plantree-node {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pf-plantree-node:hover {
+  background: var(--pf-surface-2);
+}
+
+.pf-plantree-node[data-selected="yes"] {
+  border-color: var(--pf-accent);
+}
+
+.pf-plantree-node[data-fresh="yes"] .pf-plantree-label {
+  color: var(--pf-accent);
+}
+
+.pf-plantree-kind {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pf-muted);
+}
+
+.pf-plantree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-plantree-severity {
+  flex: none;
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  font-size: 10px;
+  color: var(--pf-danger);
+}
