@@ -363,6 +363,23 @@ description and root, and `--json` prints the same for a script. `plan-forge doc
 report. At session start the hook appends one line naming the first few skills it found — information only, with no
 instruction to act on it.
 
+## A terminal instead of a browser
+
+`plan-forge run --frontend terminal` draws the same session in the terminal, with no browser at all. It is one
+frontend over one authority: the terminal dials the same loopback socket, negotiates the same protocol and sends the
+same commands, so a session behaves identically wherever it is watched. Nothing about the run changes; only where it is
+drawn.
+
+Five panes, one key each: **1** brief, **2** agents, **3** plan, **4** questions, **5** settings. `Tab` and `Shift-Tab`
+move between them, the arrows move a selection, `Enter` acts on it, and `?` shows every key. The agents pane lists each
+avatar with its status, cycle and the host and model serving it, and marks a temporary agent so a run-scoped one is
+never mistaken for the fixed team. The questions pane is the terminal equivalent of the drawer: the same options, with
+the recommended one marked — a hint, never an answer — and `1`–`9` to answer.
+
+Progress is always a list, never an attempted 3D scene: a terminal is the worst place to pretend otherwise, and the
+plan asks for a state-equivalent view. Closing the terminal does not cancel the run; quitting the shell ends the
+frontend, not the session.
+
 ## Project context
 
 Before planning, Plan Forge collects excerpts from the project's own notes, specs, plans and decision records that match

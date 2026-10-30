@@ -19,6 +19,7 @@ import (
 	"github.com/danielckv/agentic-plan-forge/internal/app"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
+	"github.com/danielckv/agentic-plan-forge/internal/tui"
 )
 
 func init() {
@@ -46,6 +47,7 @@ func runRun(ctx context.Context, args []string) int {
 		hostFlag  string
 		modeFlag  string
 		briefFlag string
+		frontend  string
 		detach    bool
 	)
 	fs, err := parseFlags("run", args, func(fs *flag.FlagSet) {
@@ -53,6 +55,7 @@ func runRun(ctx context.Context, args []string) int {
 		fs.StringVar(&hostFlag, "host", "", "invoking host kind (claude, omp, agy)")
 		fs.StringVar(&modeFlag, "mode", "solo", "session mode: solo|remote")
 		fs.StringVar(&briefFlag, "brief", "", "Markdown file seeding the shared PRD document (solo mode only)")
+		fs.StringVar(&frontend, "frontend", "browser", "where to present the session: browser|terminal")
 		fs.BoolVar(&detach, "detach", false, "run in a background session and print {\"session_id\":\"...\"}")
 	})
 	if err != nil {
@@ -83,7 +86,13 @@ func runRun(ctx context.Context, args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	front, ferr := app.ParseFrontend(frontend)
+	if ferr != nil {
+		fmt.Fprintf(os.Stderr, "run: %v\n", ferr)
+		return exitUsage
+	}
 	opts := app.Options{
+		Frontend:          front,
 		Repo:              repoFlag,
 		Host:              strings.ToLower(strings.TrimSpace(hostFlag)),
 		Mode:              mode,
@@ -94,6 +103,15 @@ func runRun(ctx context.Context, args []string) int {
 		Stdout:            os.Stdout,
 		Stderr:            os.Stderr,
 		InteractiveInvite: !detach && isTTY(os.Stdin) && isTTY(os.Stderr),
+	}
+	if front.Terminal() {
+		if detach {
+			fmt.Fprintln(os.Stderr, "run: a detached session has no terminal; use the browser frontend")
+			return exitUsage
+		}
+		opts.RunFrontend = func(ctx context.Context, origin, token string) (app.FrontendHandle, error) {
+			return tui.Start(ctx, tui.Options{Origin: origin, Token: token})
+		}
 	}
 	if detach {
 		res := app.StartDetached(ctx, opts)

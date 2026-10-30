@@ -79,3 +79,25 @@ coverage, interface comparison, dependency order and the readiness gates still r
   proposing gaps in the same reply costs nothing extra.
 - **Prompt-only structure.** This was the state before this change, and it failed at a measured rate on weaker models.
   Prose describes a shape; a schema enforces it.
+
+## Addendum (same day): the terminal frontend
+
+The plan asks for a terminal frontend that does not require a browser. It is built as a second *view* of one
+authority, not a second authority:
+
+- `app.Options` gains `Frontend` and `RunFrontend`. Terminal mode mints the launch nonce and redeems it through
+  `POST /api/session`, exactly as a tab does, then hands the origin and token to `internal/tui`. No new endpoint and no
+  new wire shape: the terminal dials `/ws`, negotiates `plan-forge.v1`, sends the `auth` frame first, and speaks the
+  same `WSEnvelope` commands.
+- The session supervises the terminal through the same handle a window offers (`Done`, `Terminate`), so a terminal
+  that dies ends the session the way a closed tab does. One lifecycle, two frontends.
+- Requests carry a full envelope. `room.HandleUI` strict-decodes with `DecodeEnvelope`, which requires a protocol
+  version, a session id and a unique event id; a TUI that sent only an event type would have every command rejected.
+  The end-to-end test in `internal/tui/run_test.go` holds a real socket against a bridge that enforces the handshake,
+  which is what caught it.
+- Rendering is a state-equivalent list per the plan: five panes, keys `1`–`5`, arrows, `?` for help. Temporary agents
+  are labelled so a run-scoped agent is never read as permanent. No estimated progress: a stage is queued, working,
+  finished, failed or cancelled, which is what the authority sends.
+
+Deliberately not done: an inline editor and artifact browsing in the terminal. Terminal mode covers watching, answering
+and approving; writing the brief stays in the composer, and `--brief` seeds it for a headless run.
