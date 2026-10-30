@@ -1,8 +1,6 @@
 # ADR 0017: Build and preview an approved plan in a prepared VM, from recorded scripts
 
-## Status
-
-Proposed
+- Status: proposed
 
 ## Context
 

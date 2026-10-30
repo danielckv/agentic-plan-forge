@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,16 +22,42 @@ func preambles() map[string]string {
 }
 
 // The plan is the source of truth: each preamble must appear in it verbatim as
-// the bolded, quoted paragraph.
-func TestPreamblesMatchThePlanVerbatim(t *testing.T) {
-	plan, err := os.ReadFile(filepath.Join("..", "..", "docs", "plans", "PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md"))
+// goldenPreambles is the recorded mandate of each avatar.
+const goldenPreambles = "testdata/preambles.golden.json"
+
+// A preamble is what an avatar is for, and the asymmetries between them are
+// the design: the Product Manager cannot see code, a specialist sees only its
+// own workstream, the critic owns no draft. Reword one casually and the
+// deliberation quietly becomes something else.
+//
+// This used to assert the preambles appeared verbatim in the original planning
+// document. That document has been deleted — it was frozen history pinning
+// live code, and the check skipped itself whenever the file was absent, so it
+// could stop testing anything without anyone noticing. The mandate now lives
+// in a fixture this test owns: changing a preamble means changing the golden
+// file in the same commit, deliberately and in the diff.
+func TestPreamblesMatchTheirRecordedMandate(t *testing.T) {
+	current, err := json.MarshalIndent(preambles(), "", "  ")
 	if err != nil {
-		t.Skipf("plan document not available: %v", err)
+		t.Fatalf("marshal preambles: %v", err)
 	}
-	for name, text := range preambles() {
-		if !bytes.Contains(plan, []byte(`**"`+text+`"**`)) {
-			t.Errorf("%s preamble does not match the bolded paragraph in the plan", name)
+	current = append(current, '\n')
+
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if err := os.WriteFile(goldenPreambles, current, 0o644); err != nil {
+			t.Fatalf("write golden: %v", err)
 		}
+		t.Log("golden updated; re-run without UPDATE_GOLDEN=1")
+		return
+	}
+
+	want, err := os.ReadFile(goldenPreambles)
+	if err != nil {
+		t.Fatalf("read %s: %v (regenerate with UPDATE_GOLDEN=1 go test ./internal/avatars/)", goldenPreambles, err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(want), bytes.TrimSpace(current)) {
+		t.Errorf("an avatar's mandate changed.\n\nIf that was deliberate, re-record it in the same commit:\n"+
+			"    UPDATE_GOLDEN=1 go test ./internal/avatars/\n\nrecorded:\n%s\n\nnow:\n%s", want, current)
 	}
 }
 

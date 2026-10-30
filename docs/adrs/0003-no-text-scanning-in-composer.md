@@ -2,8 +2,8 @@
 
 - Status: accepted
 - Date: 2026-10-22
-- Supersedes: the `FREEZE_REQUEST` secret scan specified in
-  [PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md](../plans/PLAN_FORGE_COMPLETE_SYSTEM_PLAN.md) (Page 1, footer).
+- Supersedes: the `FREEZE_REQUEST` secret scan of the original system plan (Page 1, footer). That
+  planning document has since been deleted; this ADR is the record of the decision.
 
 ## Context
 

@@ -1,8 +1,6 @@
 # ADR 0018: Generated documents are written on request, and the sandbox receives the source
 
-## Status
-
-Accepted
+- Status: accepted
 
 ## Context
 
