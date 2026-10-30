@@ -39,6 +39,40 @@ func TestEmbeddedSchemasLoad(t *testing.T) {
 	}
 }
 
+// Every stage document has an embedded schema, and each must stay embedded.
+//
+// requestSchemaID returns "" for a label SchemaNames does not list, so a stage
+// whose schema file disappears stops constraining output at the provider and
+// stops populating GenerateRequest.OutputSchema. Nothing else fails: the stage
+// still runs and its strict decode still passes, so the only symptom is weaker
+// output that reads like a model problem. One label per stage that calls the
+// provider, named individually rather than sampled.
+func TestEveryStageSchemaIsEmbedded(t *testing.T) {
+	stages := []struct {
+		stage  string
+		schema string
+	}{
+		{"pm", "pm.v1"},
+		{"architect", "architect.v1"},
+		{"specialist", "specialist.v1"},
+		{"critic", "critic.v1"},
+		{"tech_lead", "tech_lead.v1"},
+		{"code_reviewer", "code_reviewer.v1"},
+		{"gap_agent", "gap_agent.v1"},
+		{"synthesizer", "synthesizer.v1"},
+	}
+	for _, s := range stages {
+		raw, err := contracts.SchemaBytes(s.schema)
+		if err != nil {
+			t.Errorf("%s: schema %q is not embedded: %v", s.stage, s.schema, err)
+			continue
+		}
+		if len(raw) == 0 {
+			t.Errorf("%s: schema %q is embedded but empty", s.stage, s.schema)
+		}
+	}
+}
+
 func TestValidateAcceptsAndRejectsFixtures(t *testing.T) {
 	valid, err := filepath.Glob(filepath.Join(fixtureDir, "valid", "*.json"))
 	if err != nil {
