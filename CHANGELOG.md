@@ -377,7 +377,7 @@ First public release.
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
 [Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...HEAD
-[0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...v0.9.0
+[0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...f91efbc
 [0.8.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.7.2...v0.8.0

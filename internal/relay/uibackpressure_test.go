@@ -72,6 +72,17 @@ func floodUntilBackpressure(t *testing.T, bridge *relay.Bridge) int {
 
 // A window that stops draining has its socket destroyed once the queue is full,
 // and Send says so rather than failing silently.
+//
+// Only the lower bound is a contract. The queue accepts a full UIQueueDepth
+// frames before Send reports backpressure, and the count can run higher when the
+// writer goroutine drains a frame between two Send calls — that is scheduling,
+// not queue depth, so it is not asserted.
+//
+// The previous assertion was `sent > UIQueueDepth`. It encoded "the writer
+// drains at least one frame", so it passed on a busy machine and failed
+// deterministically under `-cpu=1`: the flooder never yields and Send gives up
+// at exactly the queue depth. The upper bound is left to floodUntilBackpressure,
+// which fails if backpressure never arrives inside 4*UIQueueDepth frames.
 func TestSendReportsBackpressureAtQueueDepth(t *testing.T) {
 	bridge, nonce := startBridge(t)
 	token := redeem(t, bridge, nonce)
@@ -82,8 +93,10 @@ func TestSendReportsBackpressureAtQueueDepth(t *testing.T) {
 	defer conn.CloseNow()
 
 	sent := floodUntilBackpressure(t, bridge)
-	if sent <= relay.UIQueueDepth {
-		t.Fatalf("Send gave up after %d frames, want more than the %d-deep queue", sent, relay.UIQueueDepth)
+	// A shallow queue would give up early and would break the real contract: the
+	// window may miss frames, but not before its buffer is full.
+	if sent < relay.UIQueueDepth {
+		t.Fatalf("Send gave up after %d frames, want at least the %d-deep queue", sent, relay.UIQueueDepth)
 	}
 }
 
@@ -123,6 +136,19 @@ func TestReconnectDisplacesClosingSocket(t *testing.T) {
 	}
 	if err := next.Write(ctx, websocket.MessageText, auth); err != nil {
 		t.Fatalf("write auth frame on the reconnect: %v", err)
+	}
+	// Writing the auth frame only queues it. The server goroutine still has to
+	// read it, claim the window and start its writer; Send before that reaches
+	// the displaced socket's full queue and reports backpressure that has nothing
+	// to do with the reconnect. Wait for the window to be reported up, exactly as
+	// connectUI does — this failed deterministically under `-cpu=1`.
+	select {
+	case up := <-bridge.UIEvents():
+		if !up {
+			t.Fatal("the reconnected socket was reported down")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the reconnected socket never reached UIEvents")
 	}
 	if err := bridge.Send([]byte(`{"type":"probe"}`)); err != nil {
 		t.Fatalf("Send to the reconnected window: %v", err)

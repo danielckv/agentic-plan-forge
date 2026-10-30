@@ -18,6 +18,12 @@ ignores:
   - "node_modules/**"
   - "web/node_modules/**"
   - "docs/plans/**"
+  # `agents copilot --write` generates this file from docs/docs-map.json and the
+  # tracked files. Its renderer emits a list directly under a heading (MD022,
+  # MD032), so linting it fails on every regeneration. The generator lives in the
+  # `agents` CLI, not in this repository, so the exclusion is the fix that holds:
+  # hand-editing the file is undone by the next `agents publish`.
+  - ".github/copilot-instructions.md"
   # Test fixtures stand in for documents a user wrote elsewhere, so they are
   # shaped like real input rather than like this repository's own Markdown.
   # internal/app/testdata/long-brief.md opens each epic with a top-level
