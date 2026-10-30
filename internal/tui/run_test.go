@@ -138,8 +138,7 @@ func TestTerminalSessionEndToEnd(t *testing.T) {
 
 	// A snapshot arrives and renders.
 	payload, _ := json.Marshal(map[string]any{
-		"phase": "DELIBERATION", "role": "owner", "run_id": "run-1",
-		"agents": []map[string]any{{"id": "pm", "status": "Thinking"}},
+		"phase": "DELIBERATION", "role": "owner", "run_id": "run-1", "baseline_rev": "3",
 	})
 	fb.frames <- relay.WSEnvelope{
 		Version: contracts.ProtocolVersion, SessionID: "sess-1", EventID: "ev-1",
@@ -151,11 +150,17 @@ func TestTerminalSessionEndToEnd(t *testing.T) {
 		if env.EventType != relay.EventStateSnapshot {
 			t.Fatalf("event = %s, want STATE_SNAPSHOT", env.EventType)
 		}
-		view := View{Tab: TabAgents}.Snapshot.Apply(env)
-		if view.RunID != "run-1" || view.Phase != relay.PhaseDeliberation {
-			t.Fatalf("snapshot state = %+v", view)
+		snap := Snapshot{}.Apply(env)
+		if snap.RunID != "run-1" || snap.Phase != relay.PhaseDeliberation || snap.SessionID != "sess-1" {
+			t.Fatalf("snapshot state = %+v", snap)
 		}
-		out := Render(View{Snapshot: view, Tab: TabAgents}, 100)
+		// Agents arrive as their own frames, not inside the snapshot.
+		snap = snap.Apply(relay.WSEnvelope{
+			Version: contracts.ProtocolVersion, SessionID: "sess-1", EventID: "ev-2",
+			EventType: relay.EventAvatarThought,
+			Payload:   json.RawMessage(`{"avatar_id":"pm","status":"Thinking","public_summary":"reading the brief"}`),
+		})
+		out := Render(View{Snapshot: snap, Tab: TabAgents}, 100)
 		if !strings.Contains(out, "DELIBERATION") || !strings.Contains(out, "Product Manager") {
 			t.Fatalf("rendered frame lacks the session:\n%s", out)
 		}

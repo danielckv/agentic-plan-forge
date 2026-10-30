@@ -56,10 +56,13 @@ type AgentRow struct {
 
 // QuestionRow is one decision or ambiguity waiting for the owner.
 type QuestionRow struct {
-	ID      string
-	Kind    string // decision | ambiguity
-	Prompt  string
-	Options []string
+	ID   string
+	Kind string // decision | ambiguity
+	// InputRevision is the document revision the card opened at. The authority
+	// rejects an answer that does not echo it (STALE_RUN).
+	InputRevision uint64
+	Prompt        string
+	Options       []string
 	// Recommended names the recommended option id, empty when none.
 	Recommended string
 }
@@ -78,6 +81,15 @@ type Snapshot struct {
 	Plan      []string
 	Questions []QuestionRow
 	Findings  []string
+	// BaselineRev is the document revision the run was frozen on; APPROVE must
+	// echo it or the authority answers STALE_BASELINE.
+	BaselineRev uint64
+	// SynthesisRev and SynthesisHash identify the locked spec. APPROVE must
+	// echo both; a mismatch is STALE_SYNTHESIS.
+	SynthesisRev  uint64
+	SynthesisHash string
+	// MemberID names this window's member, which the authority sends.
+	MemberID string
 	// Readiness is the compiled verdict when the spec has been locked.
 	Readiness string
 	// Artifacts are the files a finished run wrote, relative to the repo.
@@ -87,7 +99,9 @@ type Snapshot struct {
 	Banner string
 	// Err is the last protocol or authority error, cleared by a new snapshot.
 	Err string
-	// SessionID is the room this window joined; every command names it.
+	// SessionID is the room this window joined. The snapshot payload carries no
+	// session id, so Apply copies it from the envelope: a command that names
+	// none is rejected by the authority as an invalid frame.
 	SessionID string
 	// RunID is the run the commands act on. A snapshot carries it when a run
 	// has started; the commands that need it say so rather than sending empty.
@@ -108,10 +122,17 @@ func (s Snapshot) sessionID() string { return s.SessionID }
 // that refused to render because it met a frame it did not know would be worse
 // than one that shows what it understands.
 func (s Snapshot) Apply(env relay.WSEnvelope) Snapshot {
+	// The session id lives on the envelope, never in a payload. Carrying it
+	// forward here is what makes every later command addressable.
+	if env.SessionID != "" {
+		s.SessionID = env.SessionID
+	}
 	switch env.EventType {
 	case relay.EventHello, relay.EventStateSnapshot:
 		if snap, ok := decodeSnapshot(env.Payload); ok {
-			// A snapshot is authoritative: it replaces, never merges.
+			// A snapshot is authoritative: it replaces, never merges. The
+			// envelope's session id survives because it is not in the payload.
+			snap.SessionID = s.SessionID
 			snap.Banner = s.Banner
 			snap.Err = ""
 			return snap
@@ -143,6 +164,18 @@ func (s Snapshot) Apply(env relay.WSEnvelope) Snapshot {
 				s.Banner = fmt.Sprintf("%s failed: %s", agentName(p.AvatarID), p.PublicSummary)
 			}
 		}
+	case relay.EventAvatarDraft:
+		var p relay.AvatarDraftPayload
+		if json.Unmarshal(env.Payload, &p) == nil && p.AvatarID != "" {
+			// The synthesizer's hash is what APPROVE must echo back.
+			if p.AvatarID == "synthesizer" && p.ContentHash != "" {
+				s.SynthesisHash = p.ContentHash
+				if p.DraftRevision > s.SynthesisRev {
+					s.SynthesisRev = p.DraftRevision
+				}
+			}
+			s = s.setAgent(AgentRow{ID: p.AvatarID, Name: agentName(p.AvatarID), Status: "Synced", Kind: agentKind(p.AvatarID)})
+		}
 	case relay.EventAvatarCritique:
 		var p struct {
 			Issues []struct {
@@ -159,17 +192,12 @@ func (s Snapshot) Apply(env relay.WSEnvelope) Snapshot {
 			}
 		}
 	case relay.EventDecisionPrompt:
-		var p struct {
-			ID      string `json:"decision_id"`
-			Prompt  string `json:"prompt"`
-			Options []struct {
-				ID    string `json:"id"`
-				Label string `json:"label"`
-			} `json:"options"`
-			Recommended string `json:"recommended_option_id"`
-		}
-		if json.Unmarshal(env.Payload, &p) == nil && p.ID != "" {
-			row := QuestionRow{ID: p.ID, Kind: "decision", Prompt: p.Prompt, Recommended: p.Recommended}
+		var p relay.DecisionPromptPayload
+		if json.Unmarshal(env.Payload, &p) == nil && p.DecisionID != "" {
+			row := QuestionRow{
+				ID: p.DecisionID, Kind: "decision", InputRevision: p.InputRevision,
+				Prompt: p.Question, Recommended: p.RecommendedOptionID,
+			}
 			for _, o := range p.Options {
 				label := o.Label
 				if label == "" {
@@ -179,6 +207,7 @@ func (s Snapshot) Apply(env relay.WSEnvelope) Snapshot {
 			}
 			s = s.upsertQuestion(row)
 		}
+
 	case relay.EventDecisionResolve, relay.EventAlreadyResolved:
 		var p struct {
 			ID string `json:"decision_id"`
@@ -217,37 +246,26 @@ func (s Snapshot) Apply(env relay.WSEnvelope) Snapshot {
 }
 
 // decodeSnapshot reads a STATE_SNAPSHOT payload into a Snapshot.
+//
+// The payload is relay.StateSnapshotPayload: identity, counters and per-avatar
+// draft hashes. It carries no document text, no agent rows and no plan — those
+// arrive as their own frames — so this decodes only what is really there. This
+// matters: an earlier version read invented fields, which produced an empty
+// session id and made every command fail.
 func decodeSnapshot(raw json.RawMessage) (Snapshot, bool) {
-	var p struct {
-		Phase     relay.Phase `json:"phase"`
-		Role      relay.Role  `json:"role"`
-		Members   []string    `json:"members"`
-		Cycle     int         `json:"cycle"`
-		DocText   string      `json:"doc_text"`
-		DocTitle  string      `json:"doc_title"`
-		RunID     string      `json:"run_id"`
-		SessionID string      `json:"session_id"`
-		Agents    []AgentRow  `json:"agents"`
-		Plan      []string    `json:"plan"`
-	}
+	var p relay.StateSnapshotPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return Snapshot{}, false
 	}
-	s := Snapshot{
-		Phase: p.Phase, Role: p.Role, Members: p.Members, Cycle: p.Cycle,
-		DocTitle: p.DocTitle, DocWords: len(strings.Fields(p.DocText)), RunID: p.RunID, SessionID: p.SessionID,
-		Agents: p.Agents, Plan: p.Plan,
-	}
-	for i := range s.Agents {
-		if s.Agents[i].Name == "" {
-			s.Agents[i].Name = agentName(s.Agents[i].ID)
-		}
-		if s.Agents[i].Kind == "" {
-			s.Agents[i].Kind = agentKind(s.Agents[i].ID)
-		}
-	}
-	sort.SliceStable(s.Agents, func(i, j int) bool { return s.Agents[i].ID < s.Agents[j].ID })
-	return s, true
+	return Snapshot{
+		Phase:         p.Phase,
+		Role:          p.Role,
+		MemberID:      p.MemberID,
+		RunID:         p.RunID,
+		BaselineRev:   p.BaselineRev,
+		SynthesisRev:  p.SynthesisRev,
+		SynthesisHash: p.DraftHashes["synthesizer"],
+	}, true
 }
 
 // setAgent replaces or appends one agent row, keeping the list sorted so the

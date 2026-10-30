@@ -21,30 +21,31 @@ func env(t *testing.T, typ relay.WSEventType, payload any) relay.WSEnvelope {
 }
 
 // A snapshot replaces the whole view, because merging a stale pane with a new
-// one would show a state the authority never had.
+// one would show a state the authority never had. It carries the real payload:
+// identity, counters and draft hashes, never document text or agent rows.
 func TestSnapshotReplacesRatherThanMerges(t *testing.T) {
 	var s Snapshot
 	s = s.Apply(env(t, relay.EventStateSnapshot, map[string]any{
-		"phase": "DELIBERATION", "role": "owner", "cycle": 2,
-		"doc_text": "one two three", "doc_title": "Invoice export",
-		"agents": []map[string]any{{"id": "pm", "status": "Thinking"}},
+		"member_id": "owner", "role": "owner", "phase": "DELIBERATION",
+		"run_id": "run-1", "baseline_rev": "7", "synthesis_rev": "2",
+		"draft_hashes": map[string]string{"synthesizer": "hash-1"},
 	}))
-	if s.Phase != relay.PhaseDeliberation || s.Cycle != 2 || s.DocWords != 3 || s.DocTitle != "Invoice export" {
+	if s.Phase != relay.PhaseDeliberation || s.RunID != "run-1" || s.BaselineRev != 7 || s.SynthesisRev != 2 {
 		t.Fatalf("snapshot not applied: %+v", s)
 	}
-	if len(s.Agents) != 1 || s.Agents[0].Name != "Product Manager" {
-		t.Fatalf("agent name not resolved: %+v", s.Agents)
+	if s.SynthesisHash != "hash-1" || s.MemberID != "owner" {
+		t.Fatalf("draft hash or member not decoded: %+v", s)
 	}
 
-	// A second snapshot with fewer agents replaces the list entirely.
+	// A second snapshot with different counters replaces them entirely.
 	s = s.Apply(env(t, relay.EventStateSnapshot, map[string]any{
-		"phase": "SYNTHESIS", "agents": []map[string]any{},
+		"phase": "SYNTHESIS", "baseline_rev": "9", "run_id": "run-2",
 	}))
-	if len(s.Agents) != 0 {
-		t.Fatalf("stale agents survived a snapshot: %+v", s.Agents)
+	if s.Phase != relay.PhaseSynthesis || s.BaselineRev != 9 || s.RunID != "run-2" {
+		t.Fatalf("second snapshot not applied: %+v", s)
 	}
-	if s.Phase != relay.PhaseSynthesis {
-		t.Fatalf("phase = %q", s.Phase)
+	if s.SynthesisHash != "" {
+		t.Fatalf("stale draft hash survived a snapshot: %q", s.SynthesisHash)
 	}
 }
 

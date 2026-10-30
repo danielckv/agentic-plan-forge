@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -163,15 +164,24 @@ func handleKey(v View, k keyMsg, sock *socket) (View, error) {
 		next.Help = !next.Help
 	case k.Rune == 'q':
 		next.quit = true
+	case next.Tab == TabQuestions && k.Rune >= '1' && k.Rune <= '9' && len(next.Snapshot.Questions) > 0:
+		// Answering outranks the tab shortcut: on the questions pane a digit is
+		// an option, or no decision could ever be answered. Tabs stay reachable
+		// with Tab/Shift-Tab and with digits on every other pane.
+		next = answerQuestion(next, int(k.Rune-'0'), sock)
 	case k.Rune >= '1' && k.Rune <= '5':
 		next.Tab = Tabs[k.Rune-'1']
 		next.Selected = 0
 	case k.Rune == 'a':
-		if err := sendCommand(sock, next.Snapshot, relay.EventApprove, map[string]string{
-			"run_id":         next.Snapshot.runID(),
-			"synthesis_rev":  "1",
-			"content_sha256": "",
-		}); err != nil {
+		// Every field here is checked by the reducer: a wrong baseline, run,
+		// synthesis revision or content hash is rejected outright, so the values
+		// come from the snapshot rather than from a guess.
+		cmd, err := approveCommand(next.Snapshot)
+		if err != nil {
+			next.Notice = err.Error()
+			break
+		}
+		if err := sock.send(cmd); err != nil {
 			return next, err
 		}
 		next.Notice = "Approval sent."
@@ -198,8 +208,6 @@ func handleKey(v View, k keyMsg, sock *socket) (View, error) {
 			return next, err
 		}
 		next.Notice = "Retry requested."
-	case next.Tab == TabQuestions && k.Rune >= '1' && k.Rune <= '9' && k.Rune != 0:
-		next = answerQuestion(next, int(k.Rune-'0'), sock)
 	}
 	return next, nil
 }
@@ -217,9 +225,12 @@ func answerQuestion(v View, choice int, sock *socket) View {
 	}
 	// Options are rendered as "id: label"; the id is what the authority wants.
 	id, _, _ := strings.Cut(q.Options[choice-1], ":")
+	// The reducer rejects an answer that does not echo the revision the card
+	// opened at, so the value travels with the row.
 	payload := map[string]string{
-		"decision_id": q.ID,
-		"option_id":   strings.TrimSpace(id),
+		"decision_id":    q.ID,
+		"input_revision": strconv.FormatUint(q.InputRevision, 10),
+		"option_id":      strings.TrimSpace(id),
 	}
 	if err := sendCommand(sock, v.Snapshot, relay.EventDecisionResolve, payload); err != nil {
 		v.Notice = "Could not send the answer: " + err.Error()
@@ -268,6 +279,29 @@ func command(sessionID string, event relay.WSEventType, payload any) (relay.WSEn
 		env.Payload = raw
 	}
 	return env, nil
+}
+
+// approveCommand builds the APPROVE payload the reducer validates.
+//
+// The reducer checks, in order: baseline_rev, run_id, a synthesis draft exists,
+// synthesis_rev, then content_sha256. Sending a guessed revision or an empty
+// hash is refused as STALE_SYNTHESIS, so each value comes from the snapshot and
+// a missing one is reported here instead of after a round trip.
+func approveCommand(snap Snapshot) (relay.WSEnvelope, error) {
+	switch {
+	case snap.RunID == "":
+		return relay.WSEnvelope{}, errors.New("no run to approve yet")
+	case snap.SynthesisRev == 0:
+		return relay.WSEnvelope{}, errors.New("no locked synthesis to approve yet")
+	case snap.SynthesisHash == "":
+		return relay.WSEnvelope{}, errors.New("the synthesis content hash has not arrived yet")
+	}
+	return command(snap.sessionID(), relay.EventApprove, map[string]string{
+		"baseline_rev":   strconv.FormatUint(snap.BaselineRev, 10),
+		"run_id":         snap.RunID,
+		"synthesis_rev":  strconv.FormatUint(snap.SynthesisRev, 10),
+		"content_sha256": snap.SynthesisHash,
+	})
 }
 
 // sendCommand builds an envelope for this session and writes it.
