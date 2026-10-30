@@ -39,11 +39,14 @@ test("manual URL jump to /synthesis during Phase 1 redirects back", async ({ pag
   });
 });
 
-test("no requests leave the origin (no CDN fonts or scripts)", async ({ page }) => {
+test("no requests leave the origin (no CDN fonts or scripts)", async ({ page, baseURL }) => {
+  // Compare against the base URL, not page.url(): before navigation the page is
+  // about:blank, whose origin is "null", so every own-origin request would be
+  // recorded as foreign. That made this assertion test nothing but its own bug.
+  const own = new URL(baseURL ?? "http://localhost:4173").origin;
   const foreign: string[] = [];
   page.on("request", (req) => {
-    const url = new URL(req.url());
-    if (url.origin !== new URL(page.url()).origin) foreign.push(req.url());
+    if (new URL(req.url()).origin !== own) foreign.push(req.url());
   });
   await page.goto("/");
   await page.waitForTimeout(500);
