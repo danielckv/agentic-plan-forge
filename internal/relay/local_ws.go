@@ -612,7 +612,26 @@ func (b *Bridge) handleStatic(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	setAssetCacheHeaders(w, name)
 	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(data))
+}
+
+// setAssetCacheHeaders decides what a browser may keep.
+//
+// The UI is embedded in the binary, so upgrading or reinstalling Plan Forge
+// replaces it wholesale. The bundler fingerprints every chunk it emits, so an
+// asset under assets/ is safe to keep forever: a new build emits a new name.
+// index.html is the opposite — its name never changes while its contents name
+// a different set of chunks after every build. Served without a directive it
+// is heuristically cacheable, so a reinstalled binary can serve a UI the
+// browser never asks for, still requesting the chunk names of the build that
+// was uninstalled. It is therefore never stored.
+func setAssetCacheHeaders(w http.ResponseWriter, name string) {
+	if strings.HasPrefix(name, "assets/") && path.Ext(name) != ".html" {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store, must-revalidate")
 }
 
 // --- open-url ----------------------------------------------------------------------------------------

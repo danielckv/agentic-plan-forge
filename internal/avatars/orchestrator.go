@@ -269,7 +269,12 @@ func (o *orchestrator) cycle(ctx context.Context, c int) (bool, error) {
 	case c < o.maxC:
 		return false, nil
 	case len(blockers) > 0:
-		return false, o.pause(ctx, c, blockers)
+		// Not o.pause any more. A capped run with blockers open could neither
+		// cycle again nor synthesize, and the only way out discarded every
+		// avatar's work — so the run ended with no plan. The owner now decides
+		// once whether to take the plan with the findings recorded on it, and
+		// choosing to pause still reaches o.pause from inside settleBlockers.
+		return o.settleBlockers(ctx, c, blockers)
 	default:
 		return o.settleMediums(ctx, c, mediums)
 	}

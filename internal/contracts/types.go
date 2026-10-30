@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -491,6 +492,18 @@ const (
 	CritiqueOpen     = "open"
 	CritiqueResolved = "resolved"
 )
+
+// RecordedRefPrefix marks a critique the owner knowingly took the plan with,
+// rather than one a draft actually fixed. A critique carrying it is resolved
+// for the purposes of the gates and still unresolved in engineering terms, so
+// the compiled spec lists it in its readiness section instead of burying it.
+const RecordedRefPrefix = "recorded:"
+
+// IsRecorded reports whether a critique was settled by being written onto the
+// plan rather than fixed.
+func (c Critique) IsRecorded() bool {
+	return strings.HasPrefix(c.ResolutionRef, RecordedRefPrefix)
+}
 
 // DecisionOption is one choice on a human decision card.
 type DecisionOption struct {

@@ -11,12 +11,61 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/coder/websocket"
 
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 )
+
+// The UI is compiled into the binary, so reinstalling Plan Forge replaces it
+// wholesale — but only if the browser asks for it. index.html keeps its name
+// across builds while naming a different set of fingerprinted chunks, so a
+// cached copy makes a reinstalled binary serve a UI nobody requests, still
+// asking for the chunks of the build that was removed.
+func TestAssetCacheHeaders(t *testing.T) {
+	assets := fstest.MapFS{
+		"index.html":             {Data: []byte("<!doctype html>")},
+		"assets/index-ABC123.js": {Data: []byte("console.log(1)")},
+	}
+	bridge, err := relay.NewBridge(relay.BridgeConfig{Assets: assets})
+	if err != nil {
+		t.Fatalf("NewBridge: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- bridge.Serve(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		bridge.Close()
+		<-served
+	})
+
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{"/", "no-store"},
+		{"/index.html", "no-store"},
+		// A fingerprinted chunk is immutable: a new build emits a new name, so
+		// keeping it forever can never serve the wrong bytes.
+		{"/assets/index-ABC123.js", "immutable"},
+	} {
+		resp, err := http.Get(bridge.Origin() + tc.path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", tc.path, err)
+		}
+		got := resp.Header.Get("Cache-Control")
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", tc.path, resp.StatusCode)
+		}
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("GET %s Cache-Control = %q, want it to contain %q", tc.path, got, tc.want)
+		}
+	}
+}
 
 // startBridge runs a bridge and returns it with the launch nonce the window
 // would read out of its URL fragment.

@@ -108,6 +108,9 @@ func renderSpec(s specInput) string {
 		w.bullets(d.Synthesis.VerificationNotes)
 	}
 
+	w.h2(SectionReadiness)
+	writeReadiness(&w, s.in.Critiques)
+
 	w.h2(SectionPhases)
 	writePhases(&w, s.phases)
 
@@ -483,6 +486,49 @@ func orNone(s string) string {
 		return "none"
 	}
 	return s
+}
+
+// writeReadiness states whether this plan is safe to build from, and says so
+// before any of the design it is judging.
+//
+// A plan can now be produced with blocking findings still open: a capped run
+// used to end with no plan at all, which served nobody. The trade is that the
+// document must never imply it is clean when it is not. A finding the owner
+// recorded rather than fixed is listed here in full — severity, target,
+// evidence and the change it asks for — so the reader meets it before the
+// phases, not after shipping.
+func writeReadiness(w *writer, critiques []contracts.Critique) {
+	var recorded []contracts.Critique
+	for _, c := range critiques {
+		if c.IsRecorded() {
+			recorded = append(recorded, c)
+		}
+	}
+	sort.SliceStable(recorded, func(i, j int) bool { return recorded[i].ID < recorded[j].ID })
+
+	if len(recorded) == 0 {
+		w.line("**Verdict: complete.** Every finding raised against this plan was resolved by a revision. Nothing was waived.")
+		return
+	}
+	w.line("**Verdict: provisional.** %d finding(s) were recorded rather than fixed: the owner chose to take this plan with them open. Read them before building.",
+		len(recorded))
+	for _, c := range recorded {
+		w.blank()
+		w.line("### %s — %s", code(c.ID), inline(c.Severity))
+		if targets := strings.Join(c.TargetIDs, ", "); targets != "" {
+			w.line("- **Affects:** %s", code(targets))
+		}
+		if evidence := strings.TrimSpace(c.Evidence); evidence != "" {
+			w.line("- **Finding:** %s", inline(evidence))
+		}
+		if impact := strings.TrimSpace(c.Impact); impact != "" {
+			w.line("- **Impact:** %s", inline(impact))
+		}
+		if change := strings.TrimSpace(c.RequiredChange); change != "" {
+			w.line("- **Still asks for:** %s", inline(change))
+		}
+		w.line("- **Recorded by:** %s", code(c.ResolutionRef))
+	}
 }
 
 // writePhases renders the implementation as ordered dependency waves.

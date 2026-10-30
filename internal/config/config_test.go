@@ -257,6 +257,26 @@ func TestPurgeTargetsEnumerateKnownChildren(t *testing.T) {
 	}
 }
 
+// A purge that leaves a credential behind leaves live API keys on a machine
+// the owner believes they have cleaned. Every file that can hold a secret is
+// named here so adding another one without purging it fails this test.
+func TestPurgeTargetsIncludeEverySecretFile(t *testing.T) {
+	isolateHome(t)
+	targets, err := config.PurgeTargets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]bool{}
+	for _, target := range targets {
+		listed[filepath.Base(target)] = true
+	}
+	for _, secret := range []string{"credentials.json", "relay-token.json"} {
+		if !listed[secret] {
+			t.Errorf("%s holds credentials and is not purged", secret)
+		}
+	}
+}
+
 func TestIsUnsafePurgeTarget(t *testing.T) {
 	isolateHome(t)
 	if config.IsUnsafePurgeTarget("/") {
