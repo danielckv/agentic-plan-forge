@@ -20,8 +20,16 @@ It ships as one Go binary with an embedded web UI, and an optional relay for tea
 curl -fsSL https://raw.githubusercontent.com/danielckv/agentic-plan-forge/main/scripts/install.sh | sh
 ```
 
-Restart your agent, then type `/plan-forge`. You need Git, a browser, and Claude Code or OMP signed in. Plan Forge
-never asks for or stores provider API keys: it uses the credentials your host agent already has.
+Restart your agent, then type `/plan-forge`. You need Git, a browser, and a way to reach a model — either a coding
+agent you are already signed in to (Claude Code, OMP) or an API key for Anthropic, OpenAI or Fireworks, which Setup
+asks for on a first run.
+
+Both paths are first-class, and they are different credentials. A CLI host spends the subscription you already have;
+an API key is billed to you and is faster, because there is no process to start per call and the prompt prefix is
+cached between stages. There is no sign-in with a Claude or ChatGPT account: vendor terms reserve that for their own
+applications, so a subscription is reached only by running their CLI. Keys you give Plan Forge are stored outside
+`config.json`, shown only masked, and never passed through an agent — see
+[docs/configuration.md](docs/configuration.md).
 
 Re-running the command updates the binary and re-registers the skills. Windows, version pinning,
 `plan-forge uninstall` and the full host matrix are in [docs/install.md](docs/install.md).
@@ -51,7 +59,7 @@ flowchart LR
         STORE["Artifact store<br/>atomic writes under .plan/"]
     end
 
-    HOSTS["Host CLIs you already have<br/>Claude Code · OMP · agy"]
+    HOSTS["Your choice of model<br/>Claude Code · OMP · agy<br/>or Anthropic · OpenAI · Fireworks over HTTP"]
     RELAY["Relay (optional)<br/>team sessions and followers"]
     REPO["Your repository<br/>read, never written without approval"]
 
@@ -69,8 +77,9 @@ flowchart LR
     app -.->|"only when two people plan together"| RELAY
 ```
 
-Everything the window does reaches the same executor over one loopback bridge. The browser never holds provider
-credentials and never calls a model itself.
+Everything the window does reaches the same executor over one loopback bridge. The browser never calls a model itself.
+An API key travels one way — you paste it into Setup, the binary writes it to a `0600` file, and every later read
+returns a masked form, so a key cannot be lifted back out of the window or out of a screenshot of it.
 
 ## The flow
 
@@ -162,7 +171,15 @@ changes, new, already there, or clashes with a decision the team recorded.
 | ![An epic opened as a document](docs/images/epic-modal.png) | ![Searching the codebase for a component](docs/images/codebase-palette.png) |
 
 **Watch them plan.** Every status, draft, finding and decision lands in one discussion, and the plan takes shape beside
-it. Each card names the host and model serving it, the part of the stage in flight, and the evidence that call can see.
+it as a clustered node graph: epics, the stories under them and the architect's workstreams, drawn as a tree you can
+orbit and click. Nodes appear as the avatars draft, so the plan visibly grows while the run works, and a node carrying
+a critic finding is coloured by the worst severity against it. Each card names the host and model serving it, the part
+of the stage in flight, and the evidence that call can see.
+
+**You always get a plan.** If the critic still has blocking findings when the cycle budget runs out, you are asked once
+whether to take the plan with them recorded on it or to pause and revise. Take it and the specification opens with a
+readiness verdict — `complete` or `provisional` — naming every finding that is still open, with the change it asks for.
+A plan is never quietly clean.
 
 | Review the specification | Light or dark |
 | :---: | :---: |
@@ -211,14 +228,19 @@ counts.
 | [docs/install.md](docs/install.md) | Every host, Windows, version pinning, uninstall |
 | [docs/usage.md](docs/usage.md) | The window, page by page |
 | [docs/configuration.md](docs/configuration.md) | Hosts, models, storage, sandbox and repository settings |
-| [docs/adrs/](docs/adrs/) | Why each boundary sits where it does |
+| [docs/adrs/](docs/adrs/README.md) | Why each boundary sits where it does — indexed, with the threads worth following |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build, test and pull request workflow |
 
 ## Privacy and security
 
 - Requirements, repository contents, project notes and absolute paths stay on your machine. There is no telemetry and
   no account.
-- The window talks to a loopback bridge in the same process. Provider credentials never reach the browser.
+- The window talks to a loopback bridge in the same process, which checks the request origin and a session token.
+- An API key you give Plan Forge is written to `~/.plan-forge/credentials.json` with owner-only permissions,
+  deliberately outside `config.json` because that file is quoted in `doctor` output and pasted into bug reports. It is
+  never echoed by an endpoint, never written into a run receipt, and never logged; the window only ever receives a
+  masked form. `plan-forge uninstall --purge` deletes it. A subscription used through a CLI host never reaches Plan
+  Forge at all — that agent holds its own credentials.
 - Nothing is written to your repository without an approval. Generated files never overwrite an existing document, and
   a decision-record number is never reused.
 - A prepared VM receives a packaged archive, never a clone, and never your GitHub write token. The preview runs on a
