@@ -140,6 +140,36 @@ func TestAppendEmptyDocumentUsesEmptyDocumentShape(t *testing.T) {
 	}
 }
 
+// A terminal client appends to the PRD through the same Push path the browser
+// uses. This pins the two things that made the first attempt fail: the change
+// must be the canonical append encoding, and the client id must start with the
+// pushing member's id followed by a colon.
+func TestTerminalAppendIsAcceptedByPush(t *testing.T) {
+	a := NewAuthority("Existing requirement.\n")
+	const member = "owner"
+	changes, err := AppendChange(22, "Add MFA.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updates := []Update{{ClientID: member + ":terminal", Changes: changes}}
+	res, rej := a.Push(member, 0, updates)
+	if rej != nil {
+		t.Fatalf("the terminal's append was rejected: %+v", rej)
+	}
+	if res.NewVersion != 1 {
+		t.Fatalf("NewVersion = %d, want 1", res.NewVersion)
+	}
+	if want := "Existing requirement.\nAdd MFA."; a.Snapshot().Text != want {
+		t.Fatalf("document = %q, want %q", a.Snapshot().Text, want)
+	}
+
+	// A client id that does not start with the member id is refused, which is
+	// what the terminal sent before the prefix was corrected.
+	if _, rej := a.Push(member, 1, []Update{{ClientID: "terminal:owner", Changes: changes}}); rej == nil {
+		t.Fatal("a foreign client id was accepted")
+	}
+}
+
 func TestPushStaleBaseVersionRejectedWithHead(t *testing.T) {
 	a := NewAuthority("")
 	if _, rej := a.Push("m1", 0, []Update{mustInsert(t, 0, "ab"), mustInsert(t, 2, "c")}); rej != nil {

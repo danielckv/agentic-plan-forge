@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/danielckv/agentic-plan-forge/internal/collab"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 )
@@ -320,5 +321,145 @@ func TestEveryCommandIsAWellFormedEnvelope(t *testing.T) {
 		if _, err := relay.DecodeEnvelope(raw); err != nil {
 			t.Errorf("%s would be refused by the authority: %v", c.event, err)
 		}
+	}
+}
+
+// The brief can be written from the terminal. Before this, the pane said to
+// write it in the browser, so a headless machine could only run with --brief.
+func TestBriefCanBeTypedAndAppended(t *testing.T) {
+	b, sock, view, _ := startView(t, "tok")
+	// INGESTION is the only phase the authority accepts document edits in.
+	view.Snapshot = view.Snapshot.Apply(envelope(t, relay.EventStateSnapshot, map[string]any{
+		"member_id": "owner", "role": "owner", "phase": "INGESTION", "run_id": "run-1",
+	}))
+	view.Snapshot = view.Snapshot.Apply(envelope(t, relay.EventTextSnapshot, map[string]any{
+		"document_id": contracts.DocumentIDPRD, "version": "4",
+		"text": "Existing requirement.\n", "sha256": "abc",
+	}))
+	if view.Snapshot.DocVersion != 4 || view.Snapshot.DocText == "" {
+		t.Fatalf("document not tracked: version %d, %d bytes", view.Snapshot.DocVersion, len(view.Snapshot.DocText))
+	}
+
+	view.Tab = TabBrief
+	next, err := handleKey(view, keyMsg{Rune: 'e'}, sock)
+	if err != nil {
+		t.Fatalf("enter edit mode: %v", err)
+	}
+	if !next.Editing {
+		t.Fatal("e did not open the editor")
+	}
+
+	for _, r := range "Add MFA." {
+		if next, err = handleKey(next, keyMsg{Rune: r}, sock); err != nil {
+			t.Fatalf("typing %q: %v", r, err)
+		}
+	}
+	if next.Draft != "Add MFA." {
+		t.Fatalf("draft = %q", next.Draft)
+	}
+	// A letter that is a command outside edit mode must be plain text inside it.
+	next, err = handleKey(next, keyMsg{Rune: 'q'}, sock)
+	if err != nil {
+		t.Fatalf("typing q: %v", err)
+	}
+	if next.quit {
+		t.Fatal("q quit the session while the brief was being typed")
+	}
+	if next.Draft != "Add MFA.q" {
+		t.Fatalf("draft = %q, want the q kept as text", next.Draft)
+	}
+	next, err = handleKey(next, keyMsg{Special: "backspace"}, sock)
+	if err != nil {
+		t.Fatalf("backspace: %v", err)
+	}
+	if next.Draft != "Add MFA." {
+		t.Fatalf("draft = %q after backspace", next.Draft)
+	}
+
+	next, err = handleKey(next, keyMsg{Special: "ctrl-s"}, sock)
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if next.Editing || next.Draft != "" {
+		t.Fatalf("editor did not close after saving: editing=%v draft=%q", next.Editing, next.Draft)
+	}
+
+	cmd := b.waitCommand(t, relay.EventTextDelta)
+	var p relay.TextDeltaPayload
+	if err := json.Unmarshal(cmd.Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.DocumentID != contracts.DocumentIDPRD || p.BaseVersion != 4 {
+		t.Fatalf("delta targets %q at base %d, want the prd at 4", p.DocumentID, p.BaseVersion)
+	}
+	// The authority rejects a push whose client id does not start with the
+	// pushing member's id followed by a colon, so the form matters, not just
+	// that it is non-empty.
+	if len(p.Updates) != 1 || !strings.HasPrefix(p.Updates[0].ClientID, p.Updates[0].ClientID[:0]+"owner:") {
+		t.Fatalf("updates = %+v, want a client id prefixed \"owner:\"", p.Updates)
+	}
+	// The change set must be the collab authority's own encoding, so replay it
+	// through that encoder with the same inputs and require the same bytes.
+	want, err := collab.AppendChange(22, "Add MFA.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(p.Updates[0].Changes); got != string(want) {
+		t.Fatalf("changes = %s, want the authority's %s", got, want)
+	}
+	// An append splits on newlines, which one flat string would not.
+	multi, err := collab.AppendChange(22, "line one\nline two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "[22,[0,\"line one\",\"line two\"]]"; string(multi) != want {
+		t.Fatalf("multi-line append = %s, want %s", multi, want)
+	}
+}
+
+// The editor refuses once the document is frozen, because the authority refuses
+// a document edit outside INGESTION.
+func TestBriefIsReadOnlyAfterFreeze(t *testing.T) {
+	view := View{Tab: TabBrief}
+	view.Snapshot.Phase = relay.PhaseDeliberation
+	next, err := handleKey(view, keyMsg{Rune: 'e'}, nil)
+	if err != nil {
+		t.Fatalf("handleKey: %v", err)
+	}
+	if next.Editing {
+		t.Fatal("the editor opened after the document was frozen")
+	}
+}
+
+// An empty draft sends nothing rather than a change set the authority rejects.
+func TestEmptyBriefSendsNothing(t *testing.T) {
+	b, sock, view, _ := startView(t, "tok")
+	view.Tab = TabBrief
+	view.Editing = true
+	view.Draft = "   \n\n"
+	next, err := handleKey(view, keyMsg{Special: "ctrl-s"}, sock)
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if !strings.Contains(next.Notice, "Nothing to add") {
+		t.Fatalf("notice = %q", next.Notice)
+	}
+	if got := b.sent(); len(got) != 0 {
+		t.Fatalf("sent %d frames for an empty brief", len(got))
+	}
+}
+
+// Esc cancels without sending.
+func TestEscCancelsTheBrief(t *testing.T) {
+	view := View{Tab: TabBrief, Editing: true, Draft: "half typed"}
+	next, err := handleKey(view, keyMsg{Special: "esc"}, nil)
+	if err != nil {
+		t.Fatalf("handleKey: %v", err)
+	}
+	if next.Editing {
+		t.Fatal("esc did not close the editor")
+	}
+	if !strings.Contains(next.Notice, "cancelled") {
+		t.Fatalf("notice = %q", next.Notice)
 	}
 }

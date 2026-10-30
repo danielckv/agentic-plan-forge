@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 )
 
@@ -75,7 +76,6 @@ type Snapshot struct {
 	Role      relay.Role
 	Members   []string
 	Cycle     int
-	DocWords  int
 	DocTitle  string
 	Agents    []AgentRow
 	Plan      []string
@@ -90,6 +90,13 @@ type Snapshot struct {
 	SynthesisHash string
 	// MemberID names this window's member, which the authority sends.
 	MemberID string
+	// DocVersion is the PRD revision the terminal holds the text for. A text
+	// push must name it; a stale base is rejected and the terminal resyncs.
+	DocVersion uint64
+	// DocText is the PRD as the authority last reported it. The terminal keeps
+	// it so the brief can be read and appended without a browser, and so an
+	// edit can be expressed as a change against a known document length.
+	DocText string
 	// Readiness is the compiled verdict when the spec has been locked.
 	Readiness string
 	// Artifacts are the files a finished run wrote, relative to the repo.
@@ -136,6 +143,19 @@ func (s Snapshot) Apply(env relay.WSEnvelope) Snapshot {
 			snap.Banner = s.Banner
 			snap.Err = ""
 			return snap
+		}
+	case relay.EventTextSnapshot:
+		// The authority's document text, with the version a push must rebase on.
+		var p relay.TextSnapshotPayload
+		if json.Unmarshal(env.Payload, &p) == nil && p.DocumentID == contracts.DocumentIDPRD {
+			s.DocVersion = p.Version
+			s.DocText = p.Text
+		}
+	case relay.EventTextAck:
+		// The next push rebases on the version this ack names.
+		var p relay.TextAckPayload
+		if json.Unmarshal(env.Payload, &p) == nil && p.DocumentID == contracts.DocumentIDPRD {
+			s.DocVersion = p.Version
 		}
 	case relay.EventPageTransition:
 		var p struct {

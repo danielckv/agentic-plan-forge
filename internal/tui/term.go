@@ -119,6 +119,10 @@ func (t *terminal) ReadKey(ctx context.Context) (keyMsg, error) {
 		return keyMsg{Special: "enter"}, nil
 	case '\t':
 		return keyMsg{Special: "tab"}, nil
+	case 0x13: // Ctrl-S
+		return keyMsg{Special: "ctrl-s"}, nil
+	case 0x7f, 0x08: // DEL and Backspace
+		return keyMsg{Special: "backspace"}, nil
 	case 0x1b:
 		// Either a bare Escape or the start of a sequence.
 		if t.reader.Buffered() < 2 {

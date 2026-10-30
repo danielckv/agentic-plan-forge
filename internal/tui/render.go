@@ -30,8 +30,13 @@ type View struct {
 	Selected int
 	// Help reports whether the help pane is showing.
 	Help bool
-	// Notice is a transient line: a command sent, a refusal, a reconnect.
+	// Notice is a one-line message: what a key just did, or why it refused.
 	Notice string
+	// Editing is true while the brief is being typed. Every printable key then
+	// belongs to Draft, so a brief containing "q" does not quit the session.
+	Editing bool
+	// Draft is the text typed so far, appended to the document on Ctrl-S.
+	Draft string
 	// quit is set by 'q'; Run reads it and returns.
 	quit bool
 }
@@ -125,14 +130,41 @@ func writeFooter(b *strings.Builder, v View, cols int) {
 	b.WriteString(line(cols, "-", truncate(keys, cols)))
 }
 
-// writeBrief is the requirements pane: the document length and where it is.
+// writeBrief is the requirements pane: the document, and the editor when it is
+// open.
 func writeBrief(b *strings.Builder, v View, cols int) {
 	b.WriteString(section(cols, "Brief"))
-	if v.Snapshot.DocWords == 0 {
-		b.WriteString(wrapped("No requirements read yet. Write the brief in the browser, or pass --brief to run.", cols))
+	if v.Editing {
+		b.WriteString(wrapped("Type the brief. Enter is a newline, Ctrl-S appends it, Esc cancels.", cols))
+		b.WriteString(rule(cols))
+		draft := v.Draft
+		if strings.TrimSpace(draft) == "" {
+			b.WriteString(wrapped("(empty — nothing typed yet)", cols))
+		} else {
+			for _, ln := range strings.Split(draft, "\n") {
+				b.WriteString(wrapped(ln, cols))
+			}
+		}
+		b.WriteString(rule(cols))
+		b.WriteString(line(cols, "|", truncate("cursor", cols)))
 		return
 	}
-	b.WriteString(wrapped(fmt.Sprintf("%d words read. The brief is the document the session was frozen on.", v.Snapshot.DocWords), cols))
+	if v.Snapshot.DocText == "" {
+		b.WriteString(wrapped("No requirements read yet. Press e to write the brief here, or pass --brief.", cols))
+		return
+	}
+	words := len(strings.Fields(v.Snapshot.DocText))
+	b.WriteString(wrapped(fmt.Sprintf("%d words, revision %d. Press e to append.", words, v.Snapshot.DocVersion), cols))
+	b.WriteString(rule(cols))
+	// The tail is what the reader needs: the document grows by appending.
+	lines := strings.Split(strings.TrimRight(v.Snapshot.DocText, "\n"), "\n")
+	const tail = 12
+	if len(lines) > tail {
+		lines = lines[len(lines)-tail:]
+	}
+	for _, ln := range lines {
+		b.WriteString(wrapped(ln, cols))
+	}
 }
 
 // writeAgents lists every avatar with its status, cycle, host and last line. It
@@ -241,7 +273,8 @@ func writeSettings(b *strings.Builder, v View, cols int) {
 		{"phase", orDash(string(v.Snapshot.Phase))},
 		{"role", orDash(string(v.Snapshot.Role))},
 		{"cycle", fmt.Sprintf("%d", v.Snapshot.Cycle)},
-		{"brief words", fmt.Sprintf("%d", v.Snapshot.DocWords)},
+		{"brief words", fmt.Sprintf("%d", len(strings.Fields(v.Snapshot.DocText)))},
+		{"brief revision", fmt.Sprintf("%d", v.Snapshot.DocVersion)},
 		{"readiness", orDash(v.Snapshot.Readiness)},
 		{"artifacts", orDash(strings.Join(v.Snapshot.Artifacts, ", "))},
 	}
@@ -257,6 +290,7 @@ func writeHelp(b *strings.Builder, cols int) {
 	for _, k := range [][2]string{
 		{"1 – 5", "brief, agents, plan, questions, settings"},
 		{"1 – 9", "on the questions pane: answer the selected question"},
+		{"e", "on the brief pane: write the brief (Ctrl-S save, Esc cancel)"},
 		{"Tab / Shift-Tab", "next / previous pane"},
 		{"↑ / ↓", "move the selection"},
 		{"Enter", "act on the selection (answer a question, open a row)"},

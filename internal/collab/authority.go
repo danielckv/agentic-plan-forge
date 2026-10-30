@@ -389,6 +389,13 @@ func int64Of(n json.Number) (int64, bool) {
 	return i, true
 }
 
+// AppendChange builds the ChangeSet array that appends text to a document of
+// the given UTF-16 length. It is exported so a second client (the terminal)
+// sends the identical encoding instead of reimplementing it.
+func AppendChange(docLen int, text string) (json.RawMessage, error) {
+	return insertAtJSON(docLen, text)
+}
+
 // insertAtJSON builds a ChangeSet.toJSON() array that inserts text at the end
 // of a document of the given length. It is the single constructor for system
 // appends, so every caller builds them the same way.

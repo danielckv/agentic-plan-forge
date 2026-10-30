@@ -20,7 +20,7 @@ func sampleView() View {
 		Tab: TabAgents,
 		Snapshot: Snapshot{
 			Phase: relay.PhaseDeliberation, Role: relay.RoleOwner, Cycle: 2,
-			DocTitle: "Invoice export", DocWords: 412,
+			DocTitle: "Invoice export", DocText: strings.Repeat("billing ", 412),
 			Agents: []AgentRow{
 				{ID: "architect", Name: "Technical Architect", Status: "Drafting", Cycle: 2, Host: "claude", Model: "opus", Kind: "permanent"},
 				{ID: "gap:security", Name: "Temporary · security", Status: "Thinking", Kind: "temporary", Summary: "Naming the trust boundaries the export crosses."},

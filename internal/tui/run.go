@@ -17,6 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/danielckv/agentic-plan-forge/internal/collab"
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 )
@@ -146,6 +147,30 @@ func handleKey(v View, k keyMsg, sock *socket) (View, error) {
 	// The channel mutates the view; keep it simple and explicit.
 	next := v
 	switch {
+	case next.Editing:
+		// While the brief is being written, every printable key is text. Only
+		// the control keys below act, so a brief containing "q" or "a" is not
+		// taken as a quit or an approval.
+		switch {
+		case k.Special == "esc":
+			next.Editing = false
+			next.Notice = "Brief editing cancelled; nothing was sent."
+		case k.Special == "enter":
+			next.Draft += "\n"
+		case k.Special == "backspace":
+			if r := []rune(next.Draft); len(r) > 0 {
+				next.Draft = string(r[:len(r)-1])
+			}
+		case k.Special == "ctrl-s":
+			sent, err := appendBrief(next, sock)
+			if err != nil {
+				next.Notice = err.Error()
+				break
+			}
+			next = sent
+		case k.Rune != 0:
+			next.Draft += string(k.Rune)
+		}
 	case k.Special == "esc":
 		next.Help = false
 	case k.Special == "enter":
@@ -160,6 +185,11 @@ func handleKey(v View, k keyMsg, sock *socket) (View, error) {
 		if next.Selected < rowCount(next)-1 {
 			next.Selected++
 		}
+	case k.Rune == 'e' && next.Tab == TabBrief && !next.Snapshot.Frozen():
+		// The brief is only writable before the document is frozen, which is
+		// what the authority enforces for document edits.
+		next.Editing = true
+		next.Notice = "Editing the brief. Enter is a newline, Ctrl-S appends, Esc cancels."
 	case k.Rune == '?':
 		next.Help = !next.Help
 	case k.Rune == 'q':
@@ -279,6 +309,78 @@ func command(sessionID string, event relay.WSEventType, payload any) (relay.WSEn
 		env.Payload = raw
 	}
 	return env, nil
+}
+
+// Frozen reports whether the authority has closed the document for editing.
+// docGate allows TEXT_* only in INGESTION, so every later phase is read-only.
+func (s Snapshot) Frozen() bool {
+	return s.Phase != "" && s.Phase != relay.PhaseIngestion
+}
+
+// appendBrief sends the typed text as an append to the PRD and clears the draft.
+//
+// The changes array is the collab authority's own encoding, not a new one: a
+// retain covering the current document, then an insert covering the new text.
+// Sending anything else is rejected as a bad change set, so the document length
+// the terminal holds must match the authority's — which is why DocText and
+// DocVersion are tracked from TEXT_SNAPSHOT rather than assumed.
+func appendBrief(v View, sock *socket) (View, error) {
+	text := strings.TrimRight(v.Draft, "\n")
+	if strings.TrimSpace(text) == "" {
+		v.Notice = "Nothing to add: the brief is empty."
+		return v, nil
+	}
+	if sock == nil {
+		v.Notice = "No session connection is open."
+		return v, nil
+	}
+	// The collab authority's own encoder, so the terminal sends the identical
+	// shape an ingest append does rather than a second interpretation of it.
+	changes, err := collab.AppendChange(utf16Len(v.Snapshot.DocText), text)
+	if err != nil {
+		return v, err
+	}
+	payload := relay.TextDeltaPayload{
+		DocumentID:  contracts.DocumentIDPRD,
+		BaseVersion: v.Snapshot.DocVersion,
+		Updates: []relay.Update{{
+			// The authority requires the client id to start with this member's
+			// id followed by a colon, and rejects the push otherwise.
+			ClientID: v.Snapshot.MemberID + ":terminal",
+			Changes:  changes,
+		}},
+	}
+	cmd, err := command(v.Snapshot.sessionID(), relay.EventTextDelta, payload)
+	if err != nil {
+		return v, err
+	}
+	if err := sock.send(cmd); err != nil {
+		return v, err
+	}
+	// Trust arrives as TEXT_ACK, which sets the new version; the draft is applied
+	// optimistically to readable state only, never to DocVersion.
+	v.Snapshot.DocText += text
+	if v.Snapshot.DocText != "" && !strings.HasSuffix(v.Snapshot.DocText, "\n") {
+		v.Snapshot.DocText += "\n"
+	}
+	v.Draft = ""
+	v.Editing = false
+	v.Notice = "Brief appended; waiting for the authority to accept it."
+	return v, nil
+}
+
+// utf16Len counts a string the way the collab authority indexes it: UTF-16 code
+// units, so an emoji is two and a plain ASCII character is one.
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		if r > 0xFFFF {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return n
 }
 
 // approveCommand builds the APPROVE payload the reducer validates.

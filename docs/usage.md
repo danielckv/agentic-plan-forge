@@ -377,6 +377,12 @@ never mistaken for the fixed team. The questions pane is the terminal equivalent
 the recommended one marked — a hint, never an answer. On that pane `1`–`9` answer the selected question; everywhere else
 those digits select a pane.
 
+The brief is writable from the terminal too. On the brief pane, `e` opens an editor, every printable key is text
+(so a brief containing `q` or `a` is not taken as a quit or an approval), `Enter` adds a line, `Backspace` deletes
+one character, `Ctrl-S` appends the text to the document, and `Esc` cancels without sending anything. An empty draft
+sends nothing. The editor refuses once the document is frozen, which the authority enforces: document edits are only
+accepted while the session is still reading the brief.
+
 Progress is always a list, never an attempted 3D scene: a terminal is the worst place to pretend otherwise, and the
 plan asks for a state-equivalent view. Closing the terminal does not cancel the run; quitting the shell ends the
 frontend, not the session.
