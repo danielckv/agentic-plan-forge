@@ -1,6 +1,23 @@
 # Follow-ups
 
-This document tracks open follow-up work for Plan Forge maintainers. It covers observed defects and pending improvements, ordered newest first.
+Open work for Plan Forge maintainers, newest first. Each entry says what was observed, not what might be nice.
+
+## `install --host omp` warns that no host can generate, even when Claude is signed in
+
+Observed 2026-10-31. `plan-forge install --host omp` on a machine with a signed-in Claude Code prints the "no
+generation host" warning. The warning counts only the hosts named in `--host`, and oh-my-pi never generates (ADR 0027).
+In the same command, `cmd/client/cmd_install.go:83` tests `omp && ready`, which can never be true now that oh-my-pi
+reports "integration only": that branch is dead.
+
+Next: compute the warning from every generation host found on the machine, not from `--host`, and delete the dead
+branch at `cmd_install.go:83`.
+
+## Two web lint warnings
+
+`npm run lint` exits 0 with two warnings. `web/src/pages/Page2AvatarCanvas.tsx:249` has a `react-hooks/exhaustive-deps`
+warning. `web/src/vite-env.d.ts:8` has an unused `eslint-disable` directive.
+
+Next: fix both, then make lint fail on warnings (`--max-warnings 0`).
 
 ## The room needs to show thinking during long stages
 
