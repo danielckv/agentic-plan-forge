@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-31
+
 ### Added
 
 - **A sprint board.** The approved plan as columns of work to commit to: a backlog and as many sprints as you ask
@@ -63,7 +65,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   candidate list; an installation signed in to Claude Code alone and not invoked from it had no judge at all.
 - The brief pane in the terminal bounded its tail by source lines, so one unwrapped paragraph rendered as hundreds of
   lines and pushed the header off the screen. The bound is on rendered lines now, with a count of what is not shown.
-
 - The composer page is wider (1760px instead of 1600px) and its plan rail takes the larger share and never drops below
   420px, instead of a fixed 384px. The rail's seven tabs keep their full labels at any width: below 620px of rail the
   labels hide and the icons stay, instead of every label being clipped mid-word.
@@ -516,7 +517,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...v0.8.2
