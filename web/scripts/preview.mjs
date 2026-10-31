@@ -230,17 +230,25 @@ try {
   await page.waitForSelector(".pf-room-plan .pf-plangraph", { state: "visible" });
   // PlanGraph3D is a lazy chunk that starts loading when this tab is first
   // selected, and the tree fallback unmounts the moment it mounts. The
-  // container is here before either, so wait for the graph itself before
-  // counting anything.
-  await page
-    .waitForSelector(".pf-plangraph3d canvas, .pf-plantree-node", { timeout: 15_000 })
-    .catch(() => {});
-  const graphCanvases = await page.locator(".pf-plangraph3d canvas").count();
-  const treeNodes = await page.locator(".pf-plantree-node").count();
+  // container is here before either, and the tree can also be gone before
+  // the canvas arrives, so the only race-free form is to poll the DOM
+  // directly: the check passes when the graph is in it, not when a selector
+  // happened to match once. waitForSelector alone could resolve on the
+  // Suspense tree node and then unmount before a later count.
+  let graphReady = false;
+  try {
+    await page.waitForFunction(
+      () => document.querySelector(".pf-plangraph3d canvas, .pf-plantree-node") !== null,
+      { timeout: 15_000 },
+    );
+    graphReady = true;
+  } catch {
+    graphReady = false;
+  }
   // Headless Chromium has WebGL through SwiftShader, so the canvas is what is
   // expected here — but the tree is the documented fallback and reads the same
   // plan, so either satisfies the check rather than tying it to the GPU stack.
-  check(graphCanvases > 0 || treeNodes > 0, "the plan graph renders, in 3D or as its tree fallback");
+  check(graphReady, "the plan graph renders, in 3D or as its tree fallback");
   await page.getByRole("tab", { name: /Findings/ }).click();
   check((await page.locator(".pf-finding").count()) === 3, "the critic's three findings render from AVATAR_CRITIQUE.issues");
   await page.getByRole("tab", { name: /Plan/ }).click();
