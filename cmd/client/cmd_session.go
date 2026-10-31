@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -173,18 +174,7 @@ func runSessionChild(ctx context.Context, args []string) int {
 	if err != nil {
 		return fail(err)
 	}
-	var logger *slog.Logger
-	dayLog, derr := config.OpenLogFile(time.Now())
-	if derr == nil {
-		defer dayLog.Close()
-		logger = slog.New(slog.NewTextHandler(dayLog, nil))
-	}
-	if logPath, lerr := app.LogPath(sessionID); lerr == nil {
-		if f, ferr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); ferr == nil {
-			defer f.Close()
-			logger = slog.New(slog.NewTextHandler(f, nil))
-		}
-	}
+	logger := newChildLogger(sessionID)
 	res := app.Run(ctx, app.Options{
 		SessionID: sessionID,
 		Repo:      repoFlag,
@@ -197,6 +187,31 @@ func runSessionChild(ctx context.Context, args []string) int {
 		Logger:    logger,
 	})
 	return res.ExitCode
+}
+
+// newChildLogger wires the detached child's slog output to the rotating day log
+// and the per-session cache log together: one record reaches both files. The
+// per-session log is what `plan-forge wait` tails, the day log is what an
+// owner inspects next to config.json. A file that cannot be opened is skipped
+// rather than fatal — the other one still receives the run, and Run works with
+// no logger at all. Closing belongs to the caller's process lifetime, so the
+// files stay open until exit.
+func newChildLogger(sessionID string) *slog.Logger {
+	var writers []io.Writer
+	// No defers here: the files must stay open after this function returns, for
+	// the life of the child process. The OS closes them on exit.
+	if dayLog, derr := config.OpenLogFile(time.Now()); derr == nil {
+		writers = append(writers, dayLog)
+	}
+	if logPath, lerr := app.LogPath(sessionID); lerr == nil {
+		if f, ferr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); ferr == nil {
+			writers = append(writers, f)
+		}
+	}
+	if len(writers) == 0 {
+		return nil
+	}
+	return slog.New(slog.NewTextHandler(io.MultiWriter(writers...), nil))
 }
 
 func runWait(ctx context.Context, args []string) int {

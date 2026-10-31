@@ -342,6 +342,9 @@ func runSession(ctx context.Context, opts Options, relayID *string, write func(S
 	if err != nil {
 		return classify(err)
 	}
+	// The run record: the first line a detached child writes to its log pair,
+	// naming the session so `wait` output and the day log can be correlated.
+	log.Info("session run started", "session", id, "repo", repo, "mode", opts.Mode, "detached", opts.Detached)
 
 	// Generation host. Resolving it now makes a missing sign-in exit 3 before a
 	// window opens; the router caches the result for the run.
