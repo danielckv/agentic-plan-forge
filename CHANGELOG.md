@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Log files live in the Plan Forge home: `run` and `join` append to `~/.plan-forge/logs/plan-forge-YYYY-MM-DD.log`
+  (mode 0600), a new file per day, and files older than two days are deleted on the next open. Detached sessions keep
+  their per-session cache log as before.
 - The plan opens full screen, from either rendering: an Expand control in the plan rail's own bar opens the same graph in
   a dialog that fills the viewport. Clicking a node in the 3D view shows its kind, title, summary and worst finding
   beside the scene.

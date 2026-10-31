@@ -66,6 +66,8 @@ same commit.
 - An API key is written to `~/.plan-forge/credentials.json` with owner-only permissions, outside `config.json`
   because that file ends up in bug reports. It is never echoed, logged or written into a run receipt; the window only
   receives a masked form. `plan-forge uninstall --purge` deletes it.
+- Logs stay on your machine: `~/.plan-forge/logs/plan-forge-YYYY-MM-DD.log`, mode 0600, deleted after two days.
+  They hold paths and model names, never API keys.
 - Nothing is written to your repository without an approval. A prepared VM receives a packaged archive, never a
   clone, and never your GitHub write token.
 
