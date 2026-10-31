@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-31
+
 ### Fixed
 
 - Gemini normalization failed on every section with `400 ... Request contains an invalid argument`. The API refused the
@@ -28,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or a `role_models` entry naming it is the whole opt-in, and then it is used even when Claude Code or a provider key
   is ready. The pin is scoped to what named it — a `main_host` pin covers its slot, a `role_models` entry covers the
   roles it lists — so an unpinned role keeps spreading across the other ready hosts and the invoking host never
-  qualifies. Without a pin oh-my-pi reports no placement. Supersedes ADR 0025 with ADR 0026.
+  qualifies. Without a pin oh-my-pi reports no placement. Supersedes ADR 0025 with
+  [ADR 0026](docs/adrs/0026-oh-my-pi-serves-an-explicit-pin-only.md).
 - Installing over an existing copy starts from defaults on macOS and Linux: `uninstall --purge --yes` runs before
   registration, so a previous `main_host`, timeout or host choice does not survive. `credentials.json` is preserved.
 - `plan-forge install --host auto` selects Claude Code and Antigravity. Oh-my-pi is never selected automatically;
@@ -38,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `agy` serves generation through an isolated profile that Plan Forge provisions at
+  `$PLAN_FORGE_HOME/profiles/agy` (0700), whose Plan-Forge-owned `settings.json` (0600) denies every tool family. Every
+  agy child runs with `HOME` and `USERPROFILE` rewritten into that directory, and preflight validates the policy before
+  a spawn, so a drifted profile fails closed instead of running with tools. A host-level agy sign-in does not carry
+  over: `plan-forge doctor` prints the one-time sign-in command. Reasoning:
+  [ADR 0030](docs/adrs/0030-agy-generation-runs-in-an-isolated-profile.md).
 - Log files live in the Plan Forge home: `run` and `join` append to `~/.plan-forge/logs/plan-forge-YYYY-MM-DD.log`
   (mode 0600), a new file per day, and files older than two days are deleted on the next open. Detached sessions keep
   their per-session cache log as before.
@@ -446,7 +455,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.0...v0.8.1
