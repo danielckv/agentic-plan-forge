@@ -19,8 +19,15 @@ still a silent second choice, and a silent second choice on a stage that shapes 
 
 - `main_host: omp`, `judge_host: omp` and a `role_models` entry naming `omp` are the whole opt-in. A pin is the owner
   saying they want it, so the router honours it even when Claude Code or a provider key is ready.
+- A pin is **scoped to what named it**. `main_host` covers every role on the MAIN slot and `judge_host` every role on
+  the judge slot; a `role_models` entry covers exactly the roles it names. An unpinned role spreads to the other ready
+  hosts and never inherits oh-my-pi from somebody else's pin.
+- The invoking host does not qualify. The hook runs inside oh-my-pi, so `r.invokedHost` is `KindOMP` for every role of
+  every run; honouring it would restore the implicit default this ADR removes.
+- The eligibility check runs before the readiness cache. A pinned placement caches the resolved adapter in
+  `r.ready[KindOMP]`, and an unpinned role reaching oh-my-pi later in the walk must not take it from there.
 - Without a pin, `omp` never serves. `fallbackHosts()` lists claude and agy only, the role-rotation tail lists claude
-  and agy only, and `Router.selectCandidatesLocked` skips `KindOMP` with a reason that names the pin.
+  and agy only, and `selectCandidatesLocked` skips `KindOMP` with a reason naming the pin.
 - `plan-forge install --host auto` never selects oh-my-pi. `--host omp` installs its command and hook.
 - `config.IsValidHost("omp")` is true again. Validation accepts the pin; it no longer rejects it with migration text.
 - An installation holding nothing but oh-my-pi reports no usable generation host. The remedy is a pin, not a fallback.
@@ -29,6 +36,8 @@ still a silent second choice, and a silent second choice on a stage that shapes 
 
 - `TestOMPIsNotAFallbackWhenNothingElseCanServe` locks the default: an omp-only installation without a pin fails.
 - `TestOMPServesWhenPinnedAsMainHost` and `TestOMPServesAPinnedRole` lock the opt-in in both directions.
+- `TestOMPPinDoesNotLeakToUnpinnedRoles` and `TestOMPPinDoesNotLeakThroughTheReadyCache` lock the scope: a
+  `role_models` pin serves that role only, even with `invokedHost` set to oh-my-pi.
 - `TestAutoHostsNeverSelectsOMPAlone` locks the installer: naming the host is the way to want it.
 - The skip reason in `doctor` and `/api/status` says the pin that would let it serve.
 

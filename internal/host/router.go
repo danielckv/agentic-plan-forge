@@ -263,7 +263,7 @@ func (r *Router) PlaceRole(ctx context.Context, role contracts.RoleID, lane stri
 	if p, ok := r.byRole[key]; ok {
 		return p, nil
 	}
-	resolved, err := r.selectCandidatesLocked(ctx, slot, r.roleCandidates(role, lane, slot))
+	resolved, err := r.selectCandidatesLocked(ctx, slot, role, r.roleCandidates(role, lane, slot))
 	if err != nil {
 		return Placement{}, err
 	}
@@ -339,7 +339,7 @@ func (r *Router) resolveLocked(ctx context.Context, slot contracts.ModelSlot) (r
 		if r.main != nil {
 			return *r.main, false, nil
 		}
-		resolved, err := r.selectCandidatesLocked(ctx, slot, r.mainCandidates())
+		resolved, err := r.selectCandidatesLocked(ctx, slot, "", r.mainCandidates())
 		if err != nil {
 			return resolvedAdapter{}, false, err
 		}
@@ -358,7 +358,7 @@ func (r *Router) resolveLocked(ctx context.Context, slot contracts.ModelSlot) (r
 		r.judge = &main
 		return main, r.judgeSharesMainModel(), nil
 	}
-	resolved, err := r.selectCandidatesLocked(ctx, slot, r.judgeCandidates())
+	resolved, err := r.selectCandidatesLocked(ctx, slot, "", r.judgeCandidates())
 	if err != nil {
 		return resolvedAdapter{}, false, err
 	}
@@ -366,7 +366,7 @@ func (r *Router) resolveLocked(ctx context.Context, slot contracts.ModelSlot) (r
 	return resolved, false, nil
 }
 
-func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.ModelSlot, candidates []Kind) (resolvedAdapter, error) {
+func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.ModelSlot, role contracts.RoleID, candidates []Kind) (resolvedAdapter, error) {
 	var attempts []SkipReason
 	skip := func(kind Kind, probe, reason string) {
 		attempts = append(attempts, SkipReason{Kind: kind, Probe: probe, Reason: reason})
@@ -381,16 +381,16 @@ func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.Mode
 		if r.unusable[kind] {
 			continue
 		}
+		if kind == KindOMP && !r.ompEligible(role, slot) {
+			// oh-my-pi serves an explicit pin only (ADR 0026), and the pin is
+			// scoped to the role or slot that named it. This check runs before
+			// the readiness cache: a pinned placement caches the adapter, and
+			// an unpinned role must not inherit it.
+			skip(kind, "detect", "oh-my-pi serves only the main_host, judge_host or role_models pin that named it")
+			continue
+		}
 		if ready, ok := r.ready[kind]; ok {
 			return ready, nil
-		}
-		if kind == KindOMP && !r.ompPinned() {
-			// oh-my-pi serves an explicit pin only (ADR 0026). It reaches this
-			// walk through r.invokedHost, a role rotation that names it, or a
-			// stale candidate list — never through the defaults. Say so rather
-			// than probing a host that may not serve.
-			skip(kind, "detect", "oh-my-pi serves only an explicit main_host or role_models pin")
-			continue
 		}
 		version, err := adapter.Detect(ctx)
 		if err != nil {
@@ -440,18 +440,24 @@ func fallbackHosts() []Kind {
 	return []Kind{KindClaude, KindAGY}
 }
 
-// ompPinned reports whether the owner named oh-my-pi in this configuration.
-// Only a pin lets it serve: no default, no rotation and no fallback does.
-func (r *Router) ompPinned() bool {
-	if Kind(r.cfg.MainHost) == KindOMP || Kind(r.cfg.JudgeHost) == KindOMP {
+// ompEligible reports whether oh-my-pi may serve this particular resolution.
+// A pin is scoped: a slot pin (main_host / judge_host) covers every role on
+// that slot, and a role_models pin covers exactly the roles it names. The
+// invoking host does not qualify — the hook runs inside oh-my-pi, so
+// r.invokedHost is KindOMP for every role of every run, and honouring it would
+// make the opt-in the default it replaces.
+func (r *Router) ompEligible(role contracts.RoleID, slot contracts.ModelSlot) bool {
+	if slot == contracts.SlotJudge {
+		return Kind(r.cfg.JudgeHost) == KindOMP
+	}
+	if Kind(r.cfg.MainHost) == KindOMP {
 		return true
 	}
-	for _, binding := range r.cfg.RoleModels {
-		if Kind(binding.Host) == KindOMP {
-			return true
-		}
+	if role == "" {
+		return false
 	}
-	return false
+	binding, ok := r.cfg.RoleBindingFor(string(role))
+	return ok && Kind(binding.Host) == KindOMP
 }
 
 // roleCandidates orders the adapters one avatar tries. A role_models host comes

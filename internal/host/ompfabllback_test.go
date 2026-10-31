@@ -65,8 +65,8 @@ func TestOMPServesWhenPinnedAsMainHost(t *testing.T) {
 	}
 }
 
-// A role_models pin is the same statement for one role, so omp serves that
-// role's calls and nothing else.
+// A role_models pin is the same statement for one role: omp serves that role,
+// and the scope tests below prove it does not leak to the others.
 func TestOMPServesAPinnedRole(t *testing.T) {
 	r := ompRouter(map[Kind]Adapter{
 		KindClaude: &routingAdapter{kind: KindClaude, version: "2.1.0", ready: true},
