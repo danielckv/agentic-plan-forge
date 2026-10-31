@@ -33,7 +33,3 @@ function probe(): boolean {
   }
 }
 
-/** resetWebGLProbe clears the cache. Tests only. */
-export function resetWebGLProbe(): void {
-  cached = null;
-}

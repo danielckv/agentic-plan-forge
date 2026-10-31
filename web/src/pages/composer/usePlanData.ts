@@ -18,7 +18,7 @@ import {
  * rail.
  */
 
-export interface PlanFilesState {
+interface PlanFilesState {
   files: PlanFile[];
   revision: number;
   loaded: boolean;

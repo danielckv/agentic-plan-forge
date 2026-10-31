@@ -43,14 +43,12 @@ import { JiraMatrix } from "./JiraMatrix";
  * extracted from `spec_markdown` headings.
  */
 
-export type { EpicRow };
-
-export interface GanttChips {
+interface GanttChips {
   human: string;
   agent: string;
 }
 
-export interface SpecView {
+interface SpecView {
   markdown: string;
   epics: EpicRow[];
   architectureDiagram: string;

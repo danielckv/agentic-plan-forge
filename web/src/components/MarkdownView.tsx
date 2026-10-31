@@ -18,7 +18,7 @@ import { MermaidSvg } from "./MermaidSvg";
  * - preview debounce is 120ms (handled by callers).
  */
 
-export interface MarkdownViewProps {
+interface MarkdownViewProps {
   markdown: string;
   /** Confirm-then-launch handler for inert links (`POST /api/open-url`). */
   onOpenUrl?: (url: string) => void;

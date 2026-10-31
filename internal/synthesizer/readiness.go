@@ -41,15 +41,6 @@ func IsIntegrated(c contracts.Critique) bool {
 	return hasRefPrefix(c.ResolutionRef, IntegratedRefPrefix)
 }
 
-// IntegratedRationale returns the leader's reason for closing a finding
-// without a repair.
-func IntegratedRationale(c contracts.Critique) string {
-	if !IsIntegrated(c) {
-		return ""
-	}
-	return trimPrefix(c.ResolutionRef, IntegratedRefPrefix)
-}
-
 // Readiness is the deterministic verdict on one candidate. It states what the
 // plan is worth before the reader meets the design it judges, and it never
 // claims more than the input proves:
@@ -218,11 +209,4 @@ func sortByID(list []contracts.Critique) {
 
 func hasRefPrefix(ref, prefix string) bool {
 	return len(ref) >= len(prefix) && ref[:len(prefix)] == prefix
-}
-
-func trimPrefix(s, prefix string) string {
-	if hasRefPrefix(s, prefix) {
-		return s[len(prefix):]
-	}
-	return s
 }

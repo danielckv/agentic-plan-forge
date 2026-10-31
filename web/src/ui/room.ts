@@ -48,7 +48,7 @@ export const WORKING_STATUS: ReadonlySet<string> = new Set([
 ]);
 
 /** The avatar that locks the design once the cycle is finished. */
-export const SYNTHESIZER_ID = "synthesizer";
+const SYNTHESIZER_ID = "synthesizer";
 
 /**
  * The avatar that narrates the run. It holds no draft, publishes only the
@@ -115,7 +115,7 @@ export function workingAvatars(input: RoomInput, avatarIds: readonly string[]): 
   return out;
 }
 
-export interface RunFailure {
+interface RunFailure {
   avatarId: string;
   summary: string;
 }

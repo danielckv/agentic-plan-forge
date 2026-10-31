@@ -118,15 +118,6 @@ func Validate(schemaID string, raw []byte) error {
 	return nil
 }
 
-// ValidateJSON marshals v and validates it against schemaID.
-func ValidateJSON(schemaID string, v any) error {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return Wrap(CodeInternal, err, "marshal for schema %s", schemaID)
-	}
-	return Validate(schemaID, raw)
-}
-
 // SchemaPath writes the embedded schema to a 0600 temporary file and returns its
 // path. Host CLIs that accept a schema file (Antigravity's --json-schema, for
 // example) need a real path, and the file must not be world-readable because

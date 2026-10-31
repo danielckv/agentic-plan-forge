@@ -3,7 +3,7 @@
  * rules are testable; the DOM half only filters what can really take focus.
  */
 
-export const FOCUSABLE_SELECTOR = [
+const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
   "input:not([disabled]):not([type='hidden'])",
@@ -17,18 +17,18 @@ export const FOCUSABLE_SELECTOR = [
  * focusable elements when focus is on index `current` (`-1` = outside the list).
  * Focus wraps at both ends. Returns `-1` when there is nothing to focus.
  */
-export function nextFocusIndex(length: number, current: number, backwards: boolean): number {
+function nextFocusIndex(length: number, current: number, backwards: boolean): number {
   if (length <= 0) return -1;
   if (current < 0 || current >= length) return backwards ? length - 1 : 0;
   return (current + (backwards ? -1 : 1) + length) % length;
 }
 
 /** Layout-aware default: an element with no client rects is not reachable. */
-export function isRendered(el: HTMLElement): boolean {
+function isRendered(el: HTMLElement): boolean {
   return el.getClientRects().length > 0;
 }
 
-export function focusableWithin(
+function focusableWithin(
   container: HTMLElement,
   visible: (el: HTMLElement) => boolean = isRendered,
 ): HTMLElement[] {

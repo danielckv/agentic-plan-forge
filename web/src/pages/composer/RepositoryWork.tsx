@@ -24,7 +24,7 @@ const FILTERS: { id: WorkFilter; label: string; kinds: RepositoryDocument["kind"
 ];
 
 /** How an item's status reads; `unknown` is stated, never guessed. */
-export const STATUS_LABEL: Record<string, string> = {
+const STATUS_LABEL: Record<string, string> = {
   open: "open",
   done: "done",
   unknown: "status unknown",

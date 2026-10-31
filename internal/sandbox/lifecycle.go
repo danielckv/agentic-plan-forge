@@ -90,38 +90,6 @@ func hasOKReceipt(receipts []Receipt, kind ReceiptKind) bool {
 	return false
 }
 
-// Reconcile folds one provider observation into the persisted record and
-// returns the updated value. It never mutates the receiver: the caller
-// persists the result and keeps the old value until that succeeded.
-//
-// Mapping:
-//   - a provider lease past its expiry becomes expired, whatever the
-//     provider still claims;
-//   - a missing sandbox becomes stopped — it was stopped before it vanished;
-//   - a transport failure the caller observed becomes unknown;
-//   - otherwise the provider's state is normalized in.
-func (l Lifecycle) Reconcile(info Info, now time.Time) Lifecycle {
-	next := l
-	next.State = Normalize(info.State)
-	if !info.ExpiresAt.IsZero() {
-		next.ExpiresAt = info.ExpiresAt
-	}
-	if !next.ExpiresAt.IsZero() && now.After(next.ExpiresAt) {
-		next.State = StateExpired
-	}
-	switch info.State {
-	case "":
-		// No provider view reached the caller: the last observation stands,
-		// downgraded to unknown so nothing presents progress as fact.
-		if l.State != StateUnknown {
-			next.State = StateUnknown
-		}
-	case missingState:
-		next.State = StateStopped
-	}
-	return next
-}
-
 // ReconcileUnknown marks a transport failure at the caller: the provider's
 // true state cannot be seen, so the record must say unknown rather than
 // repeating a stale progress state.
@@ -130,11 +98,6 @@ func (l Lifecycle) ReconcileUnknown() Lifecycle {
 	next.State = StateUnknown
 	return next
 }
-
-// missingState is the provider-side marker for "no such sandbox" in an Info
-// value, for callers that fold Inspect results through Reconcile instead of
-// handling ErrSandboxNotFound separately.
-const missingState = "missing"
 
 // MarkFailed records a bounded failure with its reason and moves the lease
 // to failed unless it already reached a terminal state.

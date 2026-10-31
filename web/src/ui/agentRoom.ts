@@ -1,5 +1,5 @@
 import { MAIN_AVATARS, avatarSpec } from "../components/avatars/AvatarBadge";
-import { parseArchitectDraft, parsePMDraft } from "../protocol/drafts";
+import { parseArchitectDraft } from "../protocol/drafts";
 import type { SyncState } from "../store/syncStore";
 
 /**
@@ -84,7 +84,7 @@ export function roomStatus(sync: SyncState, id: string): RoomStatus {
 }
 
 /** A workstream as the room needs it: the id and the role the architect gave it. */
-export interface RoomWorkstream {
+interface RoomWorkstream {
   id: string;
   role: string;
 }
@@ -221,7 +221,7 @@ function angleOfParent(index: number, count: number): number {
 }
 
 /** The fused candidate at the centre of the room. */
-export interface FusedCandidate {
+interface FusedCandidate {
   present: boolean;
   label: string;
   /** Findings still open against the candidate. */
@@ -247,12 +247,3 @@ export function workingInRoom(room: readonly RoomAgent[]): number {
   return room.filter((a) => a.status === "working").length;
 }
 
-/**
- * The epics a specialist's workstream was assigned, so a face can say what its
- * owner is actually building. Empty when the architect has not placed it yet.
- */
-export function specialistStoryCount(sync: SyncState): number {
-  const draft = sync.drafts.find((d) => d.avatarId === "pm");
-  const pm = parsePMDraft(draft?.data);
-  return pm === null ? 0 : pm.stories.length;
-}

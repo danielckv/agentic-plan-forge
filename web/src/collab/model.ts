@@ -1,4 +1,4 @@
-import { ChangeSet, type ChangeDesc } from "@codemirror/state";
+import { ChangeSet } from "@codemirror/state";
 
 /**
  * CodeMirror collab client model (central OT authority lives in Go).
@@ -8,7 +8,7 @@ import { ChangeSet, type ChangeDesc } from "@codemirror/state";
  */
 
 /** One local update pending central acknowledgement. */
-export interface LocalUpdate {
+interface LocalUpdate {
   clientID: string;
   changes: ChangeSet;
 }
@@ -28,11 +28,6 @@ export function sendableUpdates(pending: LocalUpdate[], baseVersion: number): {
     base_version: String(baseVersion),
     updates: pending.map((u) => ({ client_id: u.clientID, changes: u.changes.toJSON() })),
   };
-}
-
-/** Deserialize a ChangeSet from `TEXT_UPDATES` payload JSON. */
-export function changeSetFromJSON(json: unknown): ChangeSet {
-  return ChangeSet.fromJSON(json as ChangeDesc);
 }
 
 /**
@@ -58,12 +53,4 @@ export function insertAllowed(text: string): boolean {
   return true;
 }
 
-/** `sha256(utf8(text))` for `TEXT_CHECK` idle verification. */
-export async function textSha256(text: string): Promise<string> {
-  const bytes = new TextEncoder().encode(text);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 

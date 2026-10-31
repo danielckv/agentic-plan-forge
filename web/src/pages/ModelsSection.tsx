@@ -17,7 +17,7 @@ import type { SettingsDocument } from "../ui/settings";
  * of it is pinned" — changing the pins stays in `plan-forge config`.
  */
 
-export interface ModelsState {
+interface ModelsState {
   settings: SettingsDocument | null;
   catalogue: ModelCatalogEntry[] | null;
   message: string | null;

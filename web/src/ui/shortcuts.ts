@@ -4,7 +4,7 @@
  * with Ctrl, Cmd, or Alt held, so they cannot shadow browser or editor chords.
  */
 
-export type ShortcutAction = "toggle-sidebar" | "help" | "focus-filter";
+type ShortcutAction = "toggle-sidebar" | "help" | "focus-filter";
 
 /** Dispatched on `window` for `/`; Page 3 cancels it after focusing its filter. */
 export const FOCUS_FILTER_EVENT = "pf:focus-filter";
@@ -40,7 +40,7 @@ export function shortcutFor(e: ShortcutKeyEvent): ShortcutAction | null {
   return ACTION_BY_KEY[e.key] ?? null;
 }
 
-export interface ShortcutHelpEntry {
+interface ShortcutHelpEntry {
   keys: string[];
   label: string;
   /** Where it applies, when not everywhere. */

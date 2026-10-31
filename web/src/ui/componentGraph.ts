@@ -1,4 +1,4 @@
-import type { ComponentRef, GraphEdge, GraphNode, GraphView } from "../protocol/api";
+import type { ComponentRef, GraphNode, GraphView } from "../protocol/api";
 
 /**
  * Pure logic for the 2D component graph overlay.
@@ -19,13 +19,13 @@ export interface PlacedGraphNode {
 }
 
 /** A laid-out edge, referencing the placed endpoints. */
-export interface PlacedGraphEdge {
+interface PlacedGraphEdge {
   from: PlacedGraphNode;
   to: PlacedGraphNode;
   kind: "imports" | "contains";
 }
 
-export interface GraphLayout {
+interface GraphLayout {
   nodes: PlacedGraphNode[];
   edges: PlacedGraphEdge[];
   /** The space the drawing occupies, so the viewBox can fit it. */
@@ -104,7 +104,7 @@ export function layoutGraph(view: GraphView): GraphLayout {
 }
 
 /** The context panel text for one node: what it is, where, and how big. */
-export interface NodeContext {
+interface NodeContext {
   title: string;
   subtitle: string;
   rows: { label: string; value: string }[];
@@ -182,6 +182,3 @@ export function focusIdForComponent(ref: ComponentRef): string {
 export function focusIdForModule(path: string): string {
   return path === "" ? "module:" : `module:${path}`;
 }
-
-/** Types re-exported so the component imports from one place. */
-export type { ComponentRef, GraphEdge, GraphNode, GraphView };

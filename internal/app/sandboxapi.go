@@ -33,7 +33,6 @@ type sandboxManager struct {
 	repo  string
 	cfg   sandbox.Settings
 	lease sandbox.Lifecycle
-	gate  *sandbox.AccessGate
 	prov  sandbox.Provider
 	// configured is false when no provider or key is available. Every launch
 	// then reports a setup problem, and nothing else in the product changes.
@@ -41,7 +40,7 @@ type sandboxManager struct {
 	setupHint  string
 
 	// appPort is the port inside the sandbox the preview serves. The lifecycle
-	// record does not carry it because it belongs to this side of the proxy.
+	// record does not carry it because it belongs to this side, not the lease.
 	appPort int
 	// drive runs the recorded commands inside the lease. It is a field so a test
 	// can substitute a driver that never reaches a provider.
@@ -185,8 +184,8 @@ func (m *sandboxManager) Launch(ctx context.Context, req LaunchRequest) LaunchRe
 		VCPU:           m.cfg.VCPU,
 		MemoryMB:       m.cfg.MemoryMB,
 		OperationID:    operationID,
-		// The preview is reachable only through this process's authenticated
-		// proxy, so the provider URL itself stays private.
+		// No public traffic: the provider URL carries a bearer token for the
+		// lease, so the window shows the sandbox ID instead of that URL.
 		AllowPublicTraffic: false,
 		Metadata:           map[string]string{"operation_id": operationID, "approval_id": req.ApprovalID},
 	})
@@ -281,9 +280,6 @@ func (m *sandboxManager) Stop(ctx context.Context) LaunchReport {
 		return report
 	}
 	m.lease.State = sandbox.StateStopped
-	if m.gate != nil {
-		m.gate.RevokeAll()
-	}
 	return m.report()
 }
 

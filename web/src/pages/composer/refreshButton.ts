@@ -11,7 +11,7 @@ import type { RefreshState } from "../../store/syncStore";
  */
 
 /** What the button says, and whether it can be pressed. */
-export interface RefreshLabel {
+interface RefreshLabel {
   text: string;
   hint: string;
   disabled: boolean;

@@ -15,7 +15,7 @@ import { ProviderSetup } from "./ProviderSetup";
 import { RuntimeLimitsSection } from "./RuntimeLimitsSection";
 import { SkillsSection } from "./SkillsSection";
 
-export type SetupTab = "general" | "models";
+type SetupTab = "general" | "models";
 
 /**
  * Setup: the hosts that serve this session's avatars, the tools its features

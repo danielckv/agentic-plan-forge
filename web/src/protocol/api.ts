@@ -169,7 +169,7 @@ export interface PlanFile {
 }
 
 /** GET /api/plan-files (`app.PlanFilesView`). */
-export interface PlanFilesView {
+interface PlanFilesView {
   revision: number;
   files: PlanFile[];
 }

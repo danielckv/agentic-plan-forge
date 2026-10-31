@@ -12,11 +12,11 @@
 import envelopeSchema from "@schema/envelope.v1.json";
 
 /** Event type names, derived from the schema so they can never drift. */
-export const eventTypeEnum: readonly string[] = (
+const eventTypeEnum: readonly string[] = (
   envelopeSchema.properties.event_type.enum as readonly string[]
 );
 
-export const isKnownEventType = (t: string): boolean => eventTypeEnum.includes(t);
+const isKnownEventType = (t: string): boolean => eventTypeEnum.includes(t);
 
 /** The nine business event types plus control and doc-channel events. */
 export type WSEventType = (typeof envelopeSchema.properties.event_type.enum)[number];
@@ -39,7 +39,7 @@ export interface WSEnvelope {
   payload: unknown;
 }
 
-export const WIRE_VERSION = 1;
+const WIRE_VERSION = 1;
 
 /**
  * Duplicate-key-strict, no-trailing-JSON, invalid-UTF-8 rejecting decode of
@@ -49,7 +49,7 @@ export const WIRE_VERSION = 1;
  * - trailing content after the first JSON value is a protocol violation;
  * - the `text` must parse as an object at the top level.
  */
-export function decodeEnvelope(text: string): { ok: true; value: WSEnvelope } | { ok: false; error: string } {
+function decodeEnvelope(text: string): { ok: true; value: WSEnvelope } | { ok: false; error: string } {
   let parsed: unknown;
   try {
     // JSON.parse rejects trailing content and malformed escapes; duplicate
@@ -72,7 +72,7 @@ export function decodeEnvelope(text: string): { ok: true; value: WSEnvelope } | 
 }
 
 /** Report duplicate keys the way the schema conformance suite expects. */
-export function findDuplicateKeys(text: string): string[] {
+function findDuplicateKeys(text: string): string[] {
   const dupes: string[] = [];
   const stack: Array<Set<string>> = [];
   let i = 0;
@@ -160,7 +160,7 @@ export function findDuplicateKeys(text: string): string[] {
   return dupes;
 }
 
-export interface FrameResult {
+interface FrameResult {
   ok: boolean;
   envelope?: WSEnvelope;
   error?: string;

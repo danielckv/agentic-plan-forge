@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 /** Matches Go `window.PostApprovalClose` (5 s): the binary closes the window. */
 export const POST_APPROVAL_CLOSE_SECONDS = 5;
 
-export type HostKind = "claude" | "omp" | "other";
+type HostKind = "claude" | "omp" | "other";
 
 export function hostKind(requestedHost: string | undefined): HostKind {
   const h = (requestedHost ?? "").trim().toLowerCase();
@@ -50,9 +50,9 @@ export function approveHint(requestedHost: string | undefined): string {
   return APPROVE_HINT[hostKind(requestedHost)];
 }
 
-export type HandoffStepState = "done" | "current" | "upcoming";
+type HandoffStepState = "done" | "current" | "upcoming";
 
-export interface HandoffStep {
+interface HandoffStep {
   id: "approved" | "plan-mode" | "validate";
   label: string;
   /** Monospace command shown after the label. */
@@ -88,7 +88,7 @@ export interface CountdownTimers {
   clear(handle: unknown): void;
 }
 
-export interface CountdownOptions {
+interface CountdownOptions {
   seconds?: number;
   now?: () => number;
   timers?: CountdownTimers;
@@ -97,7 +97,7 @@ export interface CountdownOptions {
   onChange: (remaining: number) => void;
 }
 
-export interface Countdown {
+interface Countdown {
   start(): void;
   stop(): void;
 }

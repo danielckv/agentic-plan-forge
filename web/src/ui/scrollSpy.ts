@@ -50,7 +50,7 @@ export function pickActiveSection(
   return active;
 }
 
-export function prefersReducedMotion(): boolean {
+function prefersReducedMotion(): boolean {
   return (
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
@@ -63,7 +63,7 @@ const CLICK_LOCK_MS = 700;
 /** Gap left above a section when the TOC scrolls to it. */
 const SCROLL_MARGIN_PX = 16;
 
-export interface ScrollSpy {
+interface ScrollSpy {
   active: string | null;
   /** Scroll to a section and mark it active immediately. */
   scrollTo: (id: string) => void;

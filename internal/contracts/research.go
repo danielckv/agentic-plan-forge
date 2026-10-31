@@ -162,26 +162,3 @@ type ResearchReport struct {
 	// that did not exist, or a source that could not be read.
 	Notes []string `json:"notes,omitempty"`
 }
-
-// Kept returns the findings that reach a stage: everything the user has not
-// dropped.
-func (r ResearchReport) Kept() []ResearchFinding {
-	out := make([]ResearchFinding, 0, len(r.Findings))
-	for _, f := range r.Findings {
-		if !f.Dropped {
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
-// OpenQuestions counts the questions no finding has answered.
-func (r ResearchReport) OpenQuestions() int {
-	n := 0
-	for _, q := range r.Questions {
-		if q.Status == ResearchOpen || q.Status == ResearchExhausted {
-			n++
-		}
-	}
-	return n
-}
