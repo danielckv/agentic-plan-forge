@@ -5,7 +5,9 @@ when it was taken. The long versions were separate files until 0.11.0; `git log 
 
 ## 0031. An agent CLI probe stops after 20 seconds, and oh-my-pi is found by its home directory
 
-2026-10-31. `install`, `doctor` and setup ask each agent CLI for `--version`, its sign-in state and its model list.
+2026-10-31. `install`, `doctor` and setup ask each generation host CLI for `--version`, its sign-in state and its model list.
+oh-my-pi is checked integration only: it is found by its home directory and never probed for sign-in or models, because it
+does not generate (0027).
 Those calls ran with `context.Background()` and no deadline, so one stalled CLI hung the whole command. `runProbe`
 in `internal/host/process.go` now stops every probe after 20 seconds and reports it as failed. A probe is a status
 check, not work: 20 seconds is far past a healthy answer, and a host that takes longer is not one to plan on.

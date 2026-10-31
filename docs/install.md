@@ -35,9 +35,6 @@ On macOS and Linux the installer purges the old state first, so a new release st
 
 oh-my-pi counts as found when `omp` is on `PATH` or `~/.omp/agent` exists. The second check matters: the oh-my-pi installer puts `omp` in `~/.local/bin`, which a piped install script often does not have on `PATH`.
 
-oh-my-pi counts as found when `omp` is on `PATH` or `~/.omp/agent` exists. The second check matters: the oh-my-pi
-installer puts `omp` in `~/.local/bin`, which a piped install script often does not have on `PATH`.
-
 | Agent | Skills | Hook |
 | :--- | :--- | :--- |
 | Claude Code | `~/.claude/skills/{plan-forge,plan-config}/SKILL.md` | `~/.claude/settings.json` |
@@ -71,7 +68,7 @@ plan-forge version
 plan-forge doctor
 ```
 
-`doctor` reports which agents were found, whether each is signed in, which models are available, and whether the hooks and skills are in place.
+`doctor` reports which agents were found, whether each generation host is signed in, which models are available, and whether the hooks and skills are in place. oh-my-pi is reported integration only: Plan Forge never asks it to generate (see `docs/decisions.md` 0027), so doctor checks only that its skills and hook are in place.
 
 ## Update
 

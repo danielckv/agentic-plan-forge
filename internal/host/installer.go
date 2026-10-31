@@ -475,8 +475,15 @@ func (in *Installer) planOMP(home string, opts InstallOptions) ([]artifact, erro
 	if opts.Scope == "project" {
 		skills = filepath.Join(opts.Repo, ".omp", "skills")
 		hooks = filepath.Join(opts.Repo, ".omp", "hooks", "pre")
+		if err := in.checkHostRoot(filepath.Join(opts.Repo, ".omp")); err != nil {
+			return nil, err
+		}
 	} else {
-		root := filepath.Join(home, ".omp", "agent")
+		ompRoot := filepath.Join(home, ".omp")
+		if err := in.checkHostRoot(ompRoot); err != nil {
+			return nil, err
+		}
+		root := filepath.Join(ompRoot, "agent")
 		if err := in.checkHostRoot(root); err != nil {
 			return nil, err
 		}

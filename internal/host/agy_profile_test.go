@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danielckv/agentic-plan-forge/internal/contracts"
 )
@@ -275,6 +276,39 @@ func TestAGYProbeWritesOnlyInsideProfile(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(hostHome, ".gemini")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("host ~/.gemini was touched: err = %v", err)
+	}
+}
+
+// An agy probe that never answers must stop at the deadline, not hang install
+// or doctor: runIsolatedProbe carries the same bound runProbe has.
+func TestAGYIsolatedProbeTimesOutOnStalledCLI(t *testing.T) {
+	pfHome, _ := setupAgyProfileEnv(t)
+	dir := t.TempDir()
+	stubPath(t, dir)
+	body := "#!/bin/sh\nexec /bin/sleep 30\n"
+	if err := os.WriteFile(filepath.Join(dir, "agy"), []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PLAN_FORGE_HOME", pfHome)
+
+	old := probeTimeout
+	probeTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { probeTimeout = old })
+
+	adapter := &AGY{binary: "agy"}
+	start := time.Now()
+	state, err := adapter.Auth(context.Background())
+	if err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+	if state.Ready {
+		t.Fatal("Auth ready against a stalled CLI")
+	}
+	if _, err := adapter.Models(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Models error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("probes returned after %s, want under 5s", elapsed)
 	}
 }
 

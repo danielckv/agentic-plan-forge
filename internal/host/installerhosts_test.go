@@ -154,6 +154,32 @@ func TestPlanRejectsUnsafeOMPRoot(t *testing.T) {
 	}
 }
 
+// The check must reach the root's parents: a symlinked ~/.omp whose agent
+// directory is a plain, safe directory still points the hook outside the home.
+func TestPlanRejectsUnsafeOMPParentRoot(t *testing.T) {
+	in, home := newTestInstaller(t)
+	stubPath(t, t.TempDir())
+	target := filepath.Join(home, "shared")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(target, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(home, ".omp")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".omp", "agent"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := in.Plan(context.Background(), InstallOptions{Host: "omp", Scope: "user"})
+	var pathErr *PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("Plan error = %v, want *PathError for a world-writable .omp parent", err)
+	}
+}
+
 // A CLI that never answers --version must not hang install: Plan passes
 // context.Background(), so the probe carries its own deadline.
 func TestProbeTimesOutOnStalledCLI(t *testing.T) {
