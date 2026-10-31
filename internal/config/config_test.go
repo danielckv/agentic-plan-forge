@@ -97,17 +97,33 @@ func TestValidationRejectsUnknownHosts(t *testing.T) {
 	}
 }
 
-// A pin naming omp is the owner wanting it, so validation accepts it.
-func TestValidationAcceptsAnOMPPin(t *testing.T) {
+// oh-my-pi runs Plan Forge; it does not generate for it. A config naming it
+// as a host is refused, and the message says what to do with the key.
+func TestValidationRefusesAnOMPHost(t *testing.T) {
+	cases := map[string]config.Config{}
+
 	cfg := config.Default()
 	cfg.MainHost = "omp"
-	if err := config.Validate(cfg); err != nil {
-		t.Fatalf("an omp main_host pin must validate: %v", err)
-	}
+	cases["main_host"] = cfg
+
+	cfg = config.Default()
+	cfg.JudgeHost = "omp"
+	cases["judge_host"] = cfg
+
 	cfg = config.Default()
 	cfg.RoleModels = map[string]config.RoleBinding{"architect": {Host: "omp"}}
-	if err := config.Validate(cfg); err != nil {
-		t.Fatalf("an omp role_models pin must validate: %v", err)
+	cases["role_models"] = cfg
+
+	for name, cfg := range cases {
+		err := config.Validate(cfg)
+		if err == nil {
+			t.Fatalf("%s: an omp host must be refused", name)
+		}
+		for _, want := range []string{"no longer generates", "keeps its skills"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: message %q does not mention %q", name, err, want)
+			}
+		}
 	}
 }
 

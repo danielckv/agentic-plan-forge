@@ -33,9 +33,26 @@ prefix is cached between stages, and the reply is constrained to the schema rath
 A model id is host-specific. `claude-opus-5-5-high` is an Antigravity name; Claude Code calls that family `opus` and
 404s on anything else. `plan-forge models` lists what each signed-in host offers.
 
-`omp` serves on an explicit pin only — never a default, never a fallback. One tool-free call costs 2.83s wall against
-1.10s of model time and about 2,900 tokens of the CLI's own scaffolding, on a run of 25 to 60 calls. The pin is scoped
-to what named it.
+**oh-my-pi does not generate.** It runs `/plan-forge` and keeps its skills and hook; naming it in `main_host`,
+`judge_host` or `role_models` is refused. The supported generation hosts are Claude, Antigravity/Gemini and the
+provider APIs.
+
+### What each avatar is given
+
+With nothing pinned, Plan Forge names the model per role, in three tiers:
+
+| Tier | Roles | Asked for |
+| :--- | :--- | :--- |
+| strong | architect, synthesizer, tech lead, product manager, ingestion | opus or argon, never downgraded to spread load |
+| standard | specialist, critic, code reviewer, temporary agents, impact | sonnet, or a pro/flash Gemini |
+| light | narrator | haiku, or a flash Gemini |
+
+Each tier is a preference list resolved against what the host actually lists, so an id a host does not serve falls
+through to the next and an exhausted list leaves the host its own default.
+
+**No model serves more than two avatars in one run.** A critic that reviews on the model that drafted agrees with
+itself. The cap applies only where Plan Forge chose: a pinned role uses its pin for every avatar of that role, however
+many there are. If every host is saturated the run proceeds anyway rather than failing.
 
 ## Keys
 

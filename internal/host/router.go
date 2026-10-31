@@ -263,18 +263,113 @@ func (r *Router) PlaceRole(ctx context.Context, role contracts.RoleID, lane stri
 	if p, ok := r.byRole[key]; ok {
 		return p, nil
 	}
-	resolved, err := r.selectCandidatesLocked(ctx, slot, role, r.roleCandidates(role, lane, slot))
+	p, err := r.placeUnderCapLocked(ctx, role, lane, slot)
 	if err != nil {
 		return Placement{}, err
 	}
-	p := Placement{
-		adapter: resolved.adapter,
-		Kind:    resolved.adapter.Kind(),
-		Version: resolved.version,
-	}
-	p.Model = r.modelForRoleLocked(ctx, role, lane, slot, p.Kind)
 	r.byRole[key] = p
 	return p, nil
+}
+
+// MaxAvatarsPerModel is how many avatars one model may serve in a run.
+//
+// Two is the cap because the point of spreading is a second opinion: a critic
+// that reviews on the model that drafted agrees with itself, and four
+// specialists on one model are one model's blind spots four times over. It is
+// also the rate-limit argument from ADR 0015, applied to the model rather than
+// to the host.
+const MaxAvatarsPerModel = 2
+
+// placeUnderCapLocked walks the role's candidates and takes the first whose
+// host and model pair is not already serving MaxAvatarsPerModel avatars.
+//
+// When every candidate is saturated it takes the first one anyway. A busy
+// model is worse than a spread one; no plan at all is worse than both.
+func (r *Router) placeUnderCapLocked(ctx context.Context, role contracts.RoleID, lane string, slot contracts.ModelSlot) (Placement, error) {
+	candidates := r.roleCandidates(role, lane, slot)
+	// The cap spreads a placement the owner left to Plan Forge. It never
+	// overrides one they made: pinning a role to a model means every avatar of
+	// that role uses it, however many that is.
+	capped := !r.ownerChoseLocked(role, slot)
+	var first *Placement
+	for len(candidates) > 0 {
+		resolved, err := r.selectCandidatesLocked(ctx, slot, role, candidates)
+		if err != nil {
+			if first != nil {
+				return *first, nil
+			}
+			return Placement{}, err
+		}
+		p := Placement{
+			adapter: resolved.adapter,
+			Kind:    resolved.adapter.Kind(),
+			Version: resolved.version,
+		}
+		p.Model = r.modelForRoleLocked(ctx, role, lane, slot, p.Kind)
+		if !capped || !r.modelAtCapLocked(p.Kind, p.Model) {
+			return p, nil
+		}
+		if first == nil {
+			taken := p
+			first = &taken
+		}
+		r.recordSkip(p.Kind, "throttle", fmt.Sprintf("%s already serves %d avatars in this run",
+			modelLabel(p.Model), MaxAvatarsPerModel))
+		candidates = candidatesAfter(candidates, p.Kind)
+	}
+	if first != nil {
+		return *first, nil
+	}
+	return Placement{}, &NoHostError{Slot: slot, Reasons: r.reasons}
+}
+
+// ownerChoseLocked reports whether the configuration names this placement:
+// a role_models entry, a slot host, or a slot-wide model.
+func (r *Router) ownerChoseLocked(role contracts.RoleID, slot contracts.ModelSlot) bool {
+	if role != "" {
+		if _, ok := r.cfg.RoleBindingFor(string(role)); ok {
+			return true
+		}
+	}
+	if slot == contracts.SlotJudge {
+		return r.cfg.JudgeHost != "" || r.cfg.DefaultJudgeModel != ""
+	}
+	return r.cfg.MainHost != "" || r.cfg.DefaultMainModel != ""
+}
+
+// modelAtCapLocked counts the avatars already placed on one host and model.
+// A placement that named no model is not counted: the host chose it, and two
+// hosts' defaults are not known to be the same model.
+func (r *Router) modelAtCapLocked(kind Kind, model string) bool {
+	if model == "" {
+		return false
+	}
+	used := 0
+	for _, p := range r.byRole {
+		if p.Kind == kind && p.Model == model {
+			used++
+		}
+	}
+	return used >= MaxAvatarsPerModel
+}
+
+// candidatesAfter drops everything up to and including the first occurrence of
+// kind, so the walk advances instead of resolving the same host again.
+func candidatesAfter(candidates []Kind, kind Kind) []Kind {
+	for i, c := range candidates {
+		if c == kind {
+			return candidates[i+1:]
+		}
+	}
+	return nil
+}
+
+// modelLabel names a model in a skip reason.
+func modelLabel(model string) string {
+	if model == "" {
+		return "the host default model"
+	}
+	return model
 }
 
 // Placements reports the host and model resolved for every avatar so far,
@@ -381,12 +476,11 @@ func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.Mode
 		if r.unusable[kind] {
 			continue
 		}
-		if kind == KindOMP && !r.ompEligible(role, slot) {
-			// oh-my-pi serves an explicit pin only (ADR 0026), and the pin is
-			// scoped to the role or slot that named it. This check runs before
-			// the readiness cache: a pinned placement caches the adapter, and
-			// an unpinned role must not inherit it.
-			skip(kind, "detect", "oh-my-pi serves only the main_host, judge_host or role_models pin that named it")
+		if kind == KindOMP {
+			// oh-my-pi is a harness that runs Plan Forge, not a host that
+			// generates for it. The check sits before the readiness cache so
+			// no earlier resolution can leave it there.
+			skip(kind, "detect", "oh-my-pi does not generate; it runs /plan-forge. Supported hosts: anthropic, gemini, antigravity, claude, openai, fireworks")
 			continue
 		}
 		if ready, ok := r.ready[kind]; ok {
@@ -438,26 +532,6 @@ func (r *Router) mainCandidates() []Kind {
 // the walk reaches these entries and takes the first that is ready.
 func fallbackHosts() []Kind {
 	return []Kind{KindClaude, KindAGY}
-}
-
-// ompEligible reports whether oh-my-pi may serve this particular resolution.
-// A pin is scoped: a slot pin (main_host / judge_host) covers every role on
-// that slot, and a role_models pin covers exactly the roles it names. The
-// invoking host does not qualify — the hook runs inside oh-my-pi, so
-// r.invokedHost is KindOMP for every role of every run, and honouring it would
-// make the opt-in the default it replaces.
-func (r *Router) ompEligible(role contracts.RoleID, slot contracts.ModelSlot) bool {
-	if slot == contracts.SlotJudge {
-		return Kind(r.cfg.JudgeHost) == KindOMP
-	}
-	if Kind(r.cfg.MainHost) == KindOMP {
-		return true
-	}
-	if role == "" {
-		return false
-	}
-	binding, ok := r.cfg.RoleBindingFor(string(role))
-	return ok && Kind(binding.Host) == KindOMP
 }
 
 // roleCandidates orders the adapters one avatar tries. A role_models host comes
@@ -529,10 +603,12 @@ func (r *Router) modelForRoleLocked(ctx context.Context, role contracts.RoleID, 
 	if want != "" && r.hostListsModelLocked(ctx, kind, want) {
 		return want
 	}
-	if rm, ok := r.adapters[kind].(interface {
-		RoleModel(role contracts.RoleID, lane string) string
-	}); ok {
-		if m := rm.RoleModel(role, lane); m != "" {
+	// Nothing pinned: Plan Forge names the model the role needs, so an
+	// architect is never handed whatever the host happened to default to. The
+	// ids are preferences, so one the host does not serve falls through, and
+	// an exhausted list leaves the host its own default.
+	for _, m := range defaultModelsFor(kind, role) {
+		if r.hostListsModelLocked(ctx, kind, m) {
 			return m
 		}
 	}
@@ -572,8 +648,13 @@ func (r *Router) hostListsModelLocked(ctx context.Context, kind Kind, id string)
 	return false
 }
 
+// judgeCandidates orders the hosts the JUDGE slot tries. The CLI hosts are at
+// the tail: before oh-my-pi stopped generating, r.invokedHost covered them by
+// accident, and an installation signed in to Claude Code alone had no judge at
+// all once that fell away.
 func (r *Router) judgeCandidates() []Kind {
-	return []Kind{Kind(r.cfg.JudgeHost), r.invokedHost, KindAnthropic, KindGemini, KindOpenAI}
+	candidates := []Kind{Kind(r.cfg.JudgeHost), r.invokedHost, KindAnthropic, KindGemini, KindOpenAI, KindFireworks}
+	return append(candidates, fallbackHosts()...)
 }
 
 func (r *Router) modelForSlot(slot contracts.ModelSlot) string {

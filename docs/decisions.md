@@ -3,11 +3,36 @@
 Why each boundary in Plan Forge sits where it does. One entry per decision, newest first, numbered as it was
 when it was taken. The long versions were separate files until 0.11.0; `git log docs/adrs/` still has them.
 
-## 0027. Oh-my-pi gets the skills; it still does not generate
+## 0028. Plan Forge names the model, and no model serves more than two avatars
 
-2026-10-31. `plan-forge install` writes the same two skills and the managed hook into every agent it finds,
-oh-my-pi included. Installing an agent integration and choosing which model writes the plan are different
-questions, and 0026 answered only the second. Oh-my-pi still generates nothing unless it is pinned.
+2026-10-31. An unpinned avatar used to send no model id, so the host chose. On oh-my-pi that meant the owner's own
+`modelRoles` map: a run was observed drafting on `together/zai-org/GLM-5.3-Flash`, which that map names for widgets,
+and it stalled after one workstream spec.
+
+Plan Forge names its own model per role now, in three tiers. The strong tier — architect, synthesizer, technical
+leader, product manager, ingestion — leads with an opus or argon model on every host that has one, and is never
+downgraded to spread load. Specialists, critics and reviewers take the standard tier. The narrator takes the light
+one; it writes a status line that gates nothing.
+
+Every id is a preference resolved against what the host actually lists, the same way `geminiModelPreference` works.
+An id the host does not serve falls through to the next; an exhausted list leaves the host its own default.
+
+No model serves more than two avatars in one run. A critic that reviews on the model that drafted agrees with itself,
+and four specialists on one model are one model's blind spots four times over. The cap applies only to a placement
+Plan Forge chose: a pinned role uses its pin for every avatar of that role. When every host is saturated the run
+proceeds anyway — a busy model is worse than a spread one, and no plan is worse than both.
+
+## 0027. Oh-my-pi runs Plan Forge; it does not generate
+
+2026-10-31. Two halves of one boundary. `plan-forge install` writes the same two skills and the managed hook into
+every agent it finds, oh-my-pi included: it is an agent an owner types `/plan-forge` into. And it generates nothing at
+all — not as a default, not as a fallback, and not on a pin. 0026 kept the pin; this removes it. The supported
+generation hosts are Claude and Antigravity/Gemini, plus the provider APIs.
+
+`main_host`, `judge_host` or a `role_models` entry naming `omp` is refused by validation, with a message saying to
+remove the key. `plan-forge doctor` reports oh-my-pi as "integration only" rather than listing a sign-in and hundreds
+of models that say nothing about a run. The reader of oh-my-pi's own `modelRoles` map is deleted: see 0028 for what
+replaced it.
 
 The hook no longer registers a `/plan-forge` command, because a skill of that name would shadow it. It keeps
 the session-start status banner and the plan-mode handoff, which now fires when the skill's own `plan-forge

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **oh-my-pi is not a generation host.** It runs `/plan-forge` and keeps its skills and hook; it never writes a plan,
+  as a default, a fallback or a pin. `main_host`, `judge_host` or a `role_models` entry naming `omp` is refused with a
+  message saying to remove the key, and `plan-forge doctor` reports it as integration only. The supported generation
+  hosts are Claude, Antigravity/Gemini and the provider APIs. See [decisions 0027](docs/decisions.md).
+- **Plan Forge names the model for every unpinned avatar.** Three tiers: the architect, synthesizer, technical leader,
+  product manager and ingestion lead with an opus or argon model and are never downgraded to spread load; specialists,
+  critics, reviewers and temporary agents take sonnet or a pro/flash Gemini; the narrator takes haiku or a flash
+  model. Each is a preference resolved against what the host actually lists.
+
+  This replaces reading oh-my-pi's own `modelRoles` map, which had been deciding: a run was observed drafting on
+  `together/zai-org/GLM-5.3-Flash`, which that map names for widgets, and it stalled after one workstream spec.
+- **No model serves more than two avatars in one run.** A critic that reviews on the model that drafted agrees with
+  itself, and four specialists on one model are one model's blind spots four times over. The cap applies only where
+  Plan Forge chose the placement; a pinned role uses its pin for every avatar of that role.
 - **oh-my-pi gets the skills again.** `plan-forge install --host auto` and `--host all` select every agent found on the
   machine, oh-my-pi included, and write the same two skills into each. Installing an agent integration and choosing
   which model writes the plan are different questions; the second is unchanged, and oh-my-pi still generates nothing
@@ -28,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The JUDGE slot had no CLI fallback. It reached Claude Code only because the invoking host happened to be in its
+  candidate list; an installation signed in to Claude Code alone and not invoked from it had no judge at all.
 - The brief pane in the terminal bounded its tail by source lines, so one unwrapped paragraph rendered as hundreds of
   lines and pushed the header off the screen. The bound is on rendered lines now, with a count of what is not shown.
 

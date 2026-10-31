@@ -32,8 +32,8 @@ copied aside and restored.
 ## What gets installed
 
 `plan-forge install --host auto` finds every agent on the machine and writes the same two skills into each, plus one
-managed hook. Installing an agent is not the same as choosing which model writes the plan — see
-[configuration](configuration.md).
+managed hook. Installing an agent is not the same as choosing which model writes the plan: oh-my-pi gets the skills
+and the hook, and never generates. See [configuration](configuration.md).
 
 | Agent | Skills | Hook |
 | :--- | :--- | :--- |

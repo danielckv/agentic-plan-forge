@@ -2,6 +2,22 @@
 
 Open work, newest first. Each entry says what was observed, not what might be nice.
 
+## The plan needs a Jira-shaped view, and the room needs to show thinking
+
+Owner report, 2026-10-31, two parts.
+
+**Epics, tasks and sub-tasks.** The approved plan ends as a specification document and a plan graph. The owner wants
+the same content as a worked issue tree — epics containing tasks containing sub-tasks — and better looking than Jira.
+The data is already there: `synthesized_spec.md` and `plan_manifest.json` carry epics, tasks, dependencies,
+acceptance criteria and verification commands.
+
+**Thinking, or speed.** A stage that takes 8m16s with a spinner reads as hung. Either the run gets materially faster,
+or the room shows what the avatar is thinking while it works. The avatar card already carries the stage part, elapsed
+time and bytes written; the thinking text is not streamed.
+
+Next: decide which of the two to do first — they answer the same complaint. The plan view is bounded work; streaming
+thinking depends on the SDK migration below, because a CLI subprocess does not expose it.
+
 ## Generation runs on whatever host answers, and a weak one stalls the run
 
 Observed 2026-10-31 in a real run (`docs/plans/.plan/run.json`, saved 2026-10-30T22:30Z): `Main` was
@@ -13,8 +29,11 @@ refreshed the AST and impact caches and wrote no run record at all.
 (extending `internal/host/anthropicapi.go`) and `google.golang.org/genai`, and the CLI hosts stop being generation
 candidates. Until then, a machine with a stray pin can silently plan on a model that cannot hold the schema.
 
-Next: the placement snapshot at run start should be visible in the window and in the run record, and a MAIN model that
-is not on the supported list should be refused rather than used.
+Partly fixed 2026-10-31: oh-my-pi no longer generates at all, Plan Forge names its own model per role, and no model
+serves more than two avatars. What remains is the SDK migration itself.
+
+Next: make the placement snapshot at run start visible in the window and in the run record, so a surprising model is
+seen before the run spends an hour.
 
 ## A failed run should checkpoint where it stopped
 
