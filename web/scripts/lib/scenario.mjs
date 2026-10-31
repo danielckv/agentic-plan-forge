@@ -369,3 +369,57 @@ export const MANIFEST = {
       })),
   })),
 };
+
+/**
+ * GET /api/sprints, as the planner would leave it for this plan.
+ *
+ * The board is a fixture, not a second planner: the real arrangement comes
+ * from synthesizer.BuildSprints, which has its own tests. This exists so the
+ * screenshot run has a board to draw and the move path has something to move.
+ */
+const sprintItem = (id, title, hours, minutes, epic, story, extra = {}) => ({
+  task_id: id,
+  epic_id: id.slice(0, 2),
+  story_id: id.slice(3, 5),
+  workstream_id: "reporting",
+  title,
+  epic_title: epic,
+  story_title: story,
+  human_hours: hours,
+  agent_minutes: minutes,
+  targets: 2,
+  ...extra,
+});
+
+export const SPRINT_ITEMS = [
+  sprintItem("E1-S1-T1", "Stream invoice rows from QueryInvoices into a CSV writer", 8, 42,
+    "CSV invoice export", "finance analyst: export a date range of invoices as CSV"),
+  sprintItem("E1-S1-T2", "Add the date-range filter and its boundary tests", 6, 31,
+    "CSV invoice export", "finance analyst: export a date range of invoices as CSV"),
+  sprintItem("E1-S1-T3", "Serve the export over an authenticated handler", 5, 24,
+    "CSV invoice export", "finance analyst: export a date range of invoices as CSV",
+    { depends_on: ["E1-S1-T1"] }),
+  sprintItem("E2-S2-T1", "Record one audit event per export", 7, 36,
+    "Export audit trail", "compliance officer: list every export for a period",
+    { depends_on: ["E1-S1-T3"] }),
+  sprintItem("E2-S2-T2", "List exports for a period, newest first", 4, 19,
+    "Export audit trail", "compliance officer: list every export for a period"),
+  sprintItem("E3-S3-T1", "Keep the last 20 exports for re-download", 9, 48,
+    "Export history", "finance analyst: download one of my last 20 exports again"),
+  sprintItem("E3-S3-T2", "Re-download returns the stored file unchanged", 3, 16,
+    "Export history", "finance analyst: download one of my last 20 exports again",
+    { depends_on: ["E3-S3-T1"] }),
+];
+
+/** Where each task starts out on the fixture board. */
+export const SPRINT_PLACEMENTS = {
+  "E1-S1-T1": 1,
+  "E1-S1-T2": 1,
+  "E1-S1-T3": 1,
+  "E2-S2-T1": 2,
+  "E2-S2-T2": 2,
+  "E3-S3-T1": 0,
+  "E3-S3-T2": 0,
+};
+
+export const SPRINT_SETTINGS = { basis: "human", sprint_days: 10, team_size: 2, horizon: 3 };

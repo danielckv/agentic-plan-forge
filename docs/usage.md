@@ -75,6 +75,24 @@ never an answer.
 **3. Specification.** The plan, its epics and subtasks, and a readiness verdict. A run always ends with a plan; if
 blocking findings are still open, they are written onto it and named at the top.
 
+**4. Sprints.** The same tasks as columns of work to commit to: a backlog and as many sprints as you ask for. The
+board is computed from the task graph — each task takes the earliest sprint that is not before its dependencies and
+still has room — and then you rearrange it. Drag a card, or use its **Move to** menu, which is the keyboard path.
+
+Every move is saved to `docs/plans/.plan/sprints.json` and the board is recomputed from the plan, so an arrangement
+can never drift from the work it arranges. A move that puts something before a dependency is allowed and said out
+loud, on the card and at the top of the board. The **Human / Agent** toggle switches every number between the human
+hours and the agent minutes the plan estimated. Capacity is sprint days x your workday x team size.
+
+Nothing about the handoff changes unless you ask for it:
+
+```sh
+plan-forge wait --session <id> --sprint 1
+```
+
+That adds the sprint's task ids to the approval JSON, so the agent implements one sprint instead of the whole plan.
+Without the flag it receives the whole plan, as it always has.
+
 **Setup.** What this installation can do: the hosts found, whether each is signed in, the models available, and the
 skills on this machine. API keys are added here.
 

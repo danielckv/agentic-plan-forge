@@ -27,6 +27,7 @@ const SHOTS = [
   "page1-composer", "page1-epic-modal", "page1-impact", "page1-codebase", "page1-dark", "page1-sidebar-collapsed",
   "page2-room", "page2-toasts", "help-overlay",
   "page3-synthesis", "page3-matrix", "page3-filter", "page3-mermaid-modal", "page3-handoff",
+  "sprints", "sprints-agent",
   "page1-1024", "page2-1024", "page3-1024",
 ];
 const MIN_BYTES = 8 * 1024;
@@ -380,6 +381,44 @@ try {
     (await page.evaluate(() => document.querySelector('.pf-phase-step[aria-current="step"] .pf-phase-label')?.textContent)) === "Approved",
     "the stepper reaches Approved",
   );
+
+  // ---- Sprints: the approved plan arranged as work to commit to. It is
+  // reached from the sidebar, because the approval itself lands on the build
+  // page where the time-critical handoff panel lives.
+  await page.locator(".pf-sidebar-nav").getByRole("button", { name: "Sprints" }).click();
+  await page.waitForSelector(".pf-sprints-columns", { state: "visible" });
+  const columns = await page.locator(".pf-sprint-col").count();
+  check(columns === 4, `the board draws the backlog and three sprints (${columns})`);
+  const sprint1 = page.locator(".pf-sprint-col").nth(1);
+  check((await sprint1.locator(".pf-sprint-card").count()) === 3, "sprint 1 holds its three committed tasks");
+  check(
+    (await sprint1.locator(".pf-sprint-meter-label").innerText()).includes("19h"),
+    "sprint 1 totals the hours it committed",
+  );
+  await shot(page, "sprints");
+
+  // A move goes through the server and comes back as the recomputed board.
+  await sprint1.locator(".pf-sprint-card").first().locator("select").selectOption("0");
+  await page.waitForFunction(
+    () => document.querySelectorAll(".pf-sprint-col")[1]?.querySelectorAll(".pf-sprint-card").length === 2,
+    null,
+    { timeout: 5000 },
+  );
+  const backlogCards = await page.locator(".pf-sprint-col").first().locator(".pf-sprint-card").count();
+  check(backlogCards === 3, `the moved task lands in the backlog (${backlogCards})`);
+  check(
+    (await page.locator('.pf-sprint-col >> nth=0 >> .pf-badge--moved').count()) === 1,
+    "a moved task is marked as moved",
+  );
+
+  // The basis toggle switches every number on the board to agent minutes.
+  await page.getByRole("button", { name: "Agent" }).click();
+  await page.waitForFunction(
+    () => document.querySelector(".pf-sprint-card-effort")?.textContent?.includes("m") === true,
+    null,
+    { timeout: 5000 },
+  );
+  await shot(page, "sprints-agent");
 
   for (const name of SHOTS) {
     const st = statSync(`${outDir}/${name}.png`);

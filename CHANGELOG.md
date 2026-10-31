@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A sprint board.** The approved plan as columns of work to commit to: a backlog and as many sprints as you ask
+  for, reached from the sidebar once a plan is approved. Each task takes the earliest sprint that is not before its
+  dependencies and still has room; work past the horizon waits in the backlog, and so does anything depending on it.
+  Drag a card between columns, or use its **Move to** menu, which is the keyboard path. The **Human / Agent** toggle
+  switches every number between the human hours and the agent minutes the plan estimated.
+
+  Only your moves are stored, in `docs/plans/.plan/sprints.json`; the board itself is recomputed from the task graph
+  every time, so an arrangement can never drift from the work it arranges. A move that puts something before a
+  dependency is allowed and said out loud, on the card and at the top of the board. See
+  [decisions 0029](docs/decisions.md).
+- **`plan-forge wait --sprint N`** narrows the plan-mode handoff to one sprint's tasks, so a plan of forty tasks is
+  implemented a sprint at a time. Without the flag the agent receives the whole plan, as it always has.
+- `docs/plans/.plan/.gitignore` un-ignores `sprints.json`, so the arrangement travels with the plan. A `.gitignore`
+  Plan Forge wrote before this is upgraded in place; one you edited is left alone.
+
 ### Changed
 
 - **oh-my-pi is not a generation host.** It runs `/plan-forge` and keeps its skills and hook; it never writes a plan,

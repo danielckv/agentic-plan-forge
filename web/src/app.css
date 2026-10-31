@@ -5656,3 +5656,309 @@ figure > .pf-diagram-source { border-top: none; }
   border-radius: 50%;
   flex: none;
 }
+
+/* ── Sprints: the plan as columns of work to commit to ──────────────────── */
+
+.pf-sprints {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.pf-sprints-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pf-h1 {
+  margin: 0 0 2px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--pf-ink);
+}
+
+.pf-sprints-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pf-sprints-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--pf-muted);
+}
+
+.pf-sprints-field > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pf-sprints-field input {
+  width: 52px;
+  height: 26px;
+  padding-inline: 6px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel);
+  color: var(--pf-ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-sprints-field input:disabled {
+  opacity: 0.5;
+}
+
+.pf-sprints-warnings {
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--pf-warn-border, var(--pf-border));
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+  font-size: 12px;
+}
+
+.pf-sprints-warnings li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The columns scroll sideways as a set, so a wide board never squeezes a
+   card narrower than its own text. */
+.pf-sprints-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(248px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  align-items: stretch;
+}
+
+.pf-sprint-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-card);
+  background: var(--pf-panel-subtle);
+  min-height: 160px;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.pf-sprint-col[data-backlog="true"] {
+  background: var(--pf-inset);
+}
+
+.pf-sprint-col[data-dropping="true"] {
+  border-color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+}
+
+.pf-sprint-col[data-over="true"] {
+  border-color: var(--pf-danger-border);
+}
+
+.pf-sprint-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pf-sprint-col-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pf-ink);
+}
+
+.pf-sprint-meter {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--pf-border);
+  overflow: hidden;
+}
+
+.pf-sprint-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pf-accent);
+  transition: width 160ms ease;
+}
+
+.pf-sprint-meter-fill[data-over="true"] {
+  background: var(--pf-danger-bright);
+}
+
+.pf-sprint-meter-label {
+  margin: 0;
+  font-size: 11px;
+  color: var(--pf-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-sprint-meter-label[data-over="true"] {
+  color: var(--pf-danger);
+}
+
+.pf-sprint-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* The list takes the rest of the column so every column is the same
+     height and the drop target covers the empty space below the cards. */
+  flex: 1;
+}
+
+.pf-sprint-empty {
+  padding: 14px 8px;
+  border: 1px dashed var(--pf-border-strong);
+  border-radius: var(--pf-radius-ctl);
+  text-align: center;
+  font-size: 11px;
+  color: var(--pf-faint);
+}
+
+.pf-sprint-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel);
+  box-shadow: var(--pf-shadow-sm);
+  cursor: grab;
+}
+
+.pf-sprint-card:active {
+  cursor: grabbing;
+}
+
+.pf-sprint-card[data-blocked="true"] {
+  border-color: var(--pf-danger-border);
+}
+
+.pf-sprint-card[data-moved="true"] {
+  border-inline-start: 2px solid var(--pf-accent);
+}
+
+.pf-sprint-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pf-sprint-card-grip {
+  color: var(--pf-faint);
+  flex: none;
+}
+
+.pf-chip--task {
+  color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-sprint-card-effort {
+  margin-inline-start: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pf-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-sprint-card-title {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--pf-ink);
+}
+
+.pf-sprint-card-context {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--pf-muted);
+}
+
+.pf-sprint-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pf-badge--moved {
+  color: var(--pf-accent);
+  background: var(--pf-accent-soft);
+}
+
+.pf-sprint-move {
+  margin-inline-start: auto;
+}
+
+.pf-sprint-move select {
+  height: 22px;
+  padding-inline: 4px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius-ctl);
+  background: var(--pf-panel);
+  color: var(--pf-muted);
+  font-size: 11px;
+}
+
+.pf-sprint-card-blocked {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--pf-danger);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-sprint-col,
+  .pf-sprint-meter-fill {
+    transition: none;
+  }
+}

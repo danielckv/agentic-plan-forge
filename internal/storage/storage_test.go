@@ -53,7 +53,36 @@ func newStore(t *testing.T, repo string) *ArtifactStore {
 	return s
 }
 
-func TestPlanGitignoreIsCreatedWithTheFourLines(t *testing.T) {
+// A .gitignore Plan Forge wrote before sprints.json existed is upgraded in
+// place, so an existing repository starts sharing its sprint board. Anything
+// else is the owner's file and is left alone, which the test below covers.
+func TestPlanGitignoreUpgradesTheVersionPlanForgeWrote(t *testing.T) {
+	repo := testRepo(t)
+	st := NewStateStore()
+	if _, err := st.Load(context.Background(), repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Save(context.Background(), State{SchemaVersion: 1}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(repo, filepath.FromSlash(PlanDirName), ".gitignore")
+	prior := "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json\n"
+	if err := os.WriteFile(path, []byte(prior), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Save(context.Background(), State{SchemaVersion: 1}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != PlanGitignore {
+		t.Errorf(".gitignore = %q, want it upgraded to %q", got, PlanGitignore)
+	}
+}
+
+func TestPlanGitignoreIsCreatedAndUpgraded(t *testing.T) {
 	repo := testRepo(t)
 	st := NewStateStore()
 	if _, err := st.Load(context.Background(), repo); err != nil {
@@ -69,7 +98,7 @@ func TestPlanGitignoreIsCreatedWithTheFourLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json\n" {
+	if string(got) != "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json\n!sprints.json\n" {
 		t.Fatalf(".gitignore = %q", got)
 	}
 	// A user's edit survives a later write.

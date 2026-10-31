@@ -65,6 +65,13 @@ type CompiledPlan struct {
 	// Readiness is the verdict written into the spec: ready, provisional or
 	// blocked, with the findings it lists.
 	Readiness Readiness
+	// Tasks, Epics and Stories are the work breakdown the plan compiled to.
+	// They are already in ManifestJSON and the spec Markdown, but a caller
+	// that wants to arrange the work — the sprint board, the Jira matrix —
+	// should not have to parse either one back.
+	Tasks   []contracts.TechnicalTask
+	Epics   []contracts.Epic
+	Stories []contracts.Story
 }
 
 // DraftContent returns the synthesis.v1 draft content {spec_markdown,
@@ -315,6 +322,9 @@ func Compile(input contracts.SynthesisInput, meta contracts.ApprovalMeta) (Compi
 		Schedule:       schedule,
 		Phases:         phases,
 		Readiness:      readiness,
+		Tasks:          tasks,
+		Epics:          docs.PM.Epics,
+		Stories:        docs.PM.Stories,
 	}, nil
 }
 
