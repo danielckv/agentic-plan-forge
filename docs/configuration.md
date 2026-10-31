@@ -203,6 +203,16 @@ holds no draft, gates nothing, and never fails a run — a narration that fails 
 
 The tab opens only when you run `/plan-forge`. Starting an agent session never opens it.
 
+## Logs, in the home directory
+
+Every `run` and `join` writes a log next to `config.json`: `~/.plan-forge/logs/plan-forge-YYYY-MM-DD.log`
+(`$PLAN_FORGE_HOME/logs` when the override is set). The file name carries the date, so a new day starts a new
+file without a restart. Files older than two days are deleted the next time any command opens a log; other files
+in that directory are never touched. Detached sessions also keep their per-session log under the cache
+(`sessions/<id>.log`), which `plan-forge wait` reads; the day file records the same run at the same severity.
+
+The log is mode 0600 and holds absolute paths and model names, so it stays readable by the owner only.
+
 ## After the approval: build, preview, deploy
 
 An approved plan can be implemented, run and deployed without leaving the window. The agent writes into a git worktree

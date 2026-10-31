@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/danielckv/agentic-plan-forge/internal/app"
+	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/planstate"
 	"github.com/danielckv/agentic-plan-forge/internal/relay"
 	"github.com/danielckv/agentic-plan-forge/internal/tui"
@@ -91,8 +92,16 @@ func runRun(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "run: %v\n", ferr)
 		return exitUsage
 	}
+	dayLog, derr := config.OpenLogFile(time.Now())
+	if derr != nil {
+		fmt.Fprintf(os.Stderr, "run: open log file: %v\n", derr)
+		return exitRuntimeError
+	}
+	defer dayLog.Close()
+	logger := slog.New(slog.NewTextHandler(dayLog, nil))
 	opts := app.Options{
 		Frontend:          front,
+		Logger:            logger,
 		Repo:              repoFlag,
 		Host:              strings.ToLower(strings.TrimSpace(hostFlag)),
 		Mode:              mode,
@@ -165,6 +174,11 @@ func runSessionChild(ctx context.Context, args []string) int {
 		return fail(err)
 	}
 	var logger *slog.Logger
+	dayLog, derr := config.OpenLogFile(time.Now())
+	if derr == nil {
+		defer dayLog.Close()
+		logger = slog.New(slog.NewTextHandler(dayLog, nil))
+	}
 	if logPath, lerr := app.LogPath(sessionID); lerr == nil {
 		if f, ferr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); ferr == nil {
 			defer f.Close()
@@ -298,12 +312,19 @@ func runJoin(ctx context.Context, args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	dayLog, derr := config.OpenLogFile(time.Now())
+	if derr != nil {
+		fmt.Fprintf(os.Stderr, "join: open log file: %v\n", derr)
+		return exitRuntimeError
+	}
+	defer dayLog.Close()
 	res := app.Join(ctx, app.JoinOptions{
 		InviteURL: inviteArg,
 		Repo:      repoFlag,
 		Config:    cfg,
 		Stdout:    os.Stdout,
 		Stderr:    os.Stderr,
+		Logger:    slog.New(slog.NewTextHandler(dayLog, nil)),
 	})
 	if res.ExitCode != exitOK && res.Message != "" {
 		fmt.Fprintf(os.Stderr, "join: %s\n", res.Message)
