@@ -1,5 +1,7 @@
 # SDK-backed planning workspace
 
+This design document is for Plan Forge developers and architects implementing the direct SDK generation migration. It covers provider contracts, planning lifecycle unification, temporary expertise-gap agents, browser and terminal interfaces, AST graph bounds, and implementation-ready plan output.
+
 ## Context
 Replace local CLI generation with direct SDK-backed providers. Deliver one coherent planning workspace across browser and terminal, including model selectors, skills settings, permanent reviewers, justified temporary agents, and questions after fusion. Favor one complete planning pass with bounded targeted repair rather than repeated whole-plan cycles. Repository graph evidence MUST contain only code, Markdown, and SVG.
 
@@ -32,6 +34,8 @@ With only Anthropic available, spread work across Opus and Sonnet; Haiku may han
 
 ### 1. Provider contracts, onboarding, and settings
 
+Status: [COMPLETED] (evidence: internal/app/modelsapi.go for /api/models and /api/settings, internal/host/router.go for provider routing and tiers, internal/config/config.go for RoleBinding and RoleModels, web/src/pages/PageSetup.tsx)
+
 Reuse `host.Adapter`, `contracts.Generator`, `Router.PlaceRole`, and the credential store. Add Google runtime adapters in `internal/host/`; register generation kinds `gemini` and `antigravity`. Add credential provider `google`, sourced from `GEMINI_API_KEY` or the existing owner-only credential file. Both runtimes share that credential but expose separate readiness results.
 
 Keep Claude and Antigravity integration identities separate from SDK generation. Remove `claude`, `omp`, and `agy` from automatic generation candidates in `router.go`. Remove OMP from supported generation adapters, onboarding choices, diagnostics recommendations, hook installation, and skill installation for this release. Existing OMP configuration MUST produce migration guidance, not silent fallback. Preserve user-owned OMP files; removal of previously managed files requires explicit confirmation and matching ownership hashes. Do not uninstall the user's OMP application. Existing OpenAI/Fireworks API configurations remain explicitly selectable; the default recommendation uses Anthropic and Google.
@@ -40,7 +44,7 @@ At first launch, run existing CLI detection for diagnostics only. Display separa
 
 Preflight MUST use a bounded authenticated request. Distinguish invalid credentials, missing model entitlement, network failure, quota failure, and unsupported runtime capabilities. Deduplicate concurrent probes and cache results for five minutes. Credential changes invalidate the cache. Catalog failure preserves the last list marked stale; it does not certify models as available.
 
-For managed Antigravity, use Interactions API agent `antigravity-preview-09-2026` with `agent_config.type=antigravity` and the selected underlying model. Before enabling it for planning, prove that an explicit empty tools list and omitted environment prohibit tool execution. Do not mount repositories, skills containing executables, or credentials into a managed sandbox. Verify that request serialization preserves the empty list rather than omitting it. If the API cannot enforce this contract, mark this runtime unavailable for planning; keep direct Google calls available and state the reason. A prompt saying “do not use tools” is not isolation. Expose medium effort only for runtimes that actually accept it; managed-runtime defaults MUST be labeled as defaults.
+For managed Antigravity, use Interactions API agent `antigravity-preview-09-2026` with `agent_config.type=antigravity` and the selected underlying model. Before enabling it for planning, prove that an explicit empty tools list and omitted environment prohibit tool execution. Do not mount repositories, skills containing executables, or credentials into a managed sandbox. Verify that request serialization preserves the empty list rather than omitting it. If the API cannot enforce this contract, mark this runtime unavailable for planning; keep direct Google calls available and state the reason. A prompt saying “do not use tools” is not isolation. Expose medium effort only for runtimes that actually accept it; managed-runtime defaults MUST be labeled as defaults…
 
 Use existing cancellation, receipts, metering, output bounds, schema validation, and repair machinery. Cancel remote background work when a local run is cancelled. Never restart a paid interaction merely because a stream reconnects. Unsupported structured-output capabilities MUST be surfaced; existing bounded JSON repair remains available.
 
@@ -51,6 +55,8 @@ Migrate old CLI generation pins through a visible settings review. Preserve thei
 Reuse `/api/providers` for credential submission. Add authenticated loopback settings/catalog endpoints through the same bridge guards: `GET /api/models`, `GET /api/settings`, and `PUT /api/settings`. Settings writes carry a revision; return 409 for stale writes. Validate provider/model membership server-side, not only in controls. Provider keys never appear in settings responses, logs, or collaborative events. API-key entry remains masked text; provider, runtime, model, effort, and policy are selections.
 
 ### 2. One shared planning lifecycle
+
+Status: [COMPLETED] (evidence: internal/avatars/orchestrator.go for lifecycle phases, internal/contracts/roles.go for role definitions, internal/avatars/decisions.go for decision prompt and resolve, internal/app/executor.go for state broadcast)
 
 Reuse `internal/avatars/orchestrator.go`, the existing checkpoints, `contracts.Decision`, and the session authority. Do not create a second orchestrator for the UI or terminal.
 
@@ -76,6 +82,8 @@ Define a versioned run snapshot with run ID, input revision, phase, candidate re
 
 ### 3. Temporary agents with a real purpose
 
+Status: [COMPLETED] (evidence: internal/avatars/gap_agent.go for GapAgentDescriptor and admission rules, internal/avatars/orchestrator.go for scheduling and fusion, internal/config/config.go for MaxGapAgents)
+
 Reuse workstream specialist lanes rather than create an unrestricted agent factory. Each temporary agent is a run-scoped descriptor, not generated executable code or a persisted global persona.
 
 A descriptor MUST contain `id`, `specialty`, `purpose`, `requirement_ids`, `evidence_refs`, `deliverable`, `parent_id`, `placement`, and `status`. Architecture proposes gaps alongside its normal output, avoiding an extra discovery model call. The server verifies that referenced requirements exist, the task has a concrete deliverable, and existing role ownership does not already cover it. Reject duplicate normalized scopes.
@@ -85,6 +93,8 @@ Allow at most three additional expertise-gap agents per run, beyond required wor
 Lifecycle: proposed → admitted → queued → running → completed → fused → retired. Failure, cancellation, and stale states are explicit alternatives. Emit admission before scheduling so the workspace displays the new agent. Completion means its validated deliverable exists; fusion means the deliverable is incorporated or rejected with a recorded reason. Retired agents remain inspectable in the run history but do not become permanent settings entries.
 
 ### 4. Browser workspace and question drawer
+
+Status: [COMPLETED] (evidence: web/src/pages/Page2AvatarCanvas.tsx for avatar room and inspector, web/src/components/QuestionDrawer.tsx for post-fusion drawer, web/src/store/syncStore.ts for decision sync and option impact)
 
 Extend `Page2AvatarCanvas.tsx`, not a parallel planning page. Reuse the lazy-loading and disposal pattern in `PlanGraph3D.tsx`, the WebGL capability check, and the existing plan tree fallback. Add an agent-room renderer because the existing renderer shows plan nodes, not agent lifecycle.
 
@@ -102,6 +112,8 @@ After answers, update only affected work and recheck readiness. No questions mea
 
 ### 5. Interactive terminal and skills settings
 
+Status: [IN PROGRESS] (evidence: internal/tui/app.go, internal/tui/render.go, internal/tui/term.go for 5-pane TUI; cmd/client/cmd_session.go for --frontend terminal; planning skills editor and terminal height handling remain in progress)
+
 The current terminal configuration is a line-oriented wizard in `cmd/client/cmd_config.go`; it has no full-screen planning UI. Add a real terminal frontend using Bubble Tea and its standard widgets rather than hand-written terminal escape handling. This dependency is new because no equivalent terminal framework exists in the inspected paths.
 
 Add `plan-forge run --ui=tui`; default remains `--ui=web`. Add `plan-forge config --ui=tui` for the same settings screens. Reject full-screen mode when stdin/stdout are not terminals, with actionable usage guidance. Keep existing noninteractive commands for automation.
@@ -118,6 +130,8 @@ Add planning-skill selection by existing discovered skill identity and content h
 
 ### 6. Restrict AST evidence without breaking build packaging
 
+Status: [COMPLETED] (evidence: internal/ast/languages.go for ClassifyContent and extension classification, internal/ast/scanner.go for pre-filter hashing and exclusion)
+
 Place one content classifier beside `LanguageForPath` and `otherSourceExts` in `internal/ast/languages.go`. Classify supported code, recognized unsupported code, Markdown (`.md`, `.markdown`), SVG (`.svg`), and excluded content. Reuse existing extension tables; unsupported source remains a coverage gap, not a falsely parsed AST.
 
 In `scanner.go`, classify before opening or hashing content. Excluded files MUST NOT enter graph evidence, document evidence, or WorktreeHash. Keep path-only skip accounting. Supported code retains Tree-sitter parsing. Recognized unsupported code may contribute bounded textual evidence and its hash, with explicit unsupported-language coverage. Never claim symbols were extracted from it.
@@ -130,6 +144,8 @@ This restriction applies to repository graph/evidence reads. It MUST NOT silentl
 
 ### 7. Implementation-ready plan output
 
+Status: [COMPLETED] (evidence: internal/synthesizer/compiler.go for task synthesis and verification commands, internal/synthesizer/readiness.go for ready/provisional/blocked evaluation, internal/synthesizer/sprints.go for sprint board generation, cmd/client/cmd_validate.go for verification)
+
 Extend existing synthesis and validation rather than introduce a second compiler. Every generated task MUST include purpose, requirement references, existing file/symbol targets, concrete change, dependencies, acceptance criteria, and executable verification commands. New files MUST be labeled new. References to existing symbols MUST resolve against available evidence or be labeled unverified blockers.
 
 The technical leader checks requirement coverage, interface consistency, dependency order, missing decisions, and verification completeness. Deterministic validators enforce structural checks; models explain tradeoffs rather than substitute for those checks. Include a first executable task and a dependency-ordered implementation sequence in the handoff.
@@ -139,6 +155,8 @@ Use embedded JSON schemas for all avatar outputs, including the new reviewer and
 Readiness values are `ready`, `provisional`, and `blocked`. Ready requires resolved material decisions, valid interfaces, complete requirement coverage, and no unresolved blocking findings. Human-waived findings stay in the readiness section. Unsupported evidence or unrun implementation tests MUST NOT be portrayed as verified. The product can minimize iteration; it cannot promise zero future implementation changes.
 
 ### 8. Final README rewrite and visual demonstration
+
+Status: [COMPLETED] (evidence: README.md for lucid overview and workflows, docs/images/demo.gif for palette-optimized recording, scripts/demo-gif.sh and web/scripts/promo.mjs for capture pipeline)
 
 After implementation and end-to-end verification, rewrite `README.md` to describe the shipped product clearly. Explain its purpose, prerequisites, quick start, supported providers, browser/TUI workflow, agent responsibilities, checkpoint recovery, output readiness, and implementation handoff. Link detailed configuration and architecture documentation rather than duplicate it. Remove obsolete OMP instructions and unsupported claims.
 

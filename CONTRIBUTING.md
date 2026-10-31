@@ -1,5 +1,7 @@
 # Contributing to Agentic Plan Forge
 
+This guide is for contributors to Agentic Plan Forge. It covers repository architecture, development workflows, local validation commands, and live integration testing.
+
 Thank you for your interest in contributing. This document describes how to participate in the project.
 
 ## Ways to Contribute
@@ -29,8 +31,7 @@ web                         embedded React UI
 integrations                skill, command and hook templates
 ```
 
-The `client` and `server` build tags are mutually exclusive. Most of `internal/` is client-tagged, so a plain
-`go build ./...` silently skips it; pass `-tags client`, and build `web/dist` first because the client embeds it.
+The `client` and `server` build tags are mutually exclusive. Most of `internal/` is client-tagged, so a plain `go build ./...` silently skips it; pass `-tags client`, and build `web/dist` first because the client embeds it.
 
 ## Development Workflow
 
@@ -80,8 +81,7 @@ The `client` and `server` build tags are mutually exclusive: never pass both.
 
 ## Live tests
 
-A few tests call a real model. They are skipped unless you opt in, because each one spends real money, and they are
-never run in CI. Everything above passes without them.
+A few tests call a real model. They are skipped unless you opt in, because each one spends real money, and they are never run in CI. Everything above passes without them.
 
 Setup is whatever you already have: a signed-in host agent. No API key and no extra configuration.
 
@@ -110,12 +110,9 @@ PLAN_FORGE_LIVE_DELIBERATION=1 go test -tags client \
 # One cycle runs by default; PLAN_FORGE_LIVE_CYCLES raises it.
 ```
 
-Use the deliberation test before and after any change that claims to make a run faster or an input smaller. The
-numbers it prints are what the decision records cite; a claim about speed without one of these tables behind it does
-not belong in an ADR.
+Use the deliberation test before and after any change that claims to make a run faster or an input smaller. The numbers it prints are what the decision records cite; a claim about speed without one of these tables behind it does not belong in an ADR.
 
-To look at the window without a model, two harnesses drive the built bundle through a fake planning session
-(`web/scripts/lib/`, seeded with a sample brief and Go-shaped avatar frames):
+To look at the window without a model, two harnesses drive the built bundle through a fake planning session (`web/scripts/lib/`, seeded with a sample brief and Go-shaped avatar frames):
 
 ```sh
 npm --prefix web run build
@@ -137,12 +134,8 @@ Tooling installation notes:
 - Keep pull requests small and focused; unrelated changes belong in separate pull requests.
 - Fill in the pull request template completely.
 - Ensure all CI checks pass. Reviewers may ask for changes before merging.
-- CI waits 15 minutes before it starts. Pushing again inside that window cancels the waiting run and restarts the
-  clock, so a burst of fixes costs one CI run instead of one per push. Run the checks above locally first; do not wait
-  on CI to find what `go test` would have told you.
-- Releases are cut by dispatching the Release workflow by hand. Dispatch it against a `v*.*.*` tag to publish the
-  archives and push the relay image; dispatch it against a branch to build and package every platform without
-  releasing, which is how to check a cross-compilation change.
+- CI waits 15 minutes before it starts. Pushing again inside that window cancels the waiting run and restarts the clock, so a burst of fixes costs one CI run instead of one per push. Run the checks above locally first; do not wait on CI to find what `go test` would have told you.
+- Releases are cut by dispatching the Release workflow by hand. Dispatch it against a `v*.*.*` tag to publish the archives and push the relay image; dispatch it against a branch to build and package every platform without releasing, which is how to check a cross-compilation change.
 - Maintainer review is expected before a pull request is merged. When no second reviewer is available, the maintainer self-merges.
 
 ## Licensing of Contributions
