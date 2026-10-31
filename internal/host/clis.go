@@ -28,7 +28,8 @@ type KnownCLI struct {
 
 // KnownCLIs lists the coding-agent CLIs the first-run scan looks for.
 //
-// The three adapters are the hosts a plan can be generated on. The rest are
+// Claude and agy are adapters a plan can be generated on; oh-my-pi is
+// integration only and never generates (ADR 0027). The rest are
 // agents a developer may already have installed. Finding one is reported so the
 // owner knows it was seen, and it is never placed in a generation slot until an
 // adapter exists for it: reporting a tool as available when Plan Forge cannot
@@ -36,7 +37,7 @@ type KnownCLI struct {
 // prevent.
 var KnownCLIs = []KnownCLI{
 	{Kind: KindClaude, Binaries: []string{"claude"}, Name: "Claude Code", Purpose: "Generate plan stages with your Claude Code sign-in"},
-	{Kind: KindOMP, Binaries: []string{"omp", "oh-my-pi"}, Name: "oh-my-pi", Purpose: "Generate plan stages when pinned as main_host or in role_models"},
+	{Kind: KindOMP, Binaries: []string{"omp", "oh-my-pi"}, Name: "oh-my-pi", Purpose: "Run /plan-forge; integration only, never generates"},
 	{Kind: KindAGY, Binaries: []string{"agy"}, Name: "agy", Purpose: "Generate plan stages when its preflight passes"},
 	{Binaries: []string{"codex"}, Name: "Codex CLI", Purpose: "A coding agent installed on this machine", Supports: "detected only; Plan Forge has no adapter for it yet"},
 	{Binaries: []string{"pi"}, Name: "pi", Purpose: "A coding agent installed on this machine", Supports: "detected only; Plan Forge has no adapter for it yet"},

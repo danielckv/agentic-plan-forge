@@ -70,7 +70,7 @@ export interface SprintBoardView {
 }
 
 /** Settings the board can be recomputed with. */
-export interface SprintSettings {
+interface SprintSettings {
   basis?: SprintBasis;
   sprint_days?: number;
   team_size?: number;
@@ -92,7 +92,7 @@ const EMPTY_BOARD: SprintBoard = {
 };
 
 /** A board that could not be loaded, carrying the reason to show. */
-export function boardProblem(problem: string): SprintBoardView {
+function boardProblem(problem: string): SprintBoardView {
   return { available: false, problem, board: EMPTY_BOARD };
 }
 

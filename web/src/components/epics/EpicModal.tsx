@@ -6,14 +6,14 @@ import { CopyButton } from "../../ui/CopyButton";
 import { Dialog } from "../../ui/Dialog";
 
 /** What the modal shows: one epic as a Markdown file. */
-export interface EpicDocument {
+interface EpicDocument {
   id: string;
   title: string;
   filename: string;
   markdown: string;
 }
 
-export interface EpicModalProps {
+interface EpicModalProps {
   /** The epics in order; `index` selects the open one, null closes the modal. */
   docs: EpicDocument[];
   index: number | null;

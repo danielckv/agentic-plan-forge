@@ -51,7 +51,7 @@ export interface SkillScanReport {
 }
 
 /** One harness (and surface) with the skills found under it. */
-export interface SkillGroup {
+interface SkillGroup {
   /** Stable key for React and for de-duplication: host plus surface. */
   key: string;
   host: string;
@@ -65,7 +65,7 @@ export interface SkillGroup {
  * directory is there and the harness cannot load it. The tones are the ones
  * `.pf-cap-row` already styles.
  */
-export type SkillTone = "serves" | "blocked" | "optional";
+type SkillTone = "serves" | "blocked" | "optional";
 
 export const SKILL_TONE_LABEL: Record<SkillTone, string> = {
   serves: "Available",
@@ -74,7 +74,7 @@ export const SKILL_TONE_LABEL: Record<SkillTone, string> = {
 };
 
 /** The reason this entry is not a usable skill; empty when it is one. */
-export function skillProblem(skill: DiscoveredSkill): string {
+function skillProblem(skill: DiscoveredSkill): string {
   return skill.problem ?? "";
 }
 

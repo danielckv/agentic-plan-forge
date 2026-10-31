@@ -3,7 +3,7 @@
  * synthesis manifest; the filter narrows by subtask ID, title, or target file.
  */
 
-export type Severity = "CRITICAL" | "HIGH" | "MEDIUM";
+type Severity = "CRITICAL" | "HIGH" | "MEDIUM";
 
 export interface SubtaskRow {
   id: string;
@@ -16,7 +16,7 @@ export interface SubtaskRow {
   agentEstimate: string;
 }
 
-export interface StoryRow {
+interface StoryRow {
   id: string;
   need: string;
   subtasks: SubtaskRow[];
@@ -39,13 +39,13 @@ export function subtaskMatches(subtask: Pick<SubtaskRow, "id" | "title" | "targe
   );
 }
 
-export interface MatrixCounts {
+interface MatrixCounts {
   epics: number;
   stories: number;
   subtasks: number;
 }
 
-export interface FilteredMatrix {
+interface FilteredMatrix {
   /** Epics and stories pruned to those holding at least one matching subtask. */
   epics: EpicRow[];
   matched: number;

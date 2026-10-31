@@ -54,13 +54,13 @@ export interface SandboxReceipt {
 }
 
 /** One path the packager refused (`sandbox.SourceSkip`). */
-export interface SourceSkip {
+interface SourceSkip {
   path: string;
   reason: string;
 }
 
 /** What was packaged for the VM (`app.SourceSummary`). */
-export interface SourceSummary {
+interface SourceSummary {
   files: number;
   bytes: number;
   skipped?: SourceSkip[];

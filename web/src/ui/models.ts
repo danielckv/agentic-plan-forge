@@ -15,7 +15,7 @@ import { settingsErrorMessage } from "./settings";
 import type { SettingsDocument } from "./settings";
 
 /** One selectable model, as a host lists it (`host.ModelRef`). */
-export interface ModelRef {
+interface ModelRef {
   id: string;
   label: string;
 }
@@ -135,7 +135,7 @@ export function pinSelects(pin: ModelPin, host: string, modelId: string): boolea
   return pin.model !== "" && pin.model === modelId && (pin.host === "" || pin.host === host);
 }
 
-export type ModelsResult =
+type ModelsResult =
   | { ok: true; catalogue: ModelCatalogEntry[] }
   | { ok: false; message: string };
 

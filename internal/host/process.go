@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 	"unicode/utf8"
 
 	"github.com/danielckv/agentic-plan-forge/internal/config"
@@ -23,6 +24,11 @@ const (
 	commandOutputLimit = 4 << 20
 	commandErrorLimit  = 32 << 10
 )
+
+// probeTimeout bounds one CLI probe: a version, sign-in or model-list call.
+// Install, doctor and setup pass context.Background(), so without it a
+// stalled binary would hang them. A var so a test can shorten it.
+var probeTimeout = 20 * time.Second
 
 type cappedBuffer struct {
 	buf []byte
@@ -98,7 +104,9 @@ func runProbe(ctx context.Context, adapter Adapter, binary string, args ...strin
 		return nil, nil, err
 	}
 	defer os.RemoveAll(dir)
-	return runCaptured(ctx, path, args, dir, childEnvironment(dir, adapter, nil), nil)
+	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	return runCaptured(probeCtx, path, args, dir, childEnvironment(dir, adapter, nil), nil)
 }
 
 func runCaptured(ctx context.Context, executable string, args []string, cwd string, env []string, stdin []byte) ([]byte, []byte, error) {

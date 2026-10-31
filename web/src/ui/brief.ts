@@ -22,7 +22,7 @@
 
 export type BriefSectionID = "audience" | "outcome" | "motivation" | "nonGoals" | "existing";
 
-export interface BriefSection {
+interface BriefSection {
   id: BriefSectionID;
   /** Rail heading, in the writer's language rather than the schema's. */
   label: string;
@@ -149,7 +149,7 @@ export const BRIEF_SECTIONS: readonly BriefSection[] = [
 ];
 
 /** One section's state against the document. */
-export interface BriefCheck {
+interface BriefCheck {
   section: BriefSection;
   /** True when some line mentions the topic. Mentioned, not answered. */
   mentioned: boolean;

@@ -24,7 +24,7 @@ export function isDialogOpen(): boolean {
   return openDialogs > 0;
 }
 
-export interface DialogProps {
+interface DialogProps {
   open: boolean;
   onClose: () => void;
   title: string;

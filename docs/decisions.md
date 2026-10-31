@@ -3,6 +3,23 @@
 Why each boundary in Plan Forge sits where it does. One entry per decision, newest first, numbered as it was
 when it was taken. The long versions were separate files until 0.11.0; `git log docs/adrs/` still has them.
 
+## 0031. An agent CLI probe stops after 20 seconds, and oh-my-pi is found by its home directory
+
+2026-10-31. `install`, `doctor` and setup ask each generation host CLI for `--version`, its sign-in state and its model list.
+oh-my-pi is checked integration only: it is found by its home directory and never probed for sign-in or models, because it
+does not generate (0027).
+Those calls ran with `context.Background()` and no deadline, so one stalled CLI hung the whole command. `runProbe`
+in `internal/host/process.go` now stops every probe after 20 seconds and reports it as failed. A probe is a status
+check, not work: 20 seconds is far past a healthy answer, and a host that takes longer is not one to plan on.
+
+oh-my-pi counts as found when `omp` is on `PATH` or `~/.omp/agent` exists. Its installer puts `omp` in
+`~/.local/bin`, which a piped install script often lacks on `PATH`. Before this, `install --host auto` skipped
+oh-my-pi on exactly the machines where it was installed. Finding it changes only where the skills and hook go:
+oh-my-pi still never generates (0027).
+
+This change also deleted dead code across `internal/` and `web/src/`: exports and helpers with no caller. The
+deletion carries no new boundary; it is listed here because it touched more than 60 files.
+
 ## 0029. Sprints are computed from the task graph, and only the moves are stored
 
 2026-10-31. The plan arranged as work to commit to. Phases (0006's resumable run derives them) answer "what may run

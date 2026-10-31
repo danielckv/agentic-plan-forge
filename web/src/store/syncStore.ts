@@ -27,7 +27,7 @@ import {
   WS_SUBPROTOCOL,
 } from "../protocol/bridge";
 import { validate } from "../protocol/schema";
-import { insertAllowed, textSha256 } from "../collab/model";
+import { insertAllowed } from "../collab/model";
 import { isHeartbeat } from "../ui/room";
 import { toastStore } from "../ui/toasts";
 import { ambiguityAnswer, ambiguityResolveRefusal, decisionAnswer } from "../ui/decisionDrawer";
@@ -45,7 +45,7 @@ export type Phase =
   | "CANCELLED";
 
 /** Route per phase — the router follows authority phase, blocking manual jumps. */
-export const ROUTE_BY_PHASE: Record<Phase, string> = {
+const ROUTE_BY_PHASE: Record<Phase, string> = {
   INGESTION: "/ingest",
   DELIBERATION: "/deliberate",
   SYNTHESIS: "/synthesis",
@@ -95,7 +95,7 @@ export interface DraftSummary {
   data?: unknown;
 }
 
-export interface DecisionOption {
+interface DecisionOption {
   optionId: string;
   label: string;
   tradeoff: string;
@@ -167,7 +167,7 @@ export type TimelineEntry =
   | { kind: "resolved"; at: number; decisionId: string; optionId: string; actor: string };
 
 /** The timeline keeps the newest entries; older ones scroll off. */
-export const MAX_TIMELINE = 200;
+const MAX_TIMELINE = 200;
 
 /**
  * GET /api/status, as the bridge answers it (`app.StatusView`). It carries
@@ -252,7 +252,7 @@ export interface StageView {
   recovery?: string;
 }
 
-export const STATUS_UNKNOWN: StatusView = {
+const STATUS_UNKNOWN: StatusView = {
   ast: "scanning",
   astDetail: "0 files parsed, 0 symbols indexed",
   docHealth: 0,
@@ -1042,28 +1042,6 @@ export function editDocument(changes: ChangeSet): boolean {
   docClient.edit(changes);
   syncDoc({ lastLocalEdit: Date.now() });
   return true;
-}
-
-/** Replace `from..to` of the document with `insert`. */
-export function submitEdit(insert: string, from: number, to: number): boolean {
-  return editDocument(ChangeSet.of({ from, to, insert }, docClient.localText.length));
-}
-
-/** Idle `TEXT_CHECK` heartbeat (sha256 of the current document). */
-export function startTextCheck(): void {
-  if (checkTimer !== undefined) return;
-  checkTimer = setInterval(() => {
-    if (state.conn !== "open") return;
-    void textSha256(state.docText).then((sha) => {
-      send(
-        commandEnvelope("TEXT_CHECK", {
-          document_id: "prd",
-          version: String(state.docVersion),
-          sha256: sha,
-        }),
-      );
-    });
-  }, 10_000);
 }
 
 /** Owner confirm: `FREEZE_REQUEST` (Page 1 footer). */

@@ -63,7 +63,7 @@ type HostReport struct {
 	Host    string
 	Found   bool
 	Version string
-	Auth    string // ready|unknown|missing
+	Auth    string // ready|unknown|missing|isolated profile (agy)|integration only (omp, ADR 0027)
 	AuthCmd string // login command printed for missing
 	Targets []string
 	Note    string // printed for the found-agy row instead of (skipped)
@@ -148,7 +148,7 @@ func (in *Installer) Bin() string { return in.bin }
 // Installing is not generating. Claude Code, Antigravity and oh-my-pi all get
 // the skills and hooks, because all three are agents the owner types
 // /plan-forge into. Which host generates the plan is a separate decision:
-// oh-my-pi serves a pin only (ADR 0026), and the installer does not decide it.
+// oh-my-pi never generates (ADR 0027), and the installer does not decide it.
 func (in *Installer) selectedHosts(ctx context.Context, flag string) ([]string, error) {
 	switch flag {
 	case "claude", "omp", "agy":
@@ -197,8 +197,10 @@ func (in *Installer) hostPresent(ctx context.Context, kind string) bool {
 		if err != nil {
 			return false
 		}
+		// ~/.omp/agent (singular) is the directory the skills and hooks land
+		// in. `omp` itself often sits in ~/.local/bin, off a script's PATH.
 		for _, dir := range []string{
-			filepath.Join(home, ".omp", "agents"),
+			filepath.Join(home, ".omp", "agent"),
 		} {
 			if info, err := os.Stat(dir); err == nil && info.IsDir() {
 				return true
@@ -304,6 +306,18 @@ func (in *Installer) Plan(ctx context.Context, opts InstallOptions) ([]HostRepor
 			artifacts = append(artifacts, arts...)
 			report.Targets = claudeTargets(opts.Scope)
 		case string(KindOMP):
+			// ADR 0027: oh-my-pi runs Plan Forge but never generates, so its
+			// sign-in state is not probed. It still gets the skills and hook.
+			if v, err := Version(ctx, KindOMP); err == nil {
+				report.Version = v
+			}
+			report.Auth = "integration only"
+			report.Note = "type /plan-forge in oh-my-pi; it never generates the plan"
+			arts, err := in.planOMP(home, opts)
+			if err != nil {
+				return nil, nil, err
+			}
+			artifacts = append(artifacts, arts...)
 			report.Targets = ompTargets(opts.Scope)
 		case string(KindAGY):
 			// Generation signs in to the isolated profile, not the host's agy
@@ -414,11 +428,11 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 		return nil, err
 	}
 	// The Claude copies carry `enabled: false`, and that marker is now the only
-	// thing keeping them out of OMP: OMP installs no skills of its own, yet it
-	// still reads ~/.claude/skills on opt-in and <repo>/.claude/skills by
-	// default. An unmarked copy would surface the Claude-rendered body, whose
-	// plan-mode step orders `EnterPlanMode` — a tool OMP does not have — beside
-	// the /plan-forge command the hook registers. OMP's conventional scanners
+	// thing keeping them out of OMP: OMP gets its own copies under
+	// ~/.omp/agent/skills, yet it still reads ~/.claude/skills on opt-in and
+	// <repo>/.claude/skills by default. An unmarked copy would shadow OMP's own
+	// plan-forge skill with the Claude-rendered body, whose plan-mode step
+	// orders `EnterPlanMode`, a tool OMP does not have. OMP's conventional scanners
 	// skip a skill with that key (omp://skills.md, "SKILL.md frontmatter"), and
 	// Claude Code ignores unknown frontmatter keys, so its own loading is
 	// unaffected. The AGY copies are NOT marked: AGY reads neither key.
@@ -461,8 +475,15 @@ func (in *Installer) planOMP(home string, opts InstallOptions) ([]artifact, erro
 	if opts.Scope == "project" {
 		skills = filepath.Join(opts.Repo, ".omp", "skills")
 		hooks = filepath.Join(opts.Repo, ".omp", "hooks", "pre")
+		if err := in.checkHostRoot(filepath.Join(opts.Repo, ".omp")); err != nil {
+			return nil, err
+		}
 	} else {
-		root := filepath.Join(home, ".omp", "agent")
+		ompRoot := filepath.Join(home, ".omp")
+		if err := in.checkHostRoot(ompRoot); err != nil {
+			return nil, err
+		}
+		root := filepath.Join(ompRoot, "agent")
 		if err := in.checkHostRoot(root); err != nil {
 			return nil, err
 		}

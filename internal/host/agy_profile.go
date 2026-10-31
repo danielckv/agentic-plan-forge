@@ -144,7 +144,9 @@ func (a *AGY) runIsolatedProbe(ctx context.Context, args ...string) ([]byte, []b
 	if err != nil {
 		return nil, nil, err
 	}
-	return runCaptured(ctx, path, args, dir, env, nil)
+	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	return runCaptured(probeCtx, path, args, dir, env, nil)
 }
 
 // agySignInHint is the remedy a user runs to sign in to the isolated profile.

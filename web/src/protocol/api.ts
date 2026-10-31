@@ -24,7 +24,7 @@ export interface ComponentRef {
 }
 
 /** One block: a directory of one language (`app.ComponentModule`). */
-export interface ComponentModule {
+interface ComponentModule {
   path: string;
   language: string;
   symbols: number;
@@ -51,7 +51,7 @@ export interface GraphNode {
 }
 
 /** One directed relationship in the component graph (`app.GraphEdge`). */
-export interface GraphEdge {
+interface GraphEdge {
   from: string;
   to: string;
   kind: "imports" | "contains";
@@ -114,7 +114,7 @@ export interface ImpactLink {
 }
 
 /** One draft epic's links (`contracts.ImpactEpic`). */
-export interface ImpactEpic {
+interface ImpactEpic {
   epic_id: string;
   title: string;
   links: ImpactLink[];
@@ -169,7 +169,7 @@ export interface PlanFile {
 }
 
 /** GET /api/plan-files (`app.PlanFilesView`). */
-export interface PlanFilesView {
+interface PlanFilesView {
   revision: number;
   files: PlanFile[];
 }
@@ -206,7 +206,7 @@ export function fetchComponents(query: { module?: string; q?: string } = {}): Pr
 }
 
 /** One heading of a planning document (`repowork.Heading`). */
-export interface RepositoryHeading {
+interface RepositoryHeading {
   level: number;
   text: string;
   line: number;
@@ -237,7 +237,7 @@ export interface RepositoryDocument {
 }
 
 /** One file the index left out, with the reason (`repowork.Skipped`). */
-export interface RepositorySkipped {
+interface RepositorySkipped {
   path: string;
   reason: string;
 }
@@ -274,7 +274,7 @@ export function fetchRepositoryDocument(id: string): Promise<RepositoryWorkDocum
 }
 
 /** One file a documents-only export would write (`app.bundleFileView`). */
-export interface BundleFile {
+interface BundleFile {
   path: string;
   kind: "plan" | "spec" | "adr";
   title: string;

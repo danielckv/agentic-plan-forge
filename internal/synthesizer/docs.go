@@ -147,14 +147,6 @@ type CriticDoc struct {
 	Critiques []contracts.Critique `json:"critiques"`
 }
 
-// CodeReviewDoc is the Code Reviewer's output over the assembled candidate:
-// the same critique shape as the Red-Team Critic, so findings merge into one
-// set, but scoped to code claims — file paths, symbols, interfaces, and any
-// statement that unimplemented code passes tests.
-type CodeReviewDoc struct {
-	Critiques []contracts.Critique `json:"critiques"`
-}
-
 // TechLeadDoc is the Technical Leader's integration record: one entry per
 // finding with its resolution and the plan sections the repair touched.
 type TechLeadDoc struct {
@@ -271,15 +263,6 @@ func DecodeCritic(raw []byte) (CriticDoc, error) {
 	var d CriticDoc
 	if err := decodeStrict(raw, &d); err != nil {
 		return d, &ValidationError{Stage: "critic", Problems: []string{err.Error()}}
-	}
-	return d, nil
-}
-
-// DecodeCodeReview strictly decodes Code Reviewer output.
-func DecodeCodeReview(raw []byte) (CodeReviewDoc, error) {
-	var d CodeReviewDoc
-	if err := decodeStrict(raw, &d); err != nil {
-		return d, &ValidationError{Stage: "code_reviewer", Problems: []string{err.Error()}}
 	}
 	return d, nil
 }

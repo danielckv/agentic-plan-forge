@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`plan-forge install` writes into oh-my-pi again.** Two faults stacked. First, the install plan listed oh-my-pi
+  as found and printed its targets, but planned no files, so `~/.omp/agent` never got the skills or the hook. Second,
+  auto mode looked for `~/.omp/agents`, a directory oh-my-pi never creates; its directory is `~/.omp/agent`. With
+  `omp` off `PATH` (it lives in `~/.local/bin`), auto mode skipped oh-my-pi. The install row now shows oh-my-pi as
+  "integration only" (ADR 0027), and the `--host` help no longer claims oh-my-pi installs only when named.
+- **A stalled agent CLI no longer hangs `install`, `doctor` or setup.** Each `--version`, sign-in or model-list probe
+  now stops after 20 seconds. Before, the probe ran with no deadline.
+- `plan-forge setup` described oh-my-pi as generating when pinned. It now says "integration only, never generates".
+- CI editorconfig check: two comment continuations in `web/src/app.css` used 5- and 3-space indents.
+
 ## [0.11.0] - 2026-10-31
 
 ### Added
@@ -44,8 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Plan Forge chose the placement; a pinned role uses its pin for every avatar of that role.
 - **oh-my-pi gets the skills again.** `plan-forge install --host auto` and `--host all` select every agent found on the
   machine, oh-my-pi included, and write the same two skills into each. Installing an agent integration and choosing
-  which model writes the plan are different questions; the second is unchanged, and oh-my-pi still generates nothing
-  unless it is pinned. See [decisions 0027](docs/decisions.md).
+  which model writes the plan are different questions; the second is unchanged: oh-my-pi never generates. See
+  [decisions 0027](docs/decisions.md).
 - **The oh-my-pi hook no longer registers `/plan-forge`.** A skill of that name would shadow the command. The hook
   keeps the session-start status banner and the plan-mode handoff, which now fires when the skill's own
   `plan-forge wait` returns an approved plan. Slash commands an earlier version wrote under `~/.omp/agent/commands/`

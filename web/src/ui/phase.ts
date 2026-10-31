@@ -10,9 +10,9 @@
 
 import type { Phase } from "../store/syncStore";
 
-export type StepState = "done" | "current" | "upcoming";
+type StepState = "done" | "current" | "upcoming";
 
-export interface PhaseStep {
+interface PhaseStep {
   key: "INGESTION" | "DELIBERATION" | "SYNTHESIS" | "APPROVED";
   label: string;
   state: StepState;
@@ -20,7 +20,7 @@ export interface PhaseStep {
   complete: boolean;
 }
 
-export const PHASE_STEP_DEFS: ReadonlyArray<Pick<PhaseStep, "key" | "label">> = [
+const PHASE_STEP_DEFS: ReadonlyArray<Pick<PhaseStep, "key" | "label">> = [
   { key: "INGESTION", label: "Ingestion" },
   { key: "DELIBERATION", label: "Deliberation" },
   { key: "SYNTHESIS", label: "Synthesis" },

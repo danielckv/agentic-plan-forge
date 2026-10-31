@@ -35,7 +35,7 @@ export interface CapabilityTool {
   essential: boolean;
 }
 
-export interface SkillRootView {
+interface SkillRootView {
   host: string;
   scope?: string;
   path: string;
@@ -43,7 +43,7 @@ export interface SkillRootView {
   duplicate?: boolean;
 }
 
-export interface HookStatus {
+interface HookStatus {
   host: string;
   path: string;
   state: string;
@@ -108,21 +108,6 @@ export interface CapabilitiesView {
    * reason as `providers`: a payload from an older bridge omits it.
    */
   discovered_skills?: SkillScanReport;
-}
-
-/** The API providers holding a usable key. */
-export function configuredProviders(view: CapabilitiesView | null): ProviderStatus[] {
-  return (view?.providers ?? []).filter((p) => p.configured);
-}
-
-/**
- * True when this installation cannot generate at all: no API key and no local
- * agent CLI that passed preflight. That is the one state worth interrupting
- * the owner for, because every run fails until it changes.
- */
-export function needsSetup(view: CapabilitiesView | null): boolean {
-  if (view === null) return false;
-  return configuredProviders(view).length === 0 && usableCLIs(view).length === 0;
 }
 
 /** The browser-local record that setup has been offered once. */
@@ -218,7 +203,7 @@ export function cliSummary(view: CapabilitiesView | null): string {
   return "No coding agent found. Install Claude Code, oh-my-pi, or agy to run a plan.";
 }
 
-export type HostTone = "serves" | "blocked" | "signed-out" | "absent";
+type HostTone = "serves" | "blocked" | "signed-out" | "absent";
 
 /**
  * One host's state as the window shows it. "blocked" is the case worth having

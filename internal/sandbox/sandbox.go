@@ -128,17 +128,6 @@ func (s State) Valid() bool {
 	}
 }
 
-// Normalize maps any raw persisted or provider string onto a known State.
-// An unrecognized value becomes StateUnknown, never a fabricated progress
-// state: an ambiguous truth must stay visibly ambiguous.
-func Normalize(raw string) State {
-	s := State(strings.ToLower(strings.TrimSpace(raw)))
-	if s.Valid() {
-		return s
-	}
-	return StateUnknown
-}
-
 // HTTPProvider talks to the documented sandbox REST lifecycle with a plain
 // HTTP client. APIKey stays inside the provider: no method logs it, returns
 // it, or embeds it in an error.

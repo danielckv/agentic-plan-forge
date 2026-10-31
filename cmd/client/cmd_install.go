@@ -25,7 +25,7 @@ func runInstall(ctx context.Context, args []string) int {
 	var gitHook, dryRun, yes, force bool
 
 	fs, err := parseFlags("install", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&hostFlag, "host", "auto", "auto|claude|agy|omp|all (auto = claude and agy when found; omp only when named)")
+		fs.StringVar(&hostFlag, "host", "auto", "auto|claude|agy|omp|all (auto = every agent found: claude, agy, omp; installing into omp does not make it generate)")
 		fs.StringVar(&scopeFlag, "scope", "user", "user|project")
 		fs.StringVar(&repoFlag, "repo", "", "repository path (project scope / git hook)")
 		fs.BoolVar(&gitHook, "git-hook", false, "also install the post-merge git hook")
@@ -77,10 +77,11 @@ func runInstall(ctx context.Context, args []string) int {
 		return exitOK
 	}
 	// The final line depends on whether any generation host is signed in:
-	// an API key counts as much as a CLI sign-in.
+	// an API key counts as much as a CLI sign-in. oh-my-pi never generates,
+	// so its report never counts (see docs/decisions.md 0027).
 	anyReady := false
 	for _, r := range reports {
-		if (r.Host == "claude" || r.Host == "omp" || config.IsAPIProvider(r.Host)) && r.Auth == "ready" {
+		if (r.Host == "claude" || config.IsAPIProvider(r.Host)) && r.Auth == "ready" {
 			anyReady = true
 		}
 	}

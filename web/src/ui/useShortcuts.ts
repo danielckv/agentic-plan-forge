@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { isDialogOpen } from "./Dialog";
 import { FOCUS_FILTER_EVENT, shortcutFor } from "./shortcuts";
 
-export interface ShortcutHandlers {
+interface ShortcutHandlers {
   toggleSidebar: () => void;
   openHelp: () => void;
 }
