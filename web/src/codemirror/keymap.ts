@@ -4,7 +4,7 @@ import {
   historyKeymap,
   indentWithTab,
 } from "@codemirror/commands";
-import { EditorView, keymap } from "@codemirror/view";
+import { keymap } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 
 /**
@@ -14,9 +14,8 @@ import type { Extension } from "@codemirror/state";
  * authority owns the shared text.
  */
 
-export const basicKeymap = [...defaultKeymap, ...historyKeymap, indentWithTab];
+const basicKeymap = [...defaultKeymap, ...historyKeymap, indentWithTab];
 
 /** Complete local editor extension set (history + base keymap). */
 export const editorBase: Extension[] = [history(), keymap.of(basicKeymap)];
 
-export { EditorView, keymap };

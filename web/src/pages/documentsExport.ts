@@ -38,5 +38,3 @@ export function exportResult(report: ExportReport): { tone: "ok" | "warn"; messa
   return { tone: "warn", message: report.problem ?? report.state };
 }
 
-/** pendingExport is the "you have not confirmed yet" state. */
-export const PENDING_EXPORT = "Nothing is written until you press the button.";

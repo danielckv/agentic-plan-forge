@@ -20,7 +20,7 @@ import type { StandaloneValidate } from "./validators.generated.js";
 
 import mermaidDenylistSchema from "@schema/mermaid-denylist.json";
 
-export type SchemaId =
+type SchemaId =
   | "envelope.v1"
   | "normalized_prd.v1"
   | "impact_map.v1"
@@ -35,7 +35,7 @@ const validators: Record<SchemaId, StandaloneValidate> = {
   "research_finding.v1": researchFindingV1,
 };
 
-export interface SchemaResult {
+interface SchemaResult {
   ok: boolean;
   errors?: Array<{ path: string; message: string }>;
 }

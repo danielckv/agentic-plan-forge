@@ -10,7 +10,7 @@
 import type { UsageReport, UsageRow } from "../protocol/api";
 
 /** One host's share of the session, with the models it served. */
-export interface VendorUsage {
+interface VendorUsage {
   host: string;
   models: string[];
   requests: number;
@@ -44,7 +44,7 @@ export function byVendor(report: UsageReport): VendorUsage[] {
 }
 
 /** One role's line, for the per-avatar reading. */
-export interface RoleUsage {
+interface RoleUsage {
   role: string;
   requests: number;
   failures: number;

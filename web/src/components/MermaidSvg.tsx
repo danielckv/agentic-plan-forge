@@ -18,7 +18,7 @@ import { SkeletonLines } from "../ui/Skeleton";
  * DOMPurify SVG profile before insertion. Anything that survives is inert.
  */
 
-export type MermaidTheme = "dark" | "neutral";
+type MermaidTheme = "dark" | "neutral";
 
 /**
  * Mermaid bakes colors into the SVG at render time, so a diagram cannot follow
@@ -26,7 +26,7 @@ export type MermaidTheme = "dark" | "neutral";
  * the OS when set to System) picks the Mermaid theme, and a change
  * re-initializes Mermaid and re-renders every visible diagram.
  */
-export function mermaidThemeFor(effective: EffectiveTheme): MermaidTheme {
+function mermaidThemeFor(effective: EffectiveTheme): MermaidTheme {
   return effective === "dark" ? "dark" : "neutral";
 }
 
@@ -37,7 +37,7 @@ let appliedTheme: MermaidTheme | null = null;
  * Returns true when it re-initialized. Constants only: never pass user or LLM
  * data to `initialize`.
  */
-export function ensureMermaidTheme(effective: EffectiveTheme): boolean {
+function ensureMermaidTheme(effective: EffectiveTheme): boolean {
   const theme = mermaidThemeFor(effective);
   if (theme === appliedTheme) return false;
   appliedTheme = theme;
@@ -55,13 +55,13 @@ export function ensureMermaidTheme(effective: EffectiveTheme): boolean {
 
 ensureMermaidTheme(prefs.getSnapshot().effectiveTheme);
 
-export interface MermaidSvgProps {
+interface MermaidSvgProps {
   source: string;
   /** Optional caption rendered above the diagram. */
   title?: string;
 }
 
-export interface DiagramState {
+interface DiagramState {
   svg: string | null;
   diagnostic: string | null;
   rawSource: string;

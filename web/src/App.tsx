@@ -30,7 +30,7 @@ import { useGlobalShortcuts } from "./ui/useShortcuts";
  * Everything else (a rejected edit, a copy that failed, a decision someone else
  * resolved) is a dismissible toast, rendered by `Toaster`.
  */
-export function App(): React.ReactElement {
+function App(): React.ReactElement {
   const sync = useSync();
   const { sidebarCollapsed } = usePrefs();
   const [helpOpen, setHelpOpen] = useState(false);

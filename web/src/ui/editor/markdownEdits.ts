@@ -163,7 +163,7 @@ export function componentTerm(name: string): string {
 }
 
 /** A block the slash menu and toolbar can insert. `|` marks the caret. */
-export interface BlockTemplate {
+interface BlockTemplate {
   id: string;
   label: string;
   detail: string;

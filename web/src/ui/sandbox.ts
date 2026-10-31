@@ -54,7 +54,7 @@ export interface SandboxReceipt {
 }
 
 /** One path the packager refused (`sandbox.SourceSkip`). */
-export interface SourceSkip {
+interface SourceSkip {
   path: string;
   reason: string;
 }

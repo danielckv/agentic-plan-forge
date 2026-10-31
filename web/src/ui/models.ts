@@ -135,7 +135,7 @@ export function pinSelects(pin: ModelPin, host: string, modelId: string): boolea
   return pin.model !== "" && pin.model === modelId && (pin.host === "" || pin.host === host);
 }
 
-export type ModelsResult =
+type ModelsResult =
   | { ok: true; catalogue: ModelCatalogEntry[] }
   | { ok: false; message: string };
 

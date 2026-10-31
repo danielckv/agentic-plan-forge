@@ -26,7 +26,7 @@ export type DeltaPayload = ReturnType<typeof sendableUpdates>;
 /** What the editor must do to stay equal to `localText`. */
 export type RemoteEffect = { kind: "changes"; changes: ChangeSet } | { kind: "reset"; text: string };
 
-export interface DocClientOptions {
+interface DocClientOptions {
   /** Sends one TEXT_DELTA payload. */
   send: (payload: DeltaPayload) => void;
   /** Tells the editor about text that changed under it. */

@@ -6,7 +6,7 @@ import { FileText } from "lucide-react";
  * the card opens it. Page 1 shows the draft epics this way, and Page 2 the
  * Product Manager's.
  */
-export interface EpicCardProps {
+interface EpicCardProps {
   id: string;
   title: string;
   goal?: string;

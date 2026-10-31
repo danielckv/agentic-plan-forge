@@ -19,7 +19,7 @@ export const THEME_KEY = "plan-forge:ui:theme";
 export const SIDEBAR_KEY = "plan-forge:ui:sidebar";
 
 /** Below this viewport width the sidebar collapses to its icon rail. */
-export const SIDEBAR_AUTO_COLLAPSE_PX = 1100;
+const SIDEBAR_AUTO_COLLAPSE_PX = 1100;
 export const NARROW_QUERY = `(max-width: ${String(SIDEBAR_AUTO_COLLAPSE_PX - 0.02)}px)`;
 export const DARK_QUERY = "(prefers-color-scheme: dark)";
 /** How long `data-theming` holds transitions off around a theme change. */
@@ -27,7 +27,7 @@ export const THEME_SETTLE_MS = 100;
 
 export type ThemeChoice = "system" | "light" | "dark";
 export type EffectiveTheme = "light" | "dark";
-export type SidebarPref = "expanded" | "collapsed";
+type SidebarPref = "expanded" | "collapsed";
 
 export const THEME_ORDER: readonly ThemeChoice[] = ["system", "light", "dark"];
 
@@ -70,13 +70,13 @@ export interface ThemeRoot {
   removeAttribute(name: string): void;
 }
 
-export interface PrefsEnv {
+interface PrefsEnv {
   storage: KeyValueStore | null;
   matchMedia: ((query: string) => MediaQueryListLike) | null;
   root: ThemeRoot | null;
 }
 
-export interface PrefsSnapshot {
+interface PrefsSnapshot {
   theme: ThemeChoice;
   effectiveTheme: EffectiveTheme;
   /** The persisted sidebar choice, `null` until the user toggles it. */
@@ -85,7 +85,7 @@ export interface PrefsSnapshot {
   sidebarCollapsed: boolean;
 }
 
-export interface PrefsStore {
+interface PrefsStore {
   getSnapshot(): PrefsSnapshot;
   subscribe(listener: () => void): () => void;
   setTheme(choice: ThemeChoice): void;

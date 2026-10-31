@@ -7,7 +7,7 @@ import { Compass, DraftingCompass, FileSearch, GitMerge, ShieldAlert, Sparkles, 
  * their workstream in the name.
  */
 
-export interface AvatarSpec {
+interface AvatarSpec {
   id: string;
   name: string;
   job: string;

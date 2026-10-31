@@ -45,7 +45,7 @@ export const AMBIGUITY_CHOICES: { id: AmbiguityChoice; label: string; explain: s
 ];
 
 /** `DECISION_RESOLVE` payload. `input_revision` is a decimal string on the wire. */
-export type DecisionResolvePayload = {
+type DecisionResolvePayload = {
   decision_id: string;
   /** The card's opening revision; the authority rejects a stale one. */
   input_revision: string;
@@ -53,14 +53,14 @@ export type DecisionResolvePayload = {
 };
 
 /** `AMBIGUITY_RESOLVE` payload; `note` is absent when the answer carries none. */
-export type AmbiguityResolvePayload = {
+type AmbiguityResolvePayload = {
   ambiguity_id: string;
   choice: AmbiguityChoice;
   note?: string;
 };
 
 /** Either the command to send, or the reason this window may not send it. */
-export type AnswerVerdict<P> = { ok: true; payload: P } | { ok: false; reason: string };
+type AnswerVerdict<P> = { ok: true; payload: P } | { ok: false; reason: string };
 
 /** The session facts a refusal is decided from. */
 export interface DrawerGate {

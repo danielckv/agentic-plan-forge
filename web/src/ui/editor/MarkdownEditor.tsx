@@ -58,7 +58,7 @@ import {
  * annotation, so it is never sent back.
  */
 
-export type EditorMode = "edit" | "split" | "preview";
+type EditorMode = "edit" | "split" | "preview";
 
 /** What the page can do to the editor from outside it. */
 export interface EditorApi {
@@ -235,7 +235,7 @@ function useDebounced<T>(value: T, ms: number): T {
   return v;
 }
 
-export interface MarkdownEditorProps {
+interface MarkdownEditorProps {
   /** The document when the editor mounts; later changes arrive as remote edits. */
   initialText: string;
   /** The live text, for the preview and the word count. */

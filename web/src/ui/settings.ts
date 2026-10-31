@@ -22,8 +22,8 @@ export interface SettingsDocument {
   [key: string]: unknown;
 }
 
-export const MAX_GAP_AGENTS_MIN = 0;
-export const MAX_GAP_AGENTS_MAX = 3;
+const MAX_GAP_AGENTS_MIN = 0;
+const MAX_GAP_AGENTS_MAX = 3;
 export const MAX_GAP_AGENTS_DEFAULT = 2;
 
 /** The values the limit accepts, in order. */
@@ -76,7 +76,7 @@ export function parseSettingsDocument(value: unknown): SettingsDocument | null {
   return base;
 }
 
-export type SettingsResult =
+type SettingsResult =
   | { ok: true; settings: SettingsDocument }
   | { ok: false; message: string };
 

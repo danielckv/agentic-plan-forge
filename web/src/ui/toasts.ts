@@ -24,12 +24,12 @@ export interface Toast {
   leaving: boolean;
 }
 
-export interface ToastTimers {
+interface ToastTimers {
   set(fn: () => void, ms: number): unknown;
   clear(handle: unknown): void;
 }
 
-export interface ToastStoreOptions {
+interface ToastStoreOptions {
   timers?: ToastTimers;
   /** Per-kind auto-dismiss in ms; `null` keeps the toast until dismissed. */
   ttl?: Partial<Record<ToastKind, number | null>>;

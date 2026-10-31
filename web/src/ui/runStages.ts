@@ -8,7 +8,7 @@ import type { StageView } from "../store/syncStore";
  * stage that has not started is not shown as working.
  */
 
-export type StageState = "queued" | "running" | "waiting_for_answer" | "retrying" | "failed" | "cancelled" | "completed";
+type StageState = "queued" | "running" | "waiting_for_answer" | "retrying" | "failed" | "cancelled" | "completed";
 
 /** What the page says a stage is doing, in the reader's words. */
 export const STAGE_LABEL: Record<StageState, string> = {
@@ -22,7 +22,7 @@ export const STAGE_LABEL: Record<StageState, string> = {
 };
 
 /** A stage that is over, whatever the outcome. */
-export function stageTerminal(state: StageState): boolean {
+function stageTerminal(state: StageState): boolean {
   return state === "failed" || state === "cancelled" || state === "completed";
 }
 

@@ -39,13 +39,13 @@ export function subtaskMatches(subtask: Pick<SubtaskRow, "id" | "title" | "targe
   );
 }
 
-export interface MatrixCounts {
+interface MatrixCounts {
   epics: number;
   stories: number;
   subtasks: number;
 }
 
-export interface FilteredMatrix {
+interface FilteredMatrix {
   /** Epics and stories pruned to those holding at least one matching subtask. */
   epics: EpicRow[];
   matched: number;
