@@ -189,6 +189,22 @@ func (in *Installer) hostPresent(ctx context.Context, kind string) bool {
 			}
 		}
 		return false
+	case string(KindOMP):
+		if _, err := lookPath("omp"); err == nil {
+			return true
+		}
+		home, err := homeDir()
+		if err != nil {
+			return false
+		}
+		for _, dir := range []string{
+			filepath.Join(home, ".omp", "agents"),
+		} {
+			if info, err := os.Stat(dir); err == nil && info.IsDir() {
+				return true
+			}
+		}
+		return false
 	default:
 		_, err := Version(ctx, Kind(kind))
 		return err == nil
