@@ -228,6 +228,13 @@ try {
   // The Team tab is the default view now; the Plan tab still holds the graph.
   await page.getByRole("tab", { name: /Plan/ }).click();
   await page.waitForSelector(".pf-room-plan .pf-plangraph", { state: "visible" });
+  // PlanGraph3D is a lazy chunk that starts loading when this tab is first
+  // selected, and the tree fallback unmounts the moment it mounts. The
+  // container is here before either, so wait for the graph itself before
+  // counting anything.
+  await page
+    .waitForSelector(".pf-plangraph3d canvas, .pf-plantree-node", { timeout: 15_000 })
+    .catch(() => {});
   const graphCanvases = await page.locator(".pf-plangraph3d canvas").count();
   const treeNodes = await page.locator(".pf-plantree-node").count();
   // Headless Chromium has WebGL through SwiftShader, so the canvas is what is
