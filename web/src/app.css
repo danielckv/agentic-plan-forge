@@ -5740,7 +5740,7 @@ figure > .pf-diagram-source { border-top: none; }
 }
 
 /* The columns scroll sideways as a set, so a wide board never squeezes a
-   card narrower than its own text. */
+ * card narrower than its own text. */
 .pf-sprints-columns {
   display: grid;
   grid-auto-flow: column;
@@ -5831,7 +5831,7 @@ figure > .pf-diagram-source { border-top: none; }
   flex-direction: column;
   gap: 6px;
   /* The list takes the rest of the column so every column is the same
-     height and the drop target covers the empty space below the cards. */
+   * height and the drop target covers the empty space below the cards. */
   flex: 1;
 }
 

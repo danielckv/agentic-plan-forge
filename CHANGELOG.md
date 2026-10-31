@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`plan-forge install` writes into oh-my-pi again.** Two faults stacked. First, the install plan listed oh-my-pi
+  as found and printed its targets, but planned no files, so `~/.omp/agent` never got the skills or the hook. Second,
+  auto mode looked for `~/.omp/agents`, a directory oh-my-pi never creates; its directory is `~/.omp/agent`. With
+  `omp` off `PATH` (it lives in `~/.local/bin`), auto mode skipped oh-my-pi. The install row now shows oh-my-pi as
+  "integration only" (ADR 0027), and the `--host` help no longer claims oh-my-pi installs only when named.
+- CI editorconfig check: two comment continuations in `web/src/app.css` used 5- and 3-space indents.
+
 ## [0.11.0] - 2026-10-31
 
 ### Added

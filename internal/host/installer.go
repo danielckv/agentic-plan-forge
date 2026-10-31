@@ -197,8 +197,10 @@ func (in *Installer) hostPresent(ctx context.Context, kind string) bool {
 		if err != nil {
 			return false
 		}
+		// ~/.omp/agent (singular) is the directory the skills and hooks land
+		// in. `omp` itself often sits in ~/.local/bin, off a script's PATH.
 		for _, dir := range []string{
-			filepath.Join(home, ".omp", "agents"),
+			filepath.Join(home, ".omp", "agent"),
 		} {
 			if info, err := os.Stat(dir); err == nil && info.IsDir() {
 				return true
@@ -304,6 +306,18 @@ func (in *Installer) Plan(ctx context.Context, opts InstallOptions) ([]HostRepor
 			artifacts = append(artifacts, arts...)
 			report.Targets = claudeTargets(opts.Scope)
 		case string(KindOMP):
+			// ADR 0027: oh-my-pi runs Plan Forge but never generates, so its
+			// sign-in state is not probed. It still gets the skills and hook.
+			if v, err := Version(ctx, KindOMP); err == nil {
+				report.Version = v
+			}
+			report.Auth = "integration only"
+			report.Note = "type /plan-forge in oh-my-pi; it never generates the plan"
+			arts, err := in.planOMP(home, opts)
+			if err != nil {
+				return nil, nil, err
+			}
+			artifacts = append(artifacts, arts...)
 			report.Targets = ompTargets(opts.Scope)
 		case string(KindAGY):
 			// Generation signs in to the isolated profile, not the host's agy

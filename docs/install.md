@@ -35,6 +35,9 @@ copied aside and restored.
 managed hook. Installing an agent is not the same as choosing which model writes the plan: oh-my-pi gets the skills
 and the hook, and never generates. See [configuration](configuration.md).
 
+oh-my-pi counts as found when `omp` is on `PATH` or `~/.omp/agent` exists. The second check matters: the oh-my-pi
+installer puts `omp` in `~/.local/bin`, which a piped install script often does not have on `PATH`.
+
 | Agent | Skills | Hook |
 | :--- | :--- | :--- |
 | Claude Code | `~/.claude/skills/{plan-forge,plan-config}/SKILL.md` | `~/.claude/settings.json` |
