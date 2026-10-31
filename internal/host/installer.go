@@ -63,7 +63,7 @@ type HostReport struct {
 	Host    string
 	Found   bool
 	Version string
-	Auth    string // ready|unknown|missing|integration only (omp: never generates, ADR 0027)
+	Auth    string // ready|unknown|missing|isolated profile (agy)|integration only (omp, ADR 0027)
 	AuthCmd string // login command printed for missing
 	Targets []string
 	Note    string // printed for the found-agy row instead of (skipped)

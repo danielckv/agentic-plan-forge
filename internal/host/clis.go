@@ -28,7 +28,8 @@ type KnownCLI struct {
 
 // KnownCLIs lists the coding-agent CLIs the first-run scan looks for.
 //
-// The three adapters are the hosts a plan can be generated on. The rest are
+// Claude and agy are adapters a plan can be generated on; oh-my-pi is
+// integration only and never generates (ADR 0027). The rest are
 // agents a developer may already have installed. Finding one is reported so the
 // owner knows it was seen, and it is never placed in a generation slot until an
 // adapter exists for it: reporting a tool as available when Plan Forge cannot
