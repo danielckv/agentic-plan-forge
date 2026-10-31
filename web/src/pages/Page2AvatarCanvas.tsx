@@ -440,7 +440,7 @@ export function Page2AvatarCanvas(): React.ReactElement {
                   title="Open the question drawer"
                 >
                   <CircleHelp size={15} aria-hidden="true" />
-                  <span>Questions</span>
+                  <span className="pf-rail-tab-label">Questions</span>
                   {openQuestions > 0 && <span className="pf-rail-count">{openQuestions}</span>}
                 </button>
               </div>
@@ -783,7 +783,7 @@ function PlanTabButton(props: {
   return (
     <button type="button" role="tab" className="pf-rail-tab" aria-selected={id === current} onClick={() => onSelect(id)}>
       <Icon size={14} />
-      {label}
+      <span className="pf-rail-tab-label">{label}</span>
       {count !== undefined && count > 0 && <span className="pf-rail-count">{count}</span>}
     </button>
   );

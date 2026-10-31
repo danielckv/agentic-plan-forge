@@ -2627,10 +2627,13 @@ figure > .pf-diagram-source { border-top: none; }
 
 .pf-composer-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 384px;
+  grid-template-columns: minmax(0, 44fr) minmax(420px, 56fr);
   gap: 20px;
   height: 100%;
-  max-width: 1600px;
+  /* The rail carries seven tabs and a plan: it takes the larger share of a
+   * wider page and never drops below 420px, while the editor gives up width
+   * first, down to nothing before the two-column grid itself gives up. */
+  max-width: 1760px;
   margin-inline: auto;
   padding: 20px var(--pf-gutter);
 }
@@ -2987,6 +2990,25 @@ figure > .pf-diagram-source { border-top: none; }
   background: var(--pf-panel);
   box-shadow: var(--pf-shadow-sm);
   overflow: hidden;
+  /* The tab row answers to the rail's own width, not the window's. */
+  container: pf-rail / inline-size;
+}
+
+/*
+ * Narrow rail: the tab labels hide and the icons stay, so every tab keeps a
+ * clickable, recognisable shape at any rail width. The selected tab keeps its
+ * label (the reader knows where they are); hidden labels stay readable to
+ * assistive tech. The Setup dialog overrides this: two tabs never crowd.
+ */
+@container pf-rail (max-width: 620px) {
+  .pf-rail-tab:not([aria-selected="true"]) .pf-rail-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 .pf-rail-tabs {
@@ -3003,12 +3025,13 @@ figure > .pf-diagram-source { border-top: none; }
   align-items: center;
   justify-content: center;
   gap: 5px;
-  /* Five tabs share the rail's width: each takes an equal share and keeps its
-   * label whole, because a truncated tab is a guess at which panel it opens. */
+  /* Seven tabs: each keeps its natural width and every label stays whole —
+   * a truncated tab is a guess at which panel it opens. When the row runs
+   * out of room the labels hide (not the icons), so a tab is still
+   * identifiable and still clickable. */
   min-width: 0;
-  flex: 1 1 0;
-  padding: 0 6px;
-  overflow: hidden;
+  flex: 1 1 auto;
+  padding: 0 8px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -3857,8 +3880,9 @@ figure > .pf-diagram-source { border-top: none; }
 .pf-room-grid {
   display: grid;
   flex: 1;
-  /* The rail carries five tabs and a plan; 420px wrapped them into two
-   * rows and truncated every label, so it gets a third of a wide viewport. */
+  /* The plan rail carries five tabs and a plan; 420px wrapped them into two
+   * rows and truncated every label, so it gets a third of a wide viewport.
+   * Below that the tab labels hide and the icons stay (pf-rail query). */
   grid-template-columns: minmax(0, 1fr) minmax(420px, 34%);
   gap: 16px;
   min-height: 0;
@@ -4693,6 +4717,16 @@ figure > .pf-diagram-source { border-top: none; }
 .pf-setup-tabs .pf-rail-tab {
   flex: 0 0 auto;
   padding: 0 14px;
+}
+
+/* Two tabs never crowd, so the narrow-rail fallback does not apply here. */
+.pf-setup-tabs .pf-rail-tab .pf-rail-tab-label {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
 }
 
 .pf-setup-body {
