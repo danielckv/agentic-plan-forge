@@ -100,14 +100,20 @@ func TestToolUseTripwireAllowsTextEvents(t *testing.T) {
 	}
 }
 
-func TestAGYPreflightFailsWithoutVerifiedIsolation(t *testing.T) {
+// Without the agy binary, Preflight still fails closed — but now after
+// provisioning the isolated profile, which is what the generation gate
+// validates.
+func TestAGYPreflightFailsClosedWithoutBinary(t *testing.T) {
+	t.Setenv("PLAN_FORGE_HOME", t.TempDir())
+	dir := t.TempDir()
+	stubPath(t, dir)
 	adapter := &AGY{binary: "agy"}
 	err := adapter.Preflight(context.Background())
 	var capability *contracts.ErrCapability
 	if !errors.As(err, &capability) {
 		t.Fatalf("expected ErrCapability, got %v", err)
 	}
-	if !strings.Contains(capability.Reason, "isolated settings") {
+	if !strings.Contains(capability.Reason, "not found") {
 		t.Fatalf("unexpected capability reason: %s", capability.Reason)
 	}
 }

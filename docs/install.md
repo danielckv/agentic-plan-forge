@@ -60,6 +60,36 @@ On macOS and Linux the installer runs `plan-forge uninstall --purge --yes` befor
 `credentials.json` is copied aside first and restored afterwards: the keys are what make the Gemini and Claude hosts
 work, and asking for them again is not a default value.
 
+## The isolated agy profile
+
+Antigravity (agy) has no isolated-settings flag of its own, so Plan Forge gives it one: a profile directory inside the
+Plan Forge home that becomes the agy process's entire home. Every agy child Plan Forge launches — generation runs and
+the `agy models` auth probe alike — runs with `HOME` (and `USERPROFILE`) rewritten to that directory. No `XDG_*`
+override is needed: unset, those variables derive from `HOME`, so they resolve inside the profile too.
+
+The profile lives at `$PLAN_FORGE_HOME/profiles/agy` (default `~/.plan-forge/profiles/agy`):
+
+- Plan Forge creates it on first use, mode `0700`, and tightens the mode if it finds it looser — the profile holds
+  sign-in credentials.
+- It writes `profiles/agy/.gemini/antigravity-cli/settings.json` (mode `0600`) with a deny list covering every agy
+  tool family (`read_file`, `write_file`, `read_url`, `execute_url`, `command`, `unsandboxed`, `mcp`). That policy is
+  what makes plan generation tool-free, and it is re-validated before every spawn: edit the file to weaken it and
+  generation fails closed with the missing rule named, rather than running against a tool-capable profile. Adding
+  rules of your own is fine — provisioning never rewrites an existing file.
+- Signing in writes there too: agy's `~/.gemini/oauth_creds.json` and any other state land under the profile, not
+  under your real home. Nothing under the host's own `~/.gemini` is read or written by a Plan Forge agy run.
+
+Sign in to the profile once, exactly as the profile sees it:
+
+```sh
+HOME="$HOME/.plan-forge/profiles/agy" agy
+```
+
+A sign-in to your host's own agy does not count — Plan Forge never looks at it. `plan-forge doctor` reports the agy
+row against the profile: "not signed in" prints the command above with the right path, and any policy problem appears
+as the row's `serves: NO` line. To inspect the profile by hand, list `~/.plan-forge/profiles/agy` — everything agy
+did for Plan Forge is in that tree.
+
 ## What gets installed
 
 The installer verifies the release checksum, places the binary, then runs `plan-forge install --host auto`, which detects

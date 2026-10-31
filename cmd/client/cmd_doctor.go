@@ -53,9 +53,9 @@ type doctorHost struct {
 	Auth    doctorAuth `json:"auth"`
 	Models  []string   `json:"models,omitempty"`
 	// Usable is false when the host is signed in but cannot serve a call:
-	// AGY without a verified isolated settings mechanism is the live case.
-	// Reporting auth alone hid it, and a main_host pinned to such a host was
-	// dropped without a word while every avatar went somewhere else.
+	// AGY before its isolated profile passes policy validation is the live
+	// case. Reporting auth alone hid it, and a main_host pinned to such a
+	// host was dropped without a word while every avatar went somewhere else.
 	Usable bool   `json:"usable"`
 	Blocks string `json:"blocks,omitempty"`
 }

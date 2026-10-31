@@ -50,7 +50,12 @@ func TestOMPOverlayPreservesEffectiveDisabledProviders(t *testing.T) {
 	}
 }
 
-func TestAGYGenerateReturnsAuditReceiptWhenIsolationIsUnavailable(t *testing.T) {
+// With the isolated profile provisioned but no agy binary on PATH, generation
+// still fails closed and the audit receipt records the attempted invocation.
+func TestAGYGenerateReturnsAuditReceiptWhenBinaryIsUnavailable(t *testing.T) {
+	t.Setenv("PLAN_FORGE_HOME", t.TempDir())
+	dir := t.TempDir()
+	stubPath(t, dir)
 	adapter := &AGY{binary: "agy"}
 	result, err := adapter.Generate(context.Background(), contracts.GenerateRequest{Model: "model-x"}, nil)
 	if err == nil {
