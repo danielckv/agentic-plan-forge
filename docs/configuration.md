@@ -208,8 +208,9 @@ The tab opens only when you run `/plan-forge`. Starting an agent session never o
 Every `run` and `join` writes a log next to `config.json`: `~/.plan-forge/logs/plan-forge-YYYY-MM-DD.log`
 (`$PLAN_FORGE_HOME/logs` when the override is set). The file name carries the date, so a new day starts a new
 file without a restart. Files older than two days are deleted the next time any command opens a log; other files
-in that directory are never touched. Detached sessions also keep their per-session log under the cache
-(`sessions/<id>.log`), which `plan-forge wait` reads; the day file records the same run at the same severity.
+in that directory are never touched. A detached session writes every record to both files at once: the day log and
+its per-session log under the cache (`sessions/<id>.log`), which `plan-forge wait` reads. When one of the two
+cannot be opened the child still logs to the other — a log failure never stops a run.
 
 The log is mode 0600 and holds absolute paths and model names, so it stays readable by the owner only.
 
