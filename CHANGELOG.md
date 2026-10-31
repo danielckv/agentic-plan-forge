@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-31
+
 ### Fixed
 
 - **`plan-forge install` writes into oh-my-pi again.** Two faults stacked. First, the install plan listed oh-my-pi
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A stalled agent CLI no longer hangs `install`, `doctor` or setup.** Each `--version`, sign-in or model-list probe
   now stops after 20 seconds. Before, the probe ran with no deadline.
 - `plan-forge setup` described oh-my-pi as generating when pinned. It now says "integration only, never generates".
+- `plan-forge doctor` no longer probes oh-my-pi sign-in or models. oh-my-pi is integration only, so doctor checks
+  only its skills and hook (`docs/install.md`, decisions 0031).
+- Install safety: a symlinked `~/.omp` or `<repo>/.omp` whose target is unsafe is now rejected before any write,
+  not just a symlinked `agent` directory.
+- Dead logic: the install readiness check no longer counts oh-my-pi, which never generates.
 - CI editorconfig check: two comment continuations in `web/src/app.css` used 5- and 3-space indents.
 
 ## [0.11.0] - 2026-10-31
@@ -529,7 +536,8 @@ First public release.
 
 - Antigravity generation fails closed because its CLI exposes no verified isolated-settings selector. Antigravity remains a skill host, and `/plan-forge` falls back to Claude or Oh My Pi.
 
-[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/danielckv/agentic-plan-forge/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/danielckv/agentic-plan-forge/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/danielckv/agentic-plan-forge/compare/v0.8.2...v0.9.0
