@@ -35,6 +35,22 @@ start-up. If the install directory is not on your `PATH`, the installer prints t
 The one-command install fetches the latest published release. [Build from source](#build-from-source) is the path for
 unreleased changes.
 
+### The closing summary and the configuration prompt
+
+A successful install ends with a summary block: the Plan Forge home, the `config.json` path, the binary path, the
+hosts that received skills, the model pins in effect, and one next-steps line. The block is coloured when stdout is a
+terminal and plain when it is piped or `NO_COLOR` is set, so the lines a script captures stay greppable.
+
+An interactive run — a terminal on stdin and stdout, and no `--yes` — then asks "Edit configuration now?": ↑/↓ or Tab
+move the highlight, Enter selects, y/n answer directly, q or Esc answers No, and No is the default. Yes opens a
+terminal editor over `config.json` with two tabs: **General** (`main_host`, `judge_host`, `stage_timeout_seconds`,
+`human_workday_hours`, `disable_narrator`) and **Models** (`default_main_model`, `default_judge_model`, and one row
+per pinned entry in `role_models`, which edits the model and keeps the host pin). Tab switches tabs, Enter edits a
+value — an empty answer keeps the current one, `-` clears a pin — s saves, q quits, and unsaved changes ask before
+they are discarded. A bad host name is refused as it is typed, and a save runs the same validation `plan-forge
+config` runs. `--yes` and non-terminal runs never prompt, so scripts never block; the editor is reachable again by
+re-running `plan-forge install` without `--yes`.
+
 ### A reinstall starts from defaults
 
 On macOS and Linux the installer runs `plan-forge uninstall --purge --yes` before it registers anything. That deletes

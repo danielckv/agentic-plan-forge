@@ -9,6 +9,12 @@ credentials can only be set from your own terminal (`plan-forge config --set-rel
 
 The `/plan-config` slash command reviews and changes the same settings from inside your agent.
 
+An interactive `plan-forge install` (a terminal, no `--yes`) offers to open a terminal editor over the same
+`config.json`. It has two tabs, switched with Tab: **General** for hosts, the stage timeout, the workday and the
+narrator, and **Models** for `default_main_model`, `default_judge_model` and every pinned `role_models` entry. It saves
+through the same validation as `plan-forge config`, so it cannot write a file the other commands would reject. Keys and
+details: [install.md](install.md).
+
 ## API providers, and why there is no "sign in with Claude"
 
 A plan can run two ways: through a coding-agent CLI installed on your machine, or over a

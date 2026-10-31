@@ -12,6 +12,7 @@ import (
 
 	"github.com/danielckv/agentic-plan-forge/internal/config"
 	"github.com/danielckv/agentic-plan-forge/internal/host"
+	"github.com/danielckv/agentic-plan-forge/internal/tui"
 )
 
 func init() {
@@ -87,6 +88,19 @@ func runInstall(ctx context.Context, args []string) int {
 		fmt.Println("Done. Restart your agent, then type /plan-forge")
 	} else {
 		fmt.Println("Warning: no generation host is signed in; /plan-forge exits 3 until one is. Run: plan-forge doctor")
+	}
+	renderInstallSummary(os.Stdout, gatherInstallSummary(reports, installer.Bin()), wantColor(os.Stdout))
+	// A --yes or scripted run never blocks: the prompt needs the terminal it
+	// already verified, and the flag is the script saying so.
+	if !yes {
+		edit, err := tui.Confirm(ctx, tui.StdTerminal(), "Edit configuration now?")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config prompt: %v\n", err)
+		} else if edit {
+			if err := tui.EditConfig(ctx, tui.StdTerminal(), ""); err != nil {
+				fmt.Fprintf(os.Stderr, "config editor: %v\n", err)
+			}
+		}
 	}
 	return exitOK
 }
