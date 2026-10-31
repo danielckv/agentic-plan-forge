@@ -56,14 +56,15 @@ func Render(v View, w Width) string {
 	var b strings.Builder
 
 	writeHeader(&b, v, cols)
+	writeTabs(&b, v, cols)
 	if v.Snapshot.Err != "" {
-		b.WriteString(line(cols, "!", "error: "+v.Snapshot.Err))
+		b.WriteString(line(cols, "!", bad("error: "+v.Snapshot.Err)))
 	}
 	if v.Snapshot.Banner != "" {
-		b.WriteString(line(cols, "*", v.Snapshot.Banner))
+		b.WriteString(line(cols, "*", note(v.Snapshot.Banner)))
 	}
 	if v.Notice != "" {
-		b.WriteString(line(cols, ">", v.Notice))
+		b.WriteString(line(cols, ">", warn(v.Notice)))
 	}
 	b.WriteString(rule(cols))
 
@@ -116,16 +117,32 @@ func writeHeader(b *strings.Builder, v View, cols int) {
 	if v.Snapshot.DocTitle != "" {
 		title = truncate(v.Snapshot.DocTitle, cols/3)
 	}
-	head := fmt.Sprintf("%s — %s%s%s%s", title, phase, cycle, role, members)
+	head := bold(title) + dim(fmt.Sprintf(" — %s%s%s%s", phase, cycle, role, members))
 	b.WriteString(line(cols, "=", head))
+}
+
+// writeTabs draws the tab bar: every pane, numbered by the key that opens it,
+// with the open one reversed. Without it the only clue to the current pane was
+// the section heading below it.
+func writeTabs(b *strings.Builder, v View, cols int) {
+	var row strings.Builder
+	for i, t := range Tabs {
+		label := fmt.Sprintf(" %d %s ", i+1, t.Title())
+		if t == v.Tab {
+			row.WriteString(active(label))
+			continue
+		}
+		row.WriteString(dim(label))
+	}
+	b.WriteString(truncate(row.String(), cols) + "\n")
 }
 
 // writeFooter names the keys and the count that matters most: questions waiting.
 func writeFooter(b *strings.Builder, v View, cols int) {
 	pending := len(v.Snapshot.Questions)
-	keys := "1-5 tabs · Tab/Shift-Tab panes · ↑↓ select · Enter act · ? help · q quit"
+	keys := dim("1-5 tabs · Tab/Shift-Tab panes · ↑↓ select · Enter act · ? help · q quit")
 	if pending > 0 {
-		keys = fmt.Sprintf("%d open question(s) — press 4 · %s", pending, keys)
+		keys = warn(fmt.Sprintf("%d open question(s) — press 4", pending)) + dim(" · ") + keys
 	}
 	b.WriteString(line(cols, "-", truncate(keys, cols)))
 }
@@ -156,14 +173,20 @@ func writeBrief(b *strings.Builder, v View, cols int) {
 	words := len(strings.Fields(v.Snapshot.DocText))
 	b.WriteString(wrapped(fmt.Sprintf("%d words, revision %d. Press e to append.", words, v.Snapshot.DocVersion), cols))
 	b.WriteString(rule(cols))
-	// The tail is what the reader needs: the document grows by appending.
-	lines := strings.Split(strings.TrimRight(v.Snapshot.DocText, "\n"), "\n")
+	// The tail is what the reader needs: the document grows by appending. The
+	// bound is on rendered lines, not source lines: one unwrapped paragraph is
+	// a single source line and hundreds of rendered ones.
 	const tail = 12
-	if len(lines) > tail {
-		lines = lines[len(lines)-tail:]
+	var rendered []string
+	for _, ln := range strings.Split(strings.TrimRight(v.Snapshot.DocText, "\n"), "\n") {
+		rendered = append(rendered, strings.Split(strings.TrimRight(wrapped(ln, cols), "\n"), "\n")...)
 	}
-	for _, ln := range lines {
-		b.WriteString(wrapped(ln, cols))
+	if len(rendered) > tail {
+		b.WriteString(dim(fmt.Sprintf("… %d earlier lines\n", len(rendered)-tail)))
+		rendered = rendered[len(rendered)-tail:]
+	}
+	for _, ln := range rendered {
+		b.WriteString(ln + "\n")
 	}
 }
 
@@ -197,8 +220,12 @@ func writeAgents(b *strings.Builder, v View, cols int) {
 		if status == "" {
 			status = "idle"
 		}
-		head := fmt.Sprintf("%s%s%s — %s", name, located(a.Cycle), where, status)
-		b.WriteString(line(cols, " ", cursor+truncate(head, cols-2)))
+		head := fmt.Sprintf("%s%s%s", name, located(a.Cycle), where)
+		if i == v.Selected {
+			head = bold(head)
+		}
+		head = truncate(head, cols-6-len([]rune(status))) + dim(" — ") + statusColour(status)(status)
+		b.WriteString(line(cols, " ", cursor+head))
 		if a.Summary != "" {
 			b.WriteString(wrappedIndent(a.Summary, cols, 6))
 		}
@@ -313,9 +340,10 @@ func line(cols int, marker, text string) string {
 	return truncate(marker+" "+text, cols) + "\n"
 }
 
-// section writes a heading row.
+// section writes a heading row. No leading marker and no blank line after it:
+// both were padding that made every pane look half-empty.
 func section(cols int, title string) string {
-	return line(cols, "", "── "+title+" ") + "\n"
+	return truncate(heading("── "+title), cols) + "\n"
 }
 
 // rule writes a divider the full width.
@@ -376,11 +404,40 @@ func truncate(s string, cols int) string {
 	if cols <= 1 {
 		return ""
 	}
-	if utf8.RuneCountInString(s) <= cols {
+	if !strings.Contains(s, "\x1b[") {
+		if utf8.RuneCountInString(s) <= cols {
+			return s
+		}
+		runes := []rune(s)
+		return string(runes[:cols-1]) + "…"
+	}
+	if utf8.RuneCountInString(plain(s)) <= cols {
 		return s
 	}
+	// Copy escape sequences through without spending width on them, and close
+	// the run that the cut interrupted.
+	var out strings.Builder
+	visible := 0
 	runes := []rune(s)
-	return string(runes[:cols-1]) + "…"
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == 0x1b && i+1 < len(runes) && runes[i+1] == '[' {
+			j := i + 2
+			for j < len(runes) && runes[j] != 'm' {
+				j++
+			}
+			if j < len(runes) {
+				out.WriteString(string(runes[i : j+1]))
+				i = j
+				continue
+			}
+		}
+		if visible == cols-1 {
+			break
+		}
+		out.WriteRune(runes[i])
+		visible++
+	}
+	return out.String() + "…" + sgrReset
 }
 
 // orDash renders an empty value as a dash, so a blank cell is never ambiguous

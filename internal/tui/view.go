@@ -41,6 +41,15 @@ const (
 // order matches the work.
 var Tabs = []Tab{TabBrief, TabAgents, TabPlan, TabQuestions, TabSettings}
 
+// Title is the tab's label in the tab bar: its own name, capitalised.
+func (t Tab) Title() string {
+	if t == "" {
+		return ""
+	}
+	runes := []rune(string(t))
+	return strings.ToUpper(string(runes[0])) + string(runes[1:])
+}
+
 // AgentRow is one avatar's current state, as the terminal shows it.
 type AgentRow struct {
 	ID      string

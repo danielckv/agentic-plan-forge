@@ -38,10 +38,9 @@ type HookStatus struct {
 // InspectHooks reports whether each host's managed hooks are installed and
 // point at this binary.
 //
-// It matters most for oh-my-pi. Plan Forge installs no skills there, so the
-// hook is the only thing that registers /plan-forge: a missing hook does not
-// degrade the command, it removes it. Doctor has to
-// say so rather than report a healthy-looking host with no way in.
+// Every host has one managed hook. Without it the skills still run the forge,
+// but nothing hands the approved plan to the agent's plan mode, so doctor
+// names the hook rather than report a healthy-looking host.
 //
 // kinds is the set to inspect; repo "" skips project scope.
 func (in *Installer) InspectHooks(kinds []string, repo string) ([]HookStatus, error) {
@@ -139,8 +138,8 @@ func (in *Installer) ompHookStatus(home, repo string) HookStatus {
 		}
 	}
 	st := HookStatus{Host: string(KindOMP), Surface: "hooks/pre/plan-forge.ts", Path: shortHome(home, path)}
-	st.Remedy = "without this hook oh-my-pi has no /plan-forge at all, " +
-		"because Plan Forge installs no skills there; run: plan-forge install --host omp"
+	st.Remedy = "without this hook oh-my-pi runs the forge but never opens plan mode " +
+		"with the approved plan; run: plan-forge install --host omp"
 
 	raw, err := os.ReadFile(path)
 	if err != nil {

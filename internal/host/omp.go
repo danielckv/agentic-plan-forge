@@ -83,16 +83,6 @@ func (a *OMP) Models(ctx context.Context) ([]ModelRef, error) {
 	return parseModelRefs(stdout)
 }
 
-// RoleModel returns the OMP model selector configured for role in the user's
-// OMP modelRoles map when Plan Forge has no explicit model override.
-func (a *OMP) RoleModel(role contracts.RoleID, lane string) string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	return effectiveOMPRoleModel(cwd, role, lane)
-}
-
 func (a *OMP) Preflight(ctx context.Context) error {
 	if _, err := a.Detect(ctx); err != nil {
 		return err

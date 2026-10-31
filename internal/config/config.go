@@ -148,8 +148,10 @@ type Config struct {
 // provider APIs are the defaults. The CLI hosts claude and agy join the
 // rotation when signed in. omp serves only an explicit pin: it is never a
 // default and never a fallback (ADR 0026).
+// validHosts are the hosts that generate. oh-my-pi is deliberately absent: it
+// is a harness that runs Plan Forge, and it keeps its skills and hook.
 var validHosts = map[string]bool{
-	"": true, "claude": true, "agy": true, "omp": true,
+	"": true, "claude": true, "agy": true,
 	ProviderAnthropic: true, ProviderOpenAI: true, ProviderFireworks: true,
 	"gemini": true, "antigravity": true,
 }
@@ -311,7 +313,11 @@ func Save(path string, cfg Config) error {
 // hostError explains an unsupported host. omp is supported, but only as an
 // explicit pin, so a pin naming it passes validation and the router honours it.
 func hostError(field, host string) error {
-	const supported = "anthropic, gemini, openai, fireworks, antigravity, claude, agy, omp (explicit pin only)"
+	const supported = "anthropic, gemini, antigravity, claude, agy, openai, fireworks"
+	if host == "omp" {
+		return fmt.Errorf("%s is \"omp\", which no longer generates. oh-my-pi runs /plan-forge and keeps its skills "+
+			"and hook; remove this key and let the run place itself, or name one of %s", field, supported)
+	}
 	return fmt.Errorf("%s is %q, which is not a supported host. The supported hosts are %s", field, host, supported)
 }
 

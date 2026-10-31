@@ -25,7 +25,7 @@ const (
 	// optionRecord takes the plan with its open blockers written onto it,
 	// rather than ending the run with no plan at all.
 	optionRecord = "record"
-	maxCardRunes      = 300
+	maxCardRunes = 300
 )
 
 // promptDecision records a decision as pending and opens its card. The

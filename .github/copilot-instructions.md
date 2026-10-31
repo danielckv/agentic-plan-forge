@@ -35,7 +35,7 @@ Language traps:
 ## Docs drift
 Docs are part of the change. For each changed code path, open the doc that describes it and compare names, flags, env vars, defaults, file paths, numbers and stated behaviour. Quote the doc line that is now wrong next to the code line that contradicts it.
 - Find the README or `docs/` page that names each changed path, and check it still holds.
-- **ADRs** (`docs/adrs/`): an ADR records a decision. A PR that reverses or bends an accepted ADR needs a new ADR or a dated addendum. Ask for that, not for an edit to the old decision text.
+- **Decisions** (`docs/decisions.md`): one entry per decision. A PR that reverses or bends an accepted decision needs a new entry, not an edit to the old one.
 - **Plans** (`docs/plans/`): flag a plan that still lists as pending, or describes another way, what this PR builds or replaces.
 - A structural change (a new top-level directory, or more than 10 changed files) needs an ADR in the same PR.
 - A doc changed with no code change: check it describes the code as it is now, not as planned.

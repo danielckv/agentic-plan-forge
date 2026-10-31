@@ -2,20 +2,21 @@ import type { HookAPI } from "@oh-my-pi/pi-coding-agent/extensibility/hooks";
 
 // Plan-Forge OMP hook (managed).
 //
+// The plan-forge skill runs the forge, exactly as it does on the other hosts.
+// This hook adds the two things a skill cannot do in OMP:
+//
 // - session_start: bounded plan-status banner.
-// - /plan-forge: runs the forge, waits for approval, then opens a plan-mode
-//   session: newSession records a "plan" mode_change entry in the new session
-//   (appendModeChange), switchSession to that same file re-runs the session
-//   reconcile, which enters plan mode, and sendUserMessage starts the turn.
-//   The runtime plan.defaultOnStartup override is NOT used: it does not apply
-//   to extension-driven sessions. Every missing or failing API falls back to
-//   prefilling "/plan …" in the editor.
-// - tool_result (skill path): an approved wait result prefills "/plan …".
+// - tool_result: when the skill's own `plan-forge wait` returns an approved
+//   plan, open a plan-mode session with it. newSession records a "plan"
+//   mode_change entry (appendModeChange), switchSession to that same file
+//   re-runs the session reconcile, which enters plan mode, and sendUserMessage
+//   starts the turn. The runtime plan.defaultOnStartup override is NOT used:
+//   it does not apply to extension-driven sessions. Every missing or failing
+//   API falls back to prefilling "/plan …" in the editor.
 //
 // Every pi.exec call is bounded and caught: the hook never throws into OMP.
 
 const BIN = "{{PLAN_FORGE_BIN}}";
-const STATUS_KEY = "plan-forge";
 
 export interface ExecResult {
   code: number;
@@ -23,23 +24,14 @@ export interface ExecResult {
   stderr: string;
 }
 
-// HookDeps are the injectable seams: the timing knobs. Tests shrink them.
+// HookDeps is the injectable seam: the exec time bound. Tests shrink it.
 export interface HookDeps {
   execTimeoutMs: number;
-  waitTimeout: string;
-  // Optional wait-loop seams; tests shrink them.
-  waitMaxMs?: number;
-  waitFastMs?: number;
-  waitRetryDelayMs?: number;
-  sleep?: (ms: number) => Promise<void>;
-  now?: () => number;
 }
 
 interface UiLike {
   notify(message: string, kind?: string): void;
-  setStatus(key: string, text: string): void;
   setEditorText(text: string): void;
-  confirm(title: string, message: string): Promise<boolean>;
 }
 
 interface NewSessionOptions {
@@ -67,32 +59,13 @@ interface CtxLike {
 interface PiLike {
   exec(bin: string, args: string[], options?: { timeout?: number; signal?: AbortSignal }): unknown;
   sendMessage(message: unknown): void;
-  registerCommand(
-    name: string,
-    spec: { description: string; handler(args: string, ctx: CtxLike): Promise<void> },
-  ): void;
   on(event: string, handler: (event: unknown, ctx: CtxLike) => unknown): void;
   sendUserMessage?(text: string): unknown;
 }
 
-// HookState is shared by every handler of one hook instance. shutdown stops a
-// wait loop whose session has ended.
-interface HookState {
-  shutdown: boolean;
-}
-
 export const defaultDeps: HookDeps = {
   execTimeoutMs: 60_000,
-  waitTimeout: "50s",
 };
-
-const WAIT_MAX_MS = 6 * 60 * 60 * 1000;
-const WAIT_FAST_MS = 5_000;
-const WAIT_RETRY_DELAY_MS = 1_000;
-
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
 
 // execPlanForge runs the binary with a hard time bound and normalizes the
 // result shape (code/stdout/stderr object, exitCode variant, or a bare
@@ -285,113 +258,8 @@ async function openPlanSession(pi: PiLike, ctx: CtxLike, prompt: string): Promis
   }
 }
 
-// runPlanForge is the /plan-forge handler: run, wait loop, handoff.
-async function runPlanForge(pi: PiLike, deps: HookDeps, ctx: CtxLike, state: HookState): Promise<void> {
-  let mode = "solo";
-  const cfg = await execPlanForge(pi, ["config", "--show", "--json"], deps.execTimeoutMs);
-  if (cfg.code === 0) {
-    try {
-      const parsed: unknown = JSON.parse(cfg.stdout);
-      const rec: Record<string, unknown> =
-        parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {}; // config JSON object
-      if (typeof rec.relay_server_url === "string" && rec.relay_server_url) {
-        const yes = await ctx.ui.confirm("Plan-Forge", "Run with remote collaboration connection? [y/N]");
-        if (yes) mode = "remote";
-      }
-    } catch {
-      // Unparseable config output: stay solo.
-    }
-  }
-  const run = await execPlanForge(
-    pi,
-    ["run", "--repo", ctx.cwd, "--host", "omp", "--mode", mode, "--detach"],
-    deps.execTimeoutMs,
-  );
-  if (run.code !== 0) {
-    ctx.ui.notify(`plan-forge run failed: ${oneLine(run.stderr) || "unknown error"}`, "error");
-    return;
-  }
-  let sessionId = "";
-  try {
-    const parsed: unknown = JSON.parse(run.stdout);
-    if (parsed && typeof parsed === "object" && "session_id" in parsed && typeof parsed.session_id === "string") {
-      sessionId = parsed.session_id;
-    }
-  } catch {
-    // Handled below.
-  }
-  if (!sessionId) {
-    ctx.ui.notify("plan-forge run did not report a session id", "error");
-    return;
-  }
-  const waitMatch = /^(\d+(?:\.\d+)?)s$/.exec(deps.waitTimeout.trim());
-  const waitBound = 2 * (waitMatch ? Number(waitMatch[1]) * 1000 : 50_000) + deps.execTimeoutMs;
-  const maxMs = deps.waitMaxMs ?? WAIT_MAX_MS;
-  const fastMs = deps.waitFastMs ?? WAIT_FAST_MS;
-  const retryDelayMs = deps.waitRetryDelayMs ?? WAIT_RETRY_DELAY_MS;
-  const sleep = deps.sleep ?? defaultSleep;
-  const now = deps.now ?? Date.now;
-  const clearStatus = (): void => {
-    try {
-      ctx.ui.setStatus(STATUS_KEY, "");
-    } catch {
-      // Status cleanup is best-effort.
-    }
-  };
-  const started = now();
-  let waitRes: ExecResult;
-  for (;;) {
-    if (state.shutdown) {
-      // The session this handler belongs to is gone; ctx is stale.
-      return;
-    }
-    const polled = now();
-    waitRes = await execPlanForge(
-      pi,
-      ["wait", "--session", sessionId, "--timeout", deps.waitTimeout],
-      waitBound,
-    );
-    if (state.shutdown) return;
-    if (waitRes.code === 75) {
-      if (now() - started >= maxMs) {
-        clearStatus();
-        ctx.ui.notify("plan-forge: stopped waiting for approval (6 hour limit). Run /plan-forge again.", "error");
-        return;
-      }
-      ctx.ui.setStatus(STATUS_KEY, "plan-forge: waiting for plan approval…");
-      // A wait that returns 75 almost instantly would otherwise spin the loop.
-      if (now() - polled < fastMs) await sleep(retryDelayMs);
-      continue;
-    }
-    break;
-  }
-  clearStatus();
-  if (waitRes.code === 130) {
-    ctx.ui.notify("Plan-Forge session closed without approval.", "info");
-    return;
-  }
-  if (waitRes.code !== 0) {
-    ctx.ui.notify(`plan-forge wait failed: ${oneLine(waitRes.stderr) || "unknown error"}`, "error");
-    return;
-  }
-  const approved = parseApprovedWait(waitRes.stdout);
-  if (approved === null) {
-    ctx.ui.notify("plan-forge wait ended without an approved plan", "error");
-    return;
-  }
-  await openPlanSession(pi, ctx, buildHandoffPrompt(approved));
-}
-
 export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
-  const state: HookState = { shutdown: false };
-
-  pi.on("session_shutdown", () => {
-    // Stop the wait loop so no late callback touches a dead session.
-    state.shutdown = true;
-  });
-
   pi.on("session_start", async (_event: unknown, ctx: CtxLike) => {
-    state.shutdown = false;
     try {
       const res = await execPlanForge(
         pi,
@@ -407,22 +275,7 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
     }
   });
 
-  pi.registerCommand("plan-forge", {
-    description: "Forge the plan with the multi-avatar gate, then open a plan-mode session",
-    handler: async (_args: string, ctx: CtxLike) => {
-      try {
-        await runPlanForge(pi, deps, ctx, state);
-      } catch (err) {
-        try {
-          ctx.ui.notify(`plan-forge: ${oneLine(err instanceof Error ? err.message : String(err))}`, "error");
-        } catch {
-          // Never throw into OMP.
-        }
-      }
-    },
-  });
-
-  // Skill path: the model ran `plan-forge wait` itself and it approved.
+  // The skill ran `plan-forge wait` itself and it approved: hand the plan over.
   pi.on("tool_result", async (event: unknown, ctx: CtxLike) => {
     try {
       if (!event || typeof event !== "object") return;
@@ -445,7 +298,7 @@ export function createHook(pi: PiLike, deps: HookDeps = defaultDeps): void {
       }
       const approved = parseApprovedWait(text);
       if (!approved) return;
-      fallbackPrefill(ctx, buildHandoffPrompt(approved));
+      await openPlanSession(pi, ctx, buildHandoffPrompt(approved));
     } catch {
       // Prefill is best-effort.
     }

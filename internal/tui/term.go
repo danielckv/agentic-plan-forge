@@ -49,6 +49,7 @@ func (t *terminal) start() {
 	if st, err := term.MakeRaw(int(t.in.Fd())); err == nil {
 		t.old = st
 	}
+	EnableColour(colourWanted(term.IsTerminal(int(t.out.Fd()))))
 	t.reader = bufio.NewReaderSize(t.in, 64)
 	// Alternate buffer + hide cursor + clear.
 	fmt.Fprint(t.out, "\x1b[?1049h\x1b[?25l\x1b[2J")

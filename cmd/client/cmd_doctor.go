@@ -58,6 +58,9 @@ type doctorHost struct {
 	// host was dropped without a word while every avatar went somewhere else.
 	Usable bool   `json:"usable"`
 	Blocks string `json:"blocks,omitempty"`
+	// Integration is true for a host Plan Forge installs into but never
+	// generates on. Its sign-in and model list say nothing about a run.
+	Integration bool `json:"integration,omitempty"`
 }
 
 type doctorAuth struct {
@@ -108,6 +111,13 @@ func runDoctor(ctx context.Context, args []string) int {
 		}
 		entry.Found = true
 		entry.Version = v
+		if adapter.Kind() == host.KindOMP {
+			// oh-my-pi runs /plan-forge; it never generates. Its sign-in and
+			// its hundreds of models read as a host ready to serve.
+			entry.Integration = true
+			report.Hosts = append(report.Hosts, entry)
+			continue
+		}
 		if state, aerr := adapter.Auth(ctx); aerr == nil {
 			entry.Auth = doctorAuth{Ready: state.Ready, Method: state.Method}
 			if !state.Ready && state.Detail != "" {
@@ -184,6 +194,10 @@ func runDoctor(ctx context.Context, args []string) int {
 			continue
 		}
 		fmt.Printf("%s found %s\n", name, entry.Version)
+		if entry.Integration {
+			fmt.Println("  role:   integration only — it runs /plan-forge, and never generates")
+			continue
+		}
 		if entry.Auth.Ready {
 			fmt.Printf("  auth:   ready (%s)\n", entry.Auth.Method)
 		} else if entry.Auth.SignIn != "" {
