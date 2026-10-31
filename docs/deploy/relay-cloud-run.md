@@ -1,8 +1,8 @@
 # Deploy the relay to Cloud Run
 
-`plan-forge-relay` is a long-lived WebSocket hub that holds rooms in memory, so it deploys as a Cloud Run **service** —
-not a Cloud Run function. `scripts/deploy-relay-cloudrun.sh` performs the full setup: APIs, Artifact Registry
-repository, a Cloud Build image build, a Secret Manager token, a dedicated service account, and the Cloud Run deploy.
+This deployment guide is for operators and teams hosting `plan-forge-relay` on Google Cloud Run. It covers deployment automation, infrastructure prerequisites, service configuration, client pairing, and operational commands.
+
+`plan-forge-relay` is a long-lived WebSocket hub that holds rooms in memory, so it deploys as a Cloud Run **service** — not a Cloud Run function. `scripts/deploy-relay-cloudrun.sh` performs the full setup: APIs, Artifact Registry repository, a Cloud Build image build, a Secret Manager token, a dedicated service account, and the Cloud Run deploy.
 
 ```mermaid
 flowchart LR
@@ -17,8 +17,7 @@ flowchart LR
 
 - `gcloud` CLI, authenticated (`gcloud auth login`, `gcloud auth application-default login`).
 - A Google Cloud project with billing enabled.
-- The deployer identity needs these roles (or equivalent): Run Admin, Artifact Registry Admin, Cloud Build Editor,
-  Secret Manager Admin, Service Account Admin, and Service Usage Admin (plus Project IAM to bind roles).
+- The deployer identity needs these roles (or equivalent): Run Admin, Artifact Registry Admin, Cloud Build Editor, Secret Manager Admin, Service Account Admin, and Service Usage Admin (plus Project IAM to bind roles).
 
 ## Quick start
 
@@ -26,10 +25,7 @@ flowchart LR
 ./scripts/deploy-relay-cloudrun.sh --project my-project
 ```
 
-On an interactive terminal the script asks what to build from: the local working tree (it warns when the tree is
-dirty), a git tag or branch (it lists the latest 10 tags), or an existing image. It prints the build folder and ref,
-then asks for confirmation; pass `--yes` to skip the prompt. For CI and other non-interactive use, pick the source
-explicitly:
+On an interactive terminal the script asks what to build from: the local working tree (it warns when the tree is dirty), a git tag or branch (it lists the latest 10 tags), or an existing image. It prints the build folder and ref, then asks for confirmation; pass `--yes` to skip the prompt. For CI and other non-interactive use, pick the source explicitly:
 
 ```sh
 ./scripts/deploy-relay-cloudrun.sh --project my-project --source ref:v0.1.0 --yes
@@ -61,24 +57,17 @@ The script prints the service URL when the deploy finishes.
 
 1. Enabled APIs: Cloud Run, Artifact Registry, Cloud Build, Secret Manager.
 2. An Artifact Registry repository for the image.
-3. An image built by Cloud Build from `Dockerfile.relay` via `deploy/cloudrun/cloudbuild.yaml` — no local Docker
-    needed. The script verifies the build folder contains `Dockerfile.relay`, `go.mod` and `cmd/relay/` before
-    uploading. Cloud Build pushes `<region>-docker.pkg.dev/<project>/<repository>/<service>:<version>`; the script then
-    resolves the digest and deploys Cloud Run with the image pinned by digest (`...@sha256:...`), so the service always
-    runs exactly what was just built.
-4. A Secret Manager secret containing a random 32-byte token. The token never appears on the command line and is never
-    echoed.
+3. An image built by Cloud Build from `Dockerfile.relay` via `deploy/cloudrun/cloudbuild.yaml` — no local Docker needed. The script verifies the build folder contains `Dockerfile.relay`, `go.mod` and `cmd/relay/` before uploading. Cloud Build pushes `<region>-docker.pkg.dev/<project>/<repository>/<service>:<version>`; the script then resolves the digest and deploys Cloud Run with the image pinned by digest (`...@sha256:...`), so the service always runs exactly what was just built.
+4. A Secret Manager secret containing a random 32-byte token. The token never appears on the command line and is never echoed.
 5. A dedicated service account with `secretAccessor` on that secret only.
 6. A Cloud Run service with:
     - port 8080 (the relay honors `PORT`),
-    - `--behind-proxy --trusted-proxy=169.254.0.0/16` — Cloud Run terminates TLS; the GFE peer is link-local and appends
-      the client IP to `X-Forwarded-For`, which the relay uses for rate limiting,
+    - `--behind-proxy --trusted-proxy=169.254.0.0/16` — Cloud Run terminates TLS; the GFE peer is link-local and appends the client IP to `X-Forwarded-For`, which the relay uses for rate limiting,
     - `PLAN_FORGE_RELAY_TOKEN` injected from the secret,
     - `--max-instances 1` (rooms live in memory; one instance holds them all),
     - `--concurrency 1000`, `--timeout 3600` for long-lived WebSockets (clients reconnect after the cut),
     - `--no-cpu-throttling`,
-    - `--allow-unauthenticated` — the relay enforces its own token for session creation and invite codes for joining,
-      and rejects browser origins.
+    - `--allow-unauthenticated` — the relay enforces its own token for session creation and invite codes for joining, and rejects browser origins.
 
 ## Client setup
 
@@ -90,8 +79,7 @@ gcloud secrets versions access latest --secret plan-forge-relay-token --project 
 plan-forge config --set-relay-token   # paste at the hidden prompt
 ```
 
-Alternatively, export `PLAN_FORGE_RELAY_TOKEN` in the host shell. Teammates join with `plan-forge join` and the invite
-shown in the host window; they never need the token.
+Alternatively, export `PLAN_FORGE_RELAY_TOKEN` in the host shell. Teammates join with `plan-forge join` and the invite shown in the host window; they never need the token.
 
 ## Operations
 
@@ -114,9 +102,6 @@ gcloud iam service-accounts delete <sa-email>
 
 ## Limitations
 
-- Scale-to-zero or a redeploy drops rooms. The owner's local state reseeds the room on reconnect. Set
-  `--min-instances 1` to keep rooms warm, at the cost of an always-on instance.
-- Behind an external HTTPS load balancer, the rightmost `X-Forwarded-For` entry is the load balancer, so rate limits
-  key per load balancer rather than per client.
-- The org policy "Domain restricted sharing" can block `--allow-unauthenticated`; if so, restrict invokers and
-  distribute the relay through IAM instead.
+- Scale-to-zero or a redeploy drops rooms. The owner's local state reseeds the room on reconnect. Set `--min-instances 1` to keep rooms warm, at the cost of an always-on instance.
+- Behind an external HTTPS load balancer, the rightmost `X-Forwarded-For` entry is the load balancer, so rate limits key per load balancer rather than per client.
+- The org policy "Domain restricted sharing" can block `--allow-unauthenticated`; if so, restrict invokers and distribute the relay through IAM instead.
