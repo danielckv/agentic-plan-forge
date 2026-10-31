@@ -24,12 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Oh-my-pi is the last host. Claude Code, the Gemini/Google credential and `agy` outrank it for every role, and a
-  `main_host: omp` pin no longer survives them: the pin keeps the preference, the rule decides what may serve. An
-  installation with only oh-my-pi still works. Reasoning: ADR 0025.
+- Oh-my-pi serves an explicit pin only. It is never a default, never a fallback: `main_host: omp`, `judge_host: omp`
+  or a `role_models` entry naming it is the whole opt-in, and then it is used even when Claude Code or a provider key
+  is ready. Without a pin an installation holding only oh-my-pi reports no usable generation host, and the skip reason
+  names the pin. `config` accepts the pin again instead of rejecting it. Supersedes ADR 0025 with ADR 0026.
 - Installing over an existing copy starts from defaults on macOS and Linux: `uninstall --purge --yes` runs before
   registration, so a previous `main_host`, timeout or host choice does not survive. `credentials.json` is preserved.
-- `plan-forge install --host auto` selects Claude Code and Antigravity, and oh-my-pi only when neither is present.
+- `plan-forge install --host auto` selects Claude Code and Antigravity. Oh-my-pi is never selected automatically;
+  `plan-forge install --host omp` is how you ask for its command and hook.
 - The Setup dialog opens as a large centred panel instead of a 520px card, and the plan rail is a third of a wide
   viewport instead of a fixed 420px, with its five tabs sharing the width instead of truncating.
 

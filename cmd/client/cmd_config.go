@@ -46,8 +46,8 @@ func runConfig(ctx context.Context, args []string) int {
 		fs.StringVar(&relayURL, "relay-url", "", "set the relay server URL")
 		fs.StringVar(&modelMain, "model-main", "", "set the main generation model")
 		fs.StringVar(&modelJudge, "model-judge", "", "set the critic model")
-		fs.StringVar(&mainHost, "main-host", "", "set the main host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)")
-		fs.StringVar(&judgeHost, "judge-host", "", "set the critic host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)")
+		fs.StringVar(&mainHost, "main-host", "", "set the main host (anthropic, gemini, openai, fireworks, antigravity, claude, agy, omp)")
+		fs.StringVar(&judgeHost, "judge-host", "", "set the critic host (anthropic, gemini, openai, fireworks, antigravity, claude, agy, omp)")
 		fs.Float64Var(&workdayHours, "workday-hours", 0, "set the human workday baseline in hours")
 		fs.BoolVar(&setRelayToken, "set-relay-token", false, "store the relay token read from a hidden prompt")
 		fs.IntVar(&stageTimeout, "stage-timeout", 0, "set what one deliberation call may take, in seconds (60..1800)")
@@ -354,14 +354,14 @@ func wizard(cfg *config.Config) int {
 		}
 		changed = true
 	}
-	if v := ask("main_host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)", cfg.MainHost); v != "" {
+	if v := ask("main_host (anthropic, gemini, openai, fireworks, antigravity, claude, agy, omp)", cfg.MainHost); v != "" {
 		if !config.IsValidHost(v) {
 			return fail(fmt.Errorf("main_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", v))
 		}
 		cfg.MainHost = v
 		changed = true
 	}
-	if v := ask("judge_host (anthropic, gemini, openai, fireworks, antigravity, claude, agy)", cfg.JudgeHost); v != "" {
+	if v := ask("judge_host (anthropic, gemini, openai, fireworks, antigravity, claude, agy, omp)", cfg.JudgeHost); v != "" {
 		if !config.IsValidHost(v) {
 			return fail(fmt.Errorf("judge_host %q is not one of anthropic, gemini, openai, fireworks, antigravity, claude, agy", v))
 		}

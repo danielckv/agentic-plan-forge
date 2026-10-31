@@ -144,11 +144,12 @@ type Config struct {
 	unknown map[string]json.RawMessage
 }
 
-// Valid host identifiers. An empty value means "not configured yet". The CLI
-// hosts claude and agy stay for generation only through an explicit pin;
-// omp is removed as a generation host. The SDK hosts are the defaults.
+// Valid host identifiers. An empty value means "not configured yet". The
+// provider APIs are the defaults. The CLI hosts claude and agy join the
+// rotation when signed in. omp serves only an explicit pin: it is never a
+// default and never a fallback (ADR 0026).
 var validHosts = map[string]bool{
-	"": true, "claude": true, "agy": true,
+	"": true, "claude": true, "agy": true, "omp": true,
 	ProviderAnthropic: true, ProviderOpenAI: true, ProviderFireworks: true,
 	"gemini": true, "antigravity": true,
 }
@@ -307,19 +308,11 @@ func Save(path string, cfg Config) error {
 	return nil
 }
 
-// hostError explains an unsupported host. A host that used to work gets its own
-// message: removing it without saying what to do instead left a saved config
-// failing at startup with a list of names and no path forward.
+// hostError explains an unsupported host. omp is supported, but only as an
+// explicit pin, so a pin naming it passes validation and the router honours it.
 func hostError(field, host string) error {
-	const supported = "anthropic, gemini, openai, fireworks, antigravity, claude, agy"
-	switch host {
-	case "omp":
-		return fmt.Errorf("%s is %q, which is no longer a generation host: this release generates through "+
-			"provider APIs, not a local agent CLI. Set %s to anthropic or gemini and add that provider's API key "+
-			"(plan-forge config). The supported hosts are %s", field, host, field, supported)
-	default:
-		return fmt.Errorf("%s is %q, which is not a supported host. The supported hosts are %s", field, host, supported)
-	}
+	const supported = "anthropic, gemini, openai, fireworks, antigravity, claude, agy, omp (explicit pin only)"
+	return fmt.Errorf("%s is %q, which is not a supported host. The supported hosts are %s", field, host, supported)
 }
 
 // Validate reports the first configuration problem. It never mutates cfg.

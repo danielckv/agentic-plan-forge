@@ -121,14 +121,14 @@ func TestAGYPreflightFailsClosedWithoutBinary(t *testing.T) {
 func TestRouterSelectionOrderAndJudgeDefault(t *testing.T) {
 	configured := &routingAdapter{kind: KindClaude, detectErr: errors.New("missing")}
 	invoked := &routingAdapter{kind: "fake", version: "1.0.0", ready: true}
-	fallback := &routingAdapter{kind: KindOMP, version: "2.0.0", ready: true}
+	trailing := &routingAdapter{kind: KindAGY, version: "2.0.0", ready: true}
 	router := &Router{
 		cfg:         config.Config{MainHost: string(KindClaude), DefaultMainModel: "main-model"},
 		invokedHost: "fake",
 		adapters: map[Kind]Adapter{
 			KindClaude: configured,
 			"fake":     invoked,
-			KindOMP:    fallback,
+			KindAGY:    trailing,
 		},
 		ready: make(map[Kind]resolvedAdapter),
 	}
@@ -146,8 +146,8 @@ func TestRouterSelectionOrderAndJudgeDefault(t *testing.T) {
 	if judge.Kind != "fake" || !judge.SharesMain || judge.Model != "main-model" {
 		t.Fatalf("unexpected judge resolution: %+v", judge)
 	}
-	if configured.detectCalls != 1 || invoked.preflightCalls != 1 || fallback.detectCalls != 0 {
-		t.Fatalf("unexpected probe counts: configured=%d invoked=%d/%d fallback=%d", configured.detectCalls, invoked.detectCalls, invoked.preflightCalls, fallback.detectCalls)
+	if configured.detectCalls != 1 || invoked.preflightCalls != 1 || trailing.detectCalls != 0 {
+		t.Fatalf("unexpected probe counts: configured=%d invoked=%d/%d trailing=%d", configured.detectCalls, invoked.detectCalls, invoked.preflightCalls, trailing.detectCalls)
 	}
 }
 
@@ -169,6 +169,7 @@ func (a *routingAdapter) Detect(context.Context) (string, error) {
 	a.detectCalls++
 	return a.version, a.detectErr
 }
+
 func (a *routingAdapter) Auth(context.Context) (AuthState, error) {
 	return AuthState{Ready: a.ready}, nil
 }
@@ -177,6 +178,7 @@ func (a *routingAdapter) Preflight(context.Context) error {
 	a.preflightCalls++
 	return nil
 }
+
 func (a *routingAdapter) Generate(context.Context, contracts.GenerateRequest, func(contracts.GenerationEvent) error) (contracts.GenerationResult, error) {
 	a.generateCalls++
 	result := contracts.GenerationResult{Receipt: contracts.ToolFreeReceipt{Host: string(a.kind), Version: a.version}}

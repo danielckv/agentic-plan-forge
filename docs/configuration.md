@@ -83,24 +83,23 @@ not have access to it.
 
 Fix it by setting a model the host that ran actually has.
 
-One host never serves: `agy` fails its preflight because it exposes no way to run with isolated settings, so a
-configuration naming it always falls back, and so does any role whose rotation reaches it. It stays in every rotation
-and joins the spread with no configuration change the day its preflight can pass. Reasoning:
-[ADR 0004](adrs/0004-section-size-and-host-failure-detail.md).
+One host serves only on an explicit pin: `omp`. It is never a default, never a fallback. `main_host` or a
+`role_models` entry naming it is the owner asking for it, and then it is used. Without a pin it is skipped with a
+reason, in `plan-forge doctor` and in `/api/status`. The reason is cost, measured: one tool-free `omp` call takes
+2.83s wall against 1.10s of model time and adds about 2,900 tokens of the CLI's own scaffolding, on a run that makes
+25 to 60 calls. Reasoning: [ADR 0026](adrs/0026-oh-my-pi-serves-an-explicit-pin-only.md).
 
-`plan-forge doctor` prints `serves: NO — <reason>` for such a host, and names any `main_host` or `judge_host` that is
-being ignored because of it. A host that passes preflight and then breaks the tool-free contract once a call is open —
-a stale OMP advertising a tools list is the live case — costs one retry on the next host rather than the stage it was
-serving. Reasoning: [ADR 0012](adrs/0012-a-broken-host-costs-one-retry-not-the-run.md).
+`agy` serves generation through an isolated profile that Plan Forge provisions at
+`$PLAN_FORGE_HOME/profiles/agy`, whose settings deny every tool family. A host-level agy sign-in does not carry over:
+sign in once with the command `plan-forge doctor` prints (`HOME=<profile> agy`). A profile that cannot be isolated
+fails closed with a capability error rather than falling back silently. Reasoning:
+[ADR 0004](adrs/0004-section-size-and-host-failure-detail.md) and
+[ADR 0030](adrs/0030-agy-generation-runs-in-an-isolated-profile.md).
 
-### Oh-my-pi is the last host
-
-Claude Code, the Google credential (`gemini` / `antigravity`) and `agy` outrank oh-my-pi for every role. Oh-my-pi
-serves a run only when none of them can, and that holds even when `main_host` pins it: a skipped OMP says why in
-`plan-forge doctor` and in `/api/status`. The reason is cost, measured: one tool-free `omp` call takes 2.83s wall
-against 1.10s of model time and adds about 2,900 tokens of the CLI's own scaffolding, on a run that makes 25 to 60
-calls. An installation with only oh-my-pi still works. Reasoning:
-[ADR 0025](adrs/0025-oh-my-pi-is-the-last-host.md).
+`plan-forge doctor` prints `serves: NO — <reason>` for a host that cannot serve, and names any `main_host` or
+`judge_host` that is being ignored because of it. A host that passes preflight and then breaks the tool-free contract
+once a call is open — a stale OMP advertising a tools list is the live case — costs one retry on the next host rather
+than the stage it was serving. Reasoning: [ADR 0012](adrs/0012-a-broken-host-costs-one-retry-not-the-run.md).
 
 ## One run, every host you are signed in to
 
@@ -135,10 +134,8 @@ A binding takes a host, a model, or both:
 }
 ```
 
-`omp` is no longer a generation host. A saved config that names it fails validation with a message
-saying so and what to do instead. The hosts are `anthropic`, `gemini`, `openai`, `fireworks`, and the
-pinned CLI hosts `claude` and `agy`; rewrite `"host": "omp"` to a provider and add that provider's
-API key.
+The hosts are the provider APIs `anthropic`, `gemini`, `openai` and `fireworks`, the CLI hosts `claude` and `agy`,
+and `omp` as an explicit pin only. `"host": "omp"` is accepted and served; it is never chosen for you.
 
 A model id reaches a host only if that host lists it. `default_main_model` and `default_judge_model` are slot-wide,
 so they are dropped for any host that does not advertise them and that host's own default is used instead — naming
@@ -157,7 +154,7 @@ architect, **every specialist, and the Lead Synthesizer**. Setting them is not a
 whole placement system.
 
 ```json
-{ "main_host": "omp", "default_main_model": "together/some-flash-model" }
+{ "main_host": "claude", "default_main_model": "some-fast-model" }
 ```
 
 That configuration sends the architect's design and the synthesizer's compilation to one host on a fast, cheap model,

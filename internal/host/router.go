@@ -384,12 +384,12 @@ func (r *Router) selectCandidatesLocked(ctx context.Context, slot contracts.Mode
 		if ready, ok := r.ready[kind]; ok {
 			return ready, nil
 		}
-		if kind == KindOMP && r.preferrredHostReady(ctx) {
-			// OMP is the last resort: it is a local agent CLI whose own
-			// scaffolding rides on every call, so a Claude or agy/gemini
-			// installation must serve the run first. The walk reaches this
-			// point only when no such host is ready, so the skip says so.
-			skip(kind, "detect", "oh-my-pi is a fallback host: Claude Code or Antigravity/Gemini serves this run")
+		if kind == KindOMP && !r.ompPinned() {
+			// oh-my-pi serves an explicit pin only (ADR 0026). It reaches this
+			// walk through r.invokedHost, a role rotation that names it, or a
+			// stale candidate list — never through the defaults. Say so rather
+			// than probing a host that may not serve.
+			skip(kind, "detect", "oh-my-pi serves only an explicit main_host or role_models pin")
 			continue
 		}
 		version, err := adapter.Detect(ctx)
@@ -427,43 +427,29 @@ func (r *Router) mainCandidates() []Kind {
 }
 
 // fallbackHosts are the CLI hosts, tried after every provider API. Claude Code
-// and agy are first-class generation hosts when the owner has one signed in;
-// oh-my-pi is the last resort, and the selector gives it up entirely while
-// either of the others can serve the run.
+// and agy are first-class generation hosts when the owner has one signed in.
+// oh-my-pi is not here: it serves an explicit pin only (ADR 0026), so an
+// installation holding nothing else reports no usable host rather than paying
+// a local CLI's startup and scaffolding on every call.
 //
 // They trail the API hosts because a local CLI costs a process start and
 // several thousand tokens of its own scaffolding on every call, while the API
 // hosts send the prompt directly. An installation with only a CLI still works:
 // the walk reaches these entries and takes the first that is ready.
 func fallbackHosts() []Kind {
-	return []Kind{KindClaude, KindAGY, KindOMP}
+	return []Kind{KindClaude, KindAGY}
 }
 
-// preferrredHostReady reports whether a host that outranks OMP can serve this
-// run: Claude Code, or the Google credential (gemini / antigravity), or agy.
-//
-// Oh-my-pi is kept as a fallback only. It is a local agent CLI, so every call
-// pays its startup and carries several thousand tokens of its own scaffolding
-// (measured: 2.83s wall against 1.10s of model time per call, ~2,900 tokens of
-// scaffolding), and the owner's rule is that it serves a run only when nothing
-// better is installed. Claude and Gemini are the supported defaults; agy is
-// accepted because it is the same Google account. The check is a cheap
-// readiness probe: a stored API key is a file read, and a CLI is a --version
-// run.
-func (r *Router) preferrredHostReady(ctx context.Context) bool {
-	for _, kind := range []Kind{KindClaude, KindGemini, KindAntigravity, KindAGY} {
-		adapter, ok := r.adapters[kind]
-		if !ok {
-			continue
-		}
-		if _, err := adapter.Detect(ctx); err != nil {
-			continue
-		}
-		auth, err := adapter.Auth(ctx)
-		if err != nil || !auth.Ready {
-			continue
-		}
+// ompPinned reports whether the owner named oh-my-pi in this configuration.
+// Only a pin lets it serve: no default, no rotation and no fallback does.
+func (r *Router) ompPinned() bool {
+	if Kind(r.cfg.MainHost) == KindOMP || Kind(r.cfg.JudgeHost) == KindOMP {
 		return true
+	}
+	for _, binding := range r.cfg.RoleModels {
+		if Kind(binding.Host) == KindOMP {
+			return true
+		}
 	}
 	return false
 }
@@ -490,7 +476,7 @@ func (r *Router) roleCandidates(role contracts.RoleID, lane string, slot contrac
 	}
 	out = append(out, rotate(roleHostOrder[role], laneOffset(lane))...)
 	return append(out, r.invokedHost, KindAnthropic, KindGemini, KindOpenAI,
-		KindClaude, KindAGY, KindOMP)
+		KindClaude, KindAGY)
 }
 
 // laneOffset turns a lane name into a stable rotation. It is FNV-1a rather

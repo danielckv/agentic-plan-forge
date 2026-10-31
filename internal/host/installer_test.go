@@ -673,7 +673,7 @@ func TestInstallWritesEachSkillIntoOneRootPerHost(t *testing.T) {
 	for _, kind := range []string{string(KindClaude), string(KindOMP), string(KindAGY)} {
 		all = append(all, planFor(t, in, kind, home, user)...)
 	}
-	assertNoDuplicateRoots(t, "--host all", home, "", []string{"claude", "omp", "agy"}, all)
+	assertNoDuplicateRoots(t, "--host all", home, "", []string{"claude", "agy"}, all)
 	assertNoDuplicateRoots(t, "--host omp", home, "", []string{"omp"}, planFor(t, in, string(KindOMP), home, user))
 
 	// Project scope: OMP reads .claude/skills and .agents/skills by default.
