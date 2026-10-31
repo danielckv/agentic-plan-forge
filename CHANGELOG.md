@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The composer page is wider (1760px instead of 1600px) and its plan rail takes the larger share and never drops below
+  420px, instead of a fixed 384px. The rail's seven tabs keep their full labels at any width: below 620px of rail the
+  labels hide and the icons stay, instead of every label being clipped mid-word.
+
 ## [0.10.0] - 2026-10-31
 
 ### Fixed

@@ -69,7 +69,7 @@ export function PlanRail(props: {
           aria-label={openQuestions > 0 ? `Questions, ${String(openQuestions)} open` : "Questions"}
         >
           <CircleHelp size={15} aria-hidden="true" />
-          <span>Questions</span>
+          <span className="pf-rail-tab-label">Questions</span>
           {openQuestions > 0 && <span className="pf-rail-count">{openQuestions}</span>}
         </button>
       </div>
@@ -183,7 +183,7 @@ function RailTabButton(props: {
   return (
     <button type="button" role="tab" className="pf-rail-tab" aria-selected={id === current} onClick={() => onSelect(id)}>
       <Icon size={14} />
-      {label}
+      <span className="pf-rail-tab-label">{label}</span>
       {count !== undefined && count > 0 && <span className="pf-rail-count">{count}</span>}
     </button>
   );

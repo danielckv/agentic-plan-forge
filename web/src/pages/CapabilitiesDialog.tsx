@@ -75,7 +75,7 @@ export function SetupContent(props: {
           className="pf-rail-tab"
           onClick={() => setTab("general")}
         >
-          <SlidersHorizontal size={14} /> General
+          <SlidersHorizontal size={14} /> <span className="pf-rail-tab-label">General</span>
         </button>
         <button
           type="button"
@@ -84,7 +84,7 @@ export function SetupContent(props: {
           className="pf-rail-tab"
           onClick={() => setTab("models")}
         >
-          <Boxes size={14} /> Models
+          <Boxes size={14} /> <span className="pf-rail-tab-label">Models</span>
         </button>
       </div>
       <div className="pf-setup-body pf-scroll-thin" role="tabpanel">

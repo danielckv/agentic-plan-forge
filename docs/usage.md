@@ -102,7 +102,8 @@ each other's edits live.
   each. They are parsed on this machine and added as a `## Source:` section.
 - **Write, Split, Preview.** The switch under the editor shows the rendered document beside or instead of the source.
 
-The right rail shows the plan as it forms:
+The right rail shows the plan as it forms. On a wide window it takes the larger share of the page; on a narrow one its
+tab labels collapse to icons (the names stay readable to assistive tech):
 
 - **Impact.** Which parts of your project this work touches, in plain language, so you do not have to read code to know
   what will change. See below.
