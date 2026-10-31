@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The plan opens full screen, from either rendering: an Expand control in the plan rail's own bar opens the same graph in
   a dialog that fills the viewport. Clicking a node in the 3D view shows its kind, title, summary and worst finding
   beside the scene.
+- `plan-forge install` closes with a summary block — home, `config.json`, binary, installed hosts, the model pins in
+  effect, one next-steps line — coloured on a terminal, plain when piped or under `NO_COLOR`.
+- An interactive `plan-forge install` (no `--yes`) offers "Edit configuration now?": an arrow-key Yes/No, and on Yes a
+  terminal editor over `config.json` with a General tab (hosts, timeouts, workday, narrator) and a Models tab
+  (`default_main_model`, `default_judge_model`, one row per `role_models` pin, editing the model and keeping the
+  host). Saves run the same validation as `plan-forge config`; `--yes` and non-terminal runs never prompt.
 - The 2D plan renders each node as a document card — kind, title and summary, with a left rule coloured by kind — rather
   than a row in a tree. Cards expand and collapse, and selecting one shows its id, parent, child count, worst finding and
   full summary beside the list.

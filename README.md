@@ -22,7 +22,9 @@ curl -fsSL https://raw.githubusercontent.com/danielckv/agentic-plan-forge/main/s
 
 Restart your agent, then type `/plan-forge`. You need Git, a browser, and a model: either a coding agent you are
 already signed in to (Claude Code, oh-my-pi) or an API key for Anthropic, OpenAI, Fireworks or Google, which Setup
-asks for on a first run. `plan-forge run` opens the same workspace in a browser tab without an agent. Re-running the
+asks for on a first run. The installer closes with a summary of the home, hosts and models it set up, and an
+interactive run offers to edit `config.json` right there. `plan-forge run` opens the same workspace in a browser tab
+without an agent. Re-running the
 command updates the binary and re-registers the skills. Windows, version pinning, `uninstall` and the full host
 matrix are in [docs/install.md](docs/install.md).
 
