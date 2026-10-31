@@ -344,6 +344,11 @@ is reported as detected and **not usable**, with a line saying so, because repor
 would repeat the "signed in but cannot serve" confusion above. The scan only checks `PATH`; it runs
 nothing.
 
+The dialog's **Models** tab lists the models each serving host or provider advertises, grouped per host, with the
+current selections marked: `default_main_model`, `default_judge_model` and any `role_models` pin. It is read-only —
+the window reports what the models API returns; choosing models happens in `config.json` (`plan-forge config`, the
+install-time terminal editor, or `/plan-config`).
+
 ### Skills on this machine
 
 Settings → Skills shows what the harnesses on this computer already know how to do, read from the skill directories
