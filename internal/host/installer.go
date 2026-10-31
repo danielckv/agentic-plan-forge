@@ -63,7 +63,7 @@ type HostReport struct {
 	Host    string
 	Found   bool
 	Version string
-	Auth    string // ready|unknown|missing
+	Auth    string // ready|unknown|missing|integration only (omp: never generates, ADR 0027)
 	AuthCmd string // login command printed for missing
 	Targets []string
 	Note    string // printed for the found-agy row instead of (skipped)
@@ -148,7 +148,7 @@ func (in *Installer) Bin() string { return in.bin }
 // Installing is not generating. Claude Code, Antigravity and oh-my-pi all get
 // the skills and hooks, because all three are agents the owner types
 // /plan-forge into. Which host generates the plan is a separate decision:
-// oh-my-pi serves a pin only (ADR 0026), and the installer does not decide it.
+// oh-my-pi never generates (ADR 0027), and the installer does not decide it.
 func (in *Installer) selectedHosts(ctx context.Context, flag string) ([]string, error) {
 	switch flag {
 	case "claude", "omp", "agy":
@@ -428,11 +428,11 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 		return nil, err
 	}
 	// The Claude copies carry `enabled: false`, and that marker is now the only
-	// thing keeping them out of OMP: OMP installs no skills of its own, yet it
-	// still reads ~/.claude/skills on opt-in and <repo>/.claude/skills by
-	// default. An unmarked copy would surface the Claude-rendered body, whose
-	// plan-mode step orders `EnterPlanMode` — a tool OMP does not have — beside
-	// the /plan-forge command the hook registers. OMP's conventional scanners
+	// thing keeping them out of OMP: OMP gets its own copies under
+	// ~/.omp/agent/skills, yet it still reads ~/.claude/skills on opt-in and
+	// <repo>/.claude/skills by default. An unmarked copy would shadow OMP's own
+	// plan-forge skill with the Claude-rendered body, whose plan-mode step
+	// orders `EnterPlanMode`, a tool OMP does not have. OMP's conventional scanners
 	// skip a skill with that key (omp://skills.md, "SKILL.md frontmatter"), and
 	// Claude Code ignores unknown frontmatter keys, so its own loading is
 	// unaffected. The AGY copies are NOT marked: AGY reads neither key.

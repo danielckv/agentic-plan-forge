@@ -4,9 +4,11 @@ package host
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // stubBinary writes an executable that prints a version, so hostPresent's
@@ -96,9 +98,18 @@ func TestPlanWritesOMPSkillsAndHook(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, arts, err := in.Plan(context.Background(), InstallOptions{Host: "auto", Scope: "user"})
+	reports, arts, err := in.Plan(context.Background(), InstallOptions{Host: "auto", Scope: "user"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	var omp *HostReport
+	for i := range reports {
+		if reports[i].Host == string(KindOMP) {
+			omp = &reports[i]
+		}
+	}
+	if omp == nil || !omp.Found || omp.Auth != "integration only" {
+		t.Fatalf("omp report = %+v, want found with auth \"integration only\" (ADR 0027)", omp)
 	}
 	want := map[string]bool{
 		filepath.Join(root, "skills", "plan-forge", "SKILL.md"):  false,
@@ -114,5 +125,55 @@ func TestPlanWritesOMPSkillsAndHook(t *testing.T) {
 		if !planned {
 			t.Errorf("omp artifact %s not planned", path)
 		}
+	}
+}
+
+// A rejected oh-my-pi root must stop the install plan, not be skipped: a
+// world-writable ~/.omp/agent would let another user replace the hook.
+func TestPlanRejectsUnsafeOMPRoot(t *testing.T) {
+	in, home := newTestInstaller(t)
+	stubPath(t, t.TempDir())
+	target := filepath.Join(home, "shared")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(target, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".omp"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(home, ".omp", "agent")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := in.Plan(context.Background(), InstallOptions{Host: "omp", Scope: "user"})
+	var pathErr *PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("Plan error = %v, want *PathError for a world-writable omp root", err)
+	}
+}
+
+// A CLI that never answers --version must not hang install: Plan passes
+// context.Background(), so the probe carries its own deadline.
+func TestProbeTimesOutOnStalledCLI(t *testing.T) {
+	dir := t.TempDir()
+	stubPath(t, dir)
+	// Absolute path: the probe's child environment may not carry PATH.
+	body := "#!/bin/sh\nexec /bin/sleep 30\n"
+	if err := os.WriteFile(filepath.Join(dir, "omp"), []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := probeTimeout
+	probeTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { probeTimeout = old })
+
+	start := time.Now()
+	_, err := Version(context.Background(), KindOMP)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Version error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Version returned after %s, want under 5s", elapsed)
 	}
 }
