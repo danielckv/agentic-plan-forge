@@ -141,22 +141,23 @@ func NewInstaller(version string) (*Installer, error) {
 // Bin returns the substituted {{PLAN_FORGE_BIN}} value.
 func (in *Installer) Bin() string { return in.bin }
 
-// selectedHosts maps the --host flag to concrete kinds. auto selects the
-// skill hosts found on this machine, in the order the owner wants them to
-// outrank each other.
+// selectedHosts maps the --host flag to concrete kinds. auto selects every
+// agent found on this machine, in the order the owner wants them to outrank
+// each other.
 //
-// Claude Code and Antigravity are the supported skill hosts, and the hosts
-// generation runs on. Oh-my-pi is never selected automatically (ADR 0026):
-// it serves an explicit pin only, so `--host omp` is the way to want it.
+// Installing is not generating. Claude Code, Antigravity and oh-my-pi all get
+// the skills and hooks, because all three are agents the owner types
+// /plan-forge into. Which host generates the plan is a separate decision:
+// oh-my-pi serves a pin only (ADR 0026), and the installer does not decide it.
 func (in *Installer) selectedHosts(ctx context.Context, flag string) ([]string, error) {
 	switch flag {
 	case "claude", "omp", "agy":
 		return []string{flag}, nil
 	case "all":
-		return []string{string(KindClaude), string(KindAGY)}, nil
+		return []string{string(KindClaude), string(KindAGY), string(KindOMP)}, nil
 	case "auto":
 		var found []string
-		for _, kind := range []string{string(KindClaude), string(KindAGY)} {
+		for _, kind := range []string{string(KindClaude), string(KindAGY), string(KindOMP)} {
 			if in.hostPresent(ctx, kind) {
 				found = append(found, kind)
 			}
@@ -224,7 +225,7 @@ func planModeStep(kind string) string {
 	case string(KindClaude):
 		return "Immediately call the `EnterPlanMode` tool, before any edit. In Plan Mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary `wait` printed (valid, status, verified/total, drift), and verify the listed AST file targets. When the validation is invalid or missing, run `\"{{PLAN_FORGE_BIN}}\" validate --repo <repository root>` first. Present the execution checklist and call `ExitPlanMode` for the user's approval."
 	case string(KindOMP):
-		return "The `/plan-forge` command opens a new plan-mode session seeded with the spec and the validation result; continue there. When the session API was unavailable, the hook has prefilled `/plan …` in the editor instead: ask the user to press Enter. In plan mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary, verify the listed AST targets, and present the execution checklist."
+		return "The managed hook sees the approved `wait` result and opens a plan-mode session seeded with the spec and the validation result; continue there. When the session API was unavailable, the hook has prefilled `/plan …` in the editor instead: ask the user to press Enter. In plan mode, read `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, review the validation summary, verify the listed AST targets, and present the execution checklist."
 	default:
 		return "Immediately enter Plan Mode, ingest `docs/plans/.plan/synthesized_spec.md` as your authoritative blueprint, verify the listed AST file targets, and present the execution checklist. If you cannot switch modes yourself, ask the user to " + planModeHint(kind) + ", then continue."
 	}
@@ -384,9 +385,9 @@ func claudeTargets(scope string) []string {
 
 func ompTargets(scope string) []string {
 	if scope == "project" {
-		return []string{".omp/commands/plan-config.md, .omp/hooks/pre/plan-forge.ts"}
+		return []string{".omp/skills/plan-forge, plan-config, .omp/hooks/pre/plan-forge.ts"}
 	}
-	return []string{"~/.omp/agent/commands/plan-config.md, ~/.omp/agent/hooks/pre/plan-forge.ts"}
+	return []string{"~/.omp/agent/skills/plan-forge, plan-config, ~/.omp/agent/hooks/pre/plan-forge.ts"}
 }
 
 func agyTargets(scope string) []string {
@@ -443,29 +444,30 @@ func (in *Installer) planClaude(home string, opts InstallOptions) ([]artifact, e
 	return arts, nil
 }
 
-// planOMP plans the plan-config slash command and the hook factory. OMP
-// reaches Plan Forge through built-in commands, never through skills: the hook
-// registers /plan-forge itself with pi.registerCommand,
-// and /plan-config is commands/plan-config.md. Writing no SKILL.md for OMP is
-// what makes a duplicate listing impossible; copies an earlier version
-// installed are removed by Apply.
+// planOMP plans the two SKILL.md files and the hook factory. OMP reads its own
+// skill root, so it gets the same two skills as the other hosts, rendered for
+// OMP. The hook adds what a skill cannot do there: the session-start status
+// banner, and the plan-mode session once a run is approved. The slash commands
+// an earlier version wrote under commands/ are removed by Apply.
 func (in *Installer) planOMP(home string, opts InstallOptions) ([]artifact, error) {
-	var commands, hooks string
+	var skills, hooks string
 	if opts.Scope == "project" {
-		commands = filepath.Join(opts.Repo, ".omp", "commands")
+		skills = filepath.Join(opts.Repo, ".omp", "skills")
 		hooks = filepath.Join(opts.Repo, ".omp", "hooks", "pre")
 	} else {
 		root := filepath.Join(home, ".omp", "agent")
 		if err := in.checkHostRoot(root); err != nil {
 			return nil, err
 		}
-		commands = filepath.Join(root, "commands")
+		skills = filepath.Join(root, "skills")
 		hooks = filepath.Join(root, "hooks", "pre")
 	}
+	forge := in.substitute(integrations.SkillPlanForge(), string(KindOMP))
 	conf := in.substitute(integrations.SkillPlanConfig(), string(KindOMP))
 	hookBody := in.substitute(integrations.OMPHook(), string(KindOMP))
 	return []artifact{
-		{path: filepath.Join(commands, "plan-config.md"), host: string(KindOMP), kind: kindCommand, content: conf},
+		{path: filepath.Join(skills, "plan-forge", "SKILL.md"), host: string(KindOMP), kind: kindSkill, content: forge},
+		{path: filepath.Join(skills, "plan-config", "SKILL.md"), host: string(KindOMP), kind: kindSkill, content: conf},
 		{path: filepath.Join(hooks, "plan-forge.ts"), host: string(KindOMP), kind: kindHookFactory, content: hookBody},
 	}, nil
 }
@@ -737,11 +739,11 @@ func (in *Installer) Apply(arts []artifact, opts InstallOptions) error {
 	// only the current artifacts' rows are rewritten (uninstall --host all
 	// removes the rest).
 	kept := make([]manifestRow, 0, len(manifest.Rows))
-	// OMP is command-only, so every managed OMP skill row is obsolete whatever
-	// scope wrote it, and so is a commands/plan-forge.md from before the hook
-	// registered that command itself. Both are swept only when this run plans
-	// OMP artifacts, and only while the bytes still match the recorded hash: a
-	// copy the user edited keeps its row and stays on disk.
+	// OMP reached Plan Forge through commands/plan-forge.md and
+	// commands/plan-config.md in earlier versions. Both are obsolete now that
+	// OMP has the skills, and are swept only when this run plans OMP
+	// artifacts, and only while the bytes still match the recorded hash: a copy
+	// the user edited keeps its row and stays on disk.
 	ompPlanned := false
 	for _, art := range arts {
 		if art.host == string(KindOMP) {
@@ -749,7 +751,7 @@ func (in *Installer) Apply(arts []artifact, opts InstallOptions) error {
 			break
 		}
 	}
-	staleCommands := staleOMPForgeCommands(arts)
+	staleCommands := staleOMPCommands(arts)
 	for _, row := range manifest.Rows {
 		if rowReplaced(row.Path, arts) {
 			continue
@@ -766,7 +768,7 @@ func (in *Installer) Apply(arts []artifact, opts InstallOptions) error {
 			}
 		}
 		if ompPlanned && row.Host == string(KindOMP) &&
-			(row.Kind == kindSkill || (row.Kind == kindCommand && staleCommands[row.Path])) {
+			row.Kind == kindCommand && staleCommands[row.Path] {
 			gone, err := removeOwnedRow(row)
 			if err != nil {
 				return err
@@ -792,16 +794,19 @@ func rowReplaced(path string, arts []artifact) bool {
 	return false
 }
 
-// staleOMPForgeCommands lists the commands/plan-forge.md paths an OMP install
-// from before the hook registered /plan-forge itself may have left behind: one
-// per commands directory the planned OMP artifacts write into. Skills need no
-// such derivation, because OMP owns none at any path.
-func staleOMPForgeCommands(arts []artifact) map[string]bool {
+// staleOMPCommands lists the commands/*.md paths an OMP install from before
+// the skills existed may have left behind: one pair per OMP root this run
+// writes into. The root is derived from the hook artifact, whose path is
+// always <root>/hooks/pre/plan-forge.ts.
+func staleOMPCommands(arts []artifact) map[string]bool {
 	stale := map[string]bool{}
 	for _, art := range arts {
-		if art.host == string(KindOMP) && art.kind == kindCommand {
-			stale[filepath.Join(filepath.Dir(art.path), "plan-forge.md")] = true
+		if art.host != string(KindOMP) || art.kind != kindHookFactory {
+			continue
 		}
+		root := filepath.Dir(filepath.Dir(filepath.Dir(art.path)))
+		stale[filepath.Join(root, "commands", "plan-forge.md")] = true
+		stale[filepath.Join(root, "commands", "plan-config.md")] = true
 	}
 	return stale
 }
@@ -1231,14 +1236,6 @@ type SkillDuplicate struct {
 	Identical bool     `json:"identical"` // byte-identical bodies: OMP collapses them silently
 }
 
-// SkillConflict is one managed skill a host would list under a name that is
-// already one of that host's built-in commands. OMP is command-only, so any
-// skill it can still see duplicates a command Plan Forge already registers.
-type SkillConflict struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-}
-
 // SkillRootView is what one host surface reads. AGY has two surfaces (CLI
 // and app) that read different global roots; they are never compared.
 type SkillRootView struct {
@@ -1246,12 +1243,11 @@ type SkillRootView struct {
 	Surface    string           `json:"surface,omitempty"`
 	Roots      []SkillRoot      `json:"roots"`
 	Duplicates []SkillDuplicate `json:"duplicates,omitempty"`
-	Conflicts  []SkillConflict  `json:"conflicts,omitempty"`      // OMP only: skill shadowing a built-in command
 	OptIn      []string         `json:"opt_in_sources,omitempty"` // OMP settings files that enabled a foreign root
 }
 
-// SkillDuplicateRemedy is the advice printed next to every visible duplicate
-// or command conflict. Plan Forge never edits the user's OMP settings itself.
+// SkillDuplicateRemedy is the advice printed next to every visible duplicate.
+// Plan Forge never edits the user's OMP settings itself.
 const SkillDuplicateRemedy = `add ignoredSkills: ["plan-forge*"] to your OMP settings, or remove the foreign provider from enabledProviders (or set its enableClaudeUser/enableAgentsUser/enableClaudeProject/enableAgentsProject toggle to false); plan-forge does not edit that file`
 
 // ompSkillSettings is the part of the user's OMP configuration that decides
@@ -1602,12 +1598,6 @@ func inspectSurface(host string, sf skillSurface, planned map[string][]byte) Ski
 				}
 				root.Skills = append(root.Skills, name)
 				path := filepath.Join(r.Path, name, "SKILL.md")
-				if host == string(KindOMP) {
-					// Plan Forge writes no SKILL.md for OMP, so anything still
-					// visible here came from another root and shadows the
-					// command the hook registers.
-					view.Conflicts = append(view.Conflicts, SkillConflict{Name: name, Path: path})
-				}
 				copies[name] = append(copies[name], copyOf{path, body})
 			}
 		}
@@ -1670,15 +1660,19 @@ func plannedSkillBodies(arts []artifact) map[string][]byte {
 }
 
 // ompDuplicateLines returns one warning per managed skill that OMP would list
-// twice with differing bodies once the planned artifacts are written. A
-// foreign user root counts only when the user opted in; nothing is edited.
+// twice with differing bodies once the planned artifacts are written. Two
+// identical bodies collapse silently, so they are not reported. A foreign user
+// root counts only when the user opted in; nothing is edited.
 func ompDuplicateLines(home, repo string, arts []artifact) []string {
 	settings := readOMPSkillSettings(home, repo)
 	planned := plannedSkillBodies(arts)
 	var lines []string
 	for _, sf := range hostSurfaces(string(KindOMP), home, repo, settings) {
-		for _, c := range inspectSurface(string(KindOMP), sf, planned).Conflicts {
-			lines = append(lines, fmt.Sprintf("warning: OMP would list skill %q from %s, shadowing the built-in /%s command; %s", c.Name, c.Path, c.Name, SkillDuplicateRemedy))
+		for _, d := range inspectSurface(string(KindOMP), sf, planned).Duplicates {
+			if d.Identical {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("warning: OMP would list skill %q from %s with different bodies; %s", d.Name, strings.Join(d.Paths, " and "), SkillDuplicateRemedy))
 		}
 	}
 	return lines

@@ -27,10 +27,10 @@ func stubPath(t *testing.T, dir string) {
 	t.Setenv("PATH", dir)
 }
 
-// The default install is Claude Code and Antigravity. Oh-my-pi is never
-// selected automatically (ADR 0026): it serves an explicit pin only, so the
-// installer's `--host omp` is the way to ask for it.
-func TestAutoHostsPreferClaudeAndAntigravityOverOMP(t *testing.T) {
+// Installing is not generating. Every agent found on the machine gets the
+// skills and hooks; which host generates the plan is a separate decision
+// (ADR 0026 keeps oh-my-pi out of generation unless it is pinned).
+func TestAutoHostsSelectEveryAgentFound(t *testing.T) {
 	in, _ := newTestInstaller(t)
 	dir := t.TempDir()
 	stubPath(t, dir)
@@ -43,14 +43,15 @@ func TestAutoHostsPreferClaudeAndAntigravityOverOMP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{string(KindClaude)}
-	if len(got) != len(want) || got[0] != want[0] {
-		t.Fatalf("auto hosts = %v, want %v: OMP must not be chosen beside a ready Claude", got, want)
+	want := []string{string(KindClaude), string(KindOMP)}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("auto hosts = %v, want %v: both agents are installed", got, want)
 	}
 }
 
-// With only oh-my-pi installed, auto selects nothing: the owner must name it.
-func TestAutoHostsNeverSelectsOMPAlone(t *testing.T) {
+// An oh-my-pi-only machine still gets the integration: the owner types
+// /plan-forge there, whatever host ends up generating the plan.
+func TestAutoHostsSelectOMPAlone(t *testing.T) {
 	in, _ := newTestInstaller(t)
 	dir := t.TempDir()
 	stubPath(t, dir)
@@ -60,7 +61,7 @@ func TestAutoHostsNeverSelectsOMPAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 0 {
-		t.Fatalf("auto hosts = %v, want none: OMP serves an explicit pin only", got)
+	if len(got) != 1 || got[0] != string(KindOMP) {
+		t.Fatalf("auto hosts = %v, want [omp]: the only agent installed still gets the skills", got)
 	}
 }

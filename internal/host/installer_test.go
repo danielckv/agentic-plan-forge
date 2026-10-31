@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -84,9 +85,7 @@ func TestPlanModeStepSubstitutionPerHost(t *testing.T) {
 		string(KindClaude): {
 			"`EnterPlanMode`", "`ExitPlanMode`", `"` + testBin + `" validate --repo`,
 		},
-		// OMP has no entry: it is command-only, so no SKILL.md is planned for
-		// it and the plan-mode step never renders. The hook delivers the same
-		// instructions from buildHandoffPrompt at handoff time instead.
+		string(KindOMP): {"managed hook sees the approved", "docs/plans/.plan/synthesized_spec.md"},
 		string(KindAGY): {"Immediately enter Plan Mode", "switch to Plan Mode"},
 	}
 	for _, kind := range []string{string(KindClaude), string(KindOMP), string(KindAGY)} {
@@ -178,38 +177,37 @@ func TestClaudeInstallRemovesRetiredBoardSkill(t *testing.T) {
 	}
 }
 
-func TestOMPDoesNotPlanForgeCommand(t *testing.T) {
+func TestOMPWritesNoSlashCommands(t *testing.T) {
 	in, home := newTestInstaller(t)
 	repo := t.TempDir()
 	for _, opts := range []InstallOptions{{Scope: "user"}, {Scope: "project", Repo: repo}} {
-		sawConfig := false
 		for _, art := range planFor(t, in, string(KindOMP), home, opts) {
-			if filepath.Base(art.path) == "plan-forge.md" {
-				t.Errorf("%s scope: OMP must not write %s", opts.Scope, art.path)
+			if art.kind == kindCommand {
+				t.Errorf("%s scope: OMP must not write the command %s; the skills are the entry point", opts.Scope, art.path)
 			}
-			if filepath.Base(art.path) == "plan-config.md" && art.kind == kindCommand {
-				sawConfig = true
-			}
-		}
-		if !sawConfig {
-			t.Errorf("%s scope: plan-config command must still be installed", opts.Scope)
 		}
 	}
 }
 
-func TestOMPInstallRemovesManagedLegacyCommand(t *testing.T) {
+func TestOMPInstallRemovesManagedLegacyCommands(t *testing.T) {
 	in, home := newTestInstaller(t)
 	commands := filepath.Join(home, ".omp", "agent", "commands")
-	legacy := filepath.Join(commands, "plan-forge.md")
-	legacyBody := "legacy managed command\n"
-	writeFile(t, legacy, legacyBody)
+	var rows []manifestRow
+	legacy := map[string]string{
+		filepath.Join(commands, "plan-forge.md"):  "legacy managed command\n",
+		filepath.Join(commands, "plan-config.md"): "legacy managed config command\n",
+	}
+	for path, body := range legacy {
+		writeFile(t, path, body)
+		rows = append(rows, manifestRow{
+			Path: path, Host: string(KindOMP), Kind: kindCommand, Scope: "user", SHA256: sha256Hex([]byte(body)),
+		})
+	}
 	_, manifestFile, err := loadManifest()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := saveManifest(installManifest{Rows: []manifestRow{{
-		Path: legacy, Host: string(KindOMP), Kind: kindCommand, Scope: "user", SHA256: sha256Hex([]byte(legacyBody)),
-	}}}, manifestFile); err != nil {
+	if err := saveManifest(installManifest{Rows: rows}, manifestFile); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,18 +215,20 @@ func TestOMPInstallRemovesManagedLegacyCommand(t *testing.T) {
 	if err := in.Apply(planFor(t, in, string(KindOMP), home, opts), opts); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if _, err := os.Stat(legacy); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("managed legacy commands/plan-forge.md must be removed, stat err = %v", err)
+	for path := range legacy {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("managed legacy %s must be removed, stat err = %v", filepath.Base(path), err)
+		}
 	}
-	if _, err := os.Stat(filepath.Join(commands, "plan-config.md")); err != nil {
-		t.Errorf("plan-config.md missing: %v", err)
+	if _, err := os.Stat(filepath.Join(home, ".omp", "agent", "skills", "plan-forge", "SKILL.md")); err != nil {
+		t.Errorf("the plan-forge skill that replaces them is missing: %v", err)
 	}
 	manifest, _, err := loadManifest()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, row := range manifest.Rows {
-		if row.Path == legacy {
+		if _, stale := legacy[row.Path]; stale {
 			t.Errorf("legacy row still in manifest: %+v", row)
 		}
 	}
@@ -688,28 +688,24 @@ func TestInstallWritesEachSkillIntoOneRootPerHost(t *testing.T) {
 	for _, kind := range []string{string(KindClaude), string(KindOMP), string(KindAGY)} {
 		projAll = append(projAll, planFor(t, in, kind, home, proj)...)
 	}
-	// OMP plans no SKILL.md, so it can never collide with itself. What is left
-	// is AGY's project copies under .agents/skills, a root OMP reads by
-	// default: each shadows a command the hook registers, and is reported.
+	// OMP reads .omp/skills (its own copy) and .agents/skills (AGY's) by
+	// default. The bodies differ per host, so each managed name is reported
+	// once.
+	ompSkills := 0
 	for _, art := range projAll {
 		if art.host == string(KindOMP) && art.kind == kindSkill {
-			t.Errorf("OMP planned a skill at %s; OMP is command-only", art.path)
+			ompSkills++
 		}
 	}
+	if ompSkills != 2 {
+		t.Errorf("OMP planned %d skills, want plan-forge and plan-config", ompSkills)
+	}
+	// plan-config renders the same bytes for every host, so OMP collapses its
+	// two copies silently. plan-forge carries a per-host plan-mode step, so
+	// that one differs and is reported.
 	lines := ompDuplicateLines(home, repo, projAll)
-	if len(lines) != 2 {
-		t.Fatalf("project --host all conflict lines = %v, want one per AGY project copy", lines)
-	}
-	for _, name := range []string{`"plan-forge"`, `"plan-config"`} {
-		found := false
-		for _, l := range lines {
-			if strings.Contains(l, name) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("no conflict line for %s in %v", name, lines)
-		}
+	if len(lines) != 1 || !strings.Contains(lines[0], `"plan-forge"`) {
+		t.Fatalf("project --host all duplicate lines = %v, want one for plan-forge", lines)
 	}
 }
 
@@ -743,8 +739,10 @@ func TestOMPDuplicateWarningRequiresOptIn(t *testing.T) {
 			writeFile(t, path, tc.body)
 			lines := ompDuplicateLines(home, "", arts)
 			if tc.want {
-				if len(lines) != len(managedSkillNames) {
-					t.Fatalf("lines = %v, want one per managed skill name", lines)
+				// plan-config renders identically for every host, so its two
+				// copies collapse silently; plan-forge differs and is reported.
+				if len(lines) != 1 {
+					t.Fatalf("lines = %v, want one for plan-forge", lines)
 				}
 				forge := ""
 				for _, l := range lines {
@@ -753,11 +751,11 @@ func TestOMPDuplicateWarningRequiresOptIn(t *testing.T) {
 					}
 				}
 				if forge == "" {
-					t.Fatalf("no plan-forge conflict line in %v", lines)
+					t.Fatalf("no plan-forge duplicate line in %v", lines)
 				}
 				for _, part := range []string{
 					filepath.Join(home, ".claude", "skills", "plan-forge", "SKILL.md"),
-					"shadowing the built-in /plan-forge command",
+					"with different bodies",
 					`ignoredSkills: ["plan-forge*"]`, "enabledProviders",
 				} {
 					if !strings.Contains(forge, part) {
@@ -834,7 +832,7 @@ func TestUninstallLeavesForeignHostCopies(t *testing.T) {
 				t.Fatalf("apply: %v", err)
 			}
 			claude := filepath.Join(home, ".claude", "skills", "plan-forge", "SKILL.md")
-			omp := filepath.Join(home, ".omp", "agent", "commands", "plan-config.md")
+			omp := filepath.Join(home, ".omp", "agent", "skills", "plan-forge", "SKILL.md")
 			// A same-named file nobody installed (different root) stays too.
 			foreign := filepath.Join(home, ".agents", "skills", "plan-forge", "SKILL.md")
 			writeFile(t, foreign, "not ours")
@@ -898,12 +896,6 @@ func TestOnlyClaudeSkillCopiesAreHiddenFromOMP(t *testing.T) {
 					t.Errorf("%s %s %s: enabled: false = %v", opts.Scope, kind, art.path, got)
 				}
 			}
-			if kind == string(KindOMP) {
-				if skills != 0 {
-					t.Errorf("%s omp planned %d skills; OMP is command-only", opts.Scope, skills)
-				}
-				continue
-			}
 			if skills == 0 {
 				t.Errorf("%s %s planned no skills", opts.Scope, kind)
 			}
@@ -945,8 +937,8 @@ func TestOMPDuplicateWarningSilentOnceForeignCopiesAreMarked(t *testing.T) {
 	if lines := ompDuplicateLines(home, "", marked); len(lines) != 0 {
 		t.Errorf("warned although the Claude copies are enabled: false: %v", lines)
 	}
-	if lines := ompDuplicateLines(home, "", unmarkedClaude(marked)); len(lines) != len(managedSkillNames) {
-		t.Errorf("unmarked copies produced %v, want one warning per managed skill name", lines)
+	if lines := ompDuplicateLines(home, "", unmarkedClaude(marked)); len(lines) != 1 {
+		t.Errorf("unmarked copies produced %v, want one for plan-forge", lines)
 	}
 }
 
@@ -1002,10 +994,10 @@ func TestUninstallTwiceSucceeds(t *testing.T) {
 	}
 }
 
-// OMP reaches Plan Forge through built-in commands only: /plan-config is a
-// command file and /plan-forge is registered by the hook at runtime. Writing no SKILL.md for OMP is what keeps a command from
-// being listed twice, so the absence is the contract, not an omission.
-func TestOMPPlansCommandsAndHookButNoSkills(t *testing.T) {
+// OMP reaches Plan Forge through the same two skills as every other host.
+// The hook adds only what a skill cannot do there: the status banner and the
+// plan-mode handoff. A command of its own would shadow the skill name.
+func TestOMPPlansSkillsAndHook(t *testing.T) {
 	in, home := newTestInstaller(t)
 	repo, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -1016,11 +1008,16 @@ func TestOMPPlansCommandsAndHookButNoSkills(t *testing.T) {
 		for _, art := range planFor(t, in, string(KindOMP), home, opts) {
 			kinds[art.kind] = append(kinds[art.kind], art.path)
 		}
-		if got := kinds[kindSkill]; len(got) != 0 {
-			t.Errorf("%s: OMP planned skills %v", opts.Scope, got)
+		var names []string
+		for _, path := range kinds[kindSkill] {
+			names = append(names, filepath.Base(filepath.Dir(path)))
 		}
-		if got := kinds[kindCommand]; len(got) != 1 || filepath.Base(got[0]) != "plan-config.md" {
-			t.Errorf("%s: OMP commands = %v, want one plan-config.md", opts.Scope, got)
+		sort.Strings(names)
+		if len(names) != 2 || names[0] != "plan-config" || names[1] != "plan-forge" {
+			t.Errorf("%s: OMP skills = %v, want plan-config and plan-forge", opts.Scope, names)
+		}
+		if got := kinds[kindCommand]; len(got) != 0 {
+			t.Errorf("%s: OMP commands = %v, want none", opts.Scope, got)
 		}
 		if got := kinds[kindHookFactory]; len(got) != 1 || filepath.Base(got[0]) != "plan-forge.ts" {
 			t.Errorf("%s: OMP hook factories = %v, want one plan-forge.ts", opts.Scope, got)
@@ -1028,28 +1025,23 @@ func TestOMPPlansCommandsAndHookButNoSkills(t *testing.T) {
 	}
 }
 
-// An install from before the command-only surface left SKILL.md copies under
-// the OMP roots. Apply owns those rows, so re-running the installer removes
-// them and drops the rows; the empty skill directory goes with them.
-func TestApplyRemovesSkillsFromAnEarlierOMPInstall(t *testing.T) {
+// An install from before the skills existed left slash commands under the OMP
+// commands directory. Apply owns those rows, so re-running the installer
+// removes them and drops the rows. A copy whose bytes diverged from the
+// recorded hash is not ours to delete: TestOMPInstallLeavesUnownedAndDiverged\
+// LegacyCommand covers that side.
+func TestApplyRemovesCommandsFromAnEarlierOMPInstall(t *testing.T) {
 	in, home := newTestInstaller(t)
 	opts := InstallOptions{Scope: "user", Host: "omp"}
-	stale := filepath.Join(home, ".omp", "agent", "skills", "plan-forge", "SKILL.md")
-	body := in.substitute(integrations.SkillPlanForge(), string(KindOMP))
+	stale := filepath.Join(home, ".omp", "agent", "commands", "plan-config.md")
+	body := "legacy plan-config command\n"
 	writeFile(t, stale, body)
 	manifest, file, err := loadManifest()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A row from a project-scope install must go too: OMP owns no skill at any
-	// path, so the sweep is deliberately not limited to this run's scope.
-	repo := t.TempDir()
-	staleProject := filepath.Join(repo, ".omp", "skills", "plan-config", "SKILL.md")
-	projectBody := in.substitute(integrations.SkillPlanConfig(), string(KindOMP))
-	writeFile(t, staleProject, projectBody)
 	manifest.Rows = []manifestRow{
-		{Path: stale, Host: string(KindOMP), Kind: kindSkill, SHA256: sha256Hex([]byte(body))},
-		{Path: staleProject, Host: string(KindOMP), Kind: kindSkill, SHA256: sha256Hex([]byte(projectBody))},
+		{Path: stale, Host: string(KindOMP), Kind: kindCommand, SHA256: sha256Hex([]byte(body))},
 	}
 	if err := saveManifest(manifest, file); err != nil {
 		t.Fatal(err)
@@ -1062,53 +1054,22 @@ func TestApplyRemovesSkillsFromAnEarlierOMPInstall(t *testing.T) {
 		t.Fatalf("dry-run apply: %v", err)
 	}
 	if _, err := os.Stat(stale); err != nil {
-		t.Errorf("--dry-run removed the stale skill: %v", err)
+		t.Errorf("--dry-run removed the stale command: %v", err)
 	}
 
 	if err := in.Apply(planFor(t, in, string(KindOMP), home, opts), opts); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Errorf("stale OMP skill still present: %v", err)
-	}
-	if _, err := os.Stat(filepath.Dir(stale)); !os.IsNotExist(err) {
-		t.Error("empty skill directory was left behind")
-	}
-	if _, err := os.Stat(staleProject); !os.IsNotExist(err) {
-		t.Errorf("project-scope skill survived a user-scope install: %v", err)
+		t.Errorf("stale OMP command still present: %v", err)
 	}
 	after, _, err := loadManifest()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, row := range after.Rows {
-		if row.Path == stale || row.Path == staleProject {
-			t.Errorf("manifest still carries the removed skill row %s", row.Path)
+		if row.Path == stale {
+			t.Errorf("manifest still carries the removed command row %s", row.Path)
 		}
-	}
-}
-
-// A copy whose bytes diverged from the manifest hash is not ours to delete.
-func TestApplyKeepsADivergedOMPSkill(t *testing.T) {
-	in, home := newTestInstaller(t)
-	opts := InstallOptions{Scope: "user", Host: "omp"}
-	stale := filepath.Join(home, ".omp", "agent", "skills", "plan-forge", "SKILL.md")
-	writeFile(t, stale, "edited by the user\n")
-	manifest, file, err := loadManifest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	manifest.Rows = []manifestRow{{
-		Path: stale, Host: string(KindOMP), Kind: kindSkill, SHA256: sha256Hex([]byte("original\n")),
-	}}
-	if err := saveManifest(manifest, file); err != nil {
-		t.Fatal(err)
-	}
-	if err := in.Apply(planFor(t, in, string(KindOMP), home, opts), opts); err != nil {
-		t.Fatalf("apply: %v", err)
-	}
-	if _, err := os.Stat(stale); err != nil {
-		t.Errorf("diverged copy was deleted: %v", err)
 	}
 }

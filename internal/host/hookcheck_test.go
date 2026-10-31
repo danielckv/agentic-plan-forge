@@ -119,15 +119,15 @@ func TestInspectHooksReportsClaudeInstalledStaleAndMissing(t *testing.T) {
 	})
 }
 
-// The oh-my-pi remedy has to say what is actually lost, because no skill backs
-// those commands up any more.
+// The oh-my-pi remedy has to say what is actually lost: the skill still runs
+// the forge without the hook, but nothing opens plan mode with the result.
 func TestInspectHooksNamesWhatAMissingOMPHookCosts(t *testing.T) {
 	in, home := newTestInstaller(t)
 	got := statusFor(t, in, home, "", string(KindOMP))
 	if got.State != HookMissing {
 		t.Fatalf("state = %q, want missing", got.State)
 	}
-	for _, want := range []string{"/plan-forge", "no skills"} {
+	for _, want := range []string{"plan mode", "install --host omp"} {
 		if !strings.Contains(got.Remedy, want) {
 			t.Errorf("remedy %q does not mention %q", got.Remedy, want)
 		}
