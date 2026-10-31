@@ -60,7 +60,7 @@ interface SourceSkip {
 }
 
 /** What was packaged for the VM (`app.SourceSummary`). */
-export interface SourceSummary {
+interface SourceSummary {
   files: number;
   bytes: number;
   skipped?: SourceSkip[];

@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../protocol/bridge";
 
-export type BuildStage =
+type BuildStage =
   | "IDLE"
   | "CODING"
   | "CODED"
@@ -22,7 +22,7 @@ export type BuildStage =
   | "DEPLOYED"
   | "FAILED";
 
-export interface CoderStep {
+interface CoderStep {
   at: string;
   text: string;
 }
@@ -35,7 +35,7 @@ export interface FileChange {
   binary: boolean;
 }
 
-export interface Changes {
+interface Changes {
   branch: string;
   base: string;
   files: FileChange[];
@@ -45,7 +45,7 @@ export interface Changes {
   removed: number;
 }
 
-export interface Box {
+interface Box {
   image: string;
   container?: string;
   url?: string;
@@ -53,7 +53,7 @@ export interface Box {
   port?: number;
 }
 
-export interface Deployment {
+interface Deployment {
   target: string;
   url?: string;
   detail?: string;
@@ -81,7 +81,7 @@ export interface BuildView {
   updated_at: string;
 }
 
-export interface DeployTargetOption {
+interface DeployTargetOption {
   id: string;
   name: string;
   ok: boolean;

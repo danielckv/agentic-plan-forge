@@ -15,7 +15,7 @@ import { settingsErrorMessage } from "./settings";
 import type { SettingsDocument } from "./settings";
 
 /** One selectable model, as a host lists it (`host.ModelRef`). */
-export interface ModelRef {
+interface ModelRef {
   id: string;
   label: string;
 }

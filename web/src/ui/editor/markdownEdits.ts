@@ -6,7 +6,7 @@
  * one undo step.
  */
 
-export interface TextChange {
+interface TextChange {
   from: number;
   to: number;
   insert: string;

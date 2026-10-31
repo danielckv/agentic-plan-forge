@@ -35,7 +35,7 @@ export interface CapabilityTool {
   essential: boolean;
 }
 
-export interface SkillRootView {
+interface SkillRootView {
   host: string;
   scope?: string;
   path: string;
@@ -43,7 +43,7 @@ export interface SkillRootView {
   duplicate?: boolean;
 }
 
-export interface HookStatus {
+interface HookStatus {
   host: string;
   path: string;
   state: string;

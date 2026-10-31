@@ -95,7 +95,7 @@ export interface DraftSummary {
   data?: unknown;
 }
 
-export interface DecisionOption {
+interface DecisionOption {
   optionId: string;
   label: string;
   tradeoff: string;
