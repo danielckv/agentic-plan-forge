@@ -36,7 +36,12 @@ const (
 
 // PlanGitignore is the exact content of docs/plans/.plan/.gitignore: default-deny inside a
 // user's repository, with the two approved artifacts left trackable.
-const PlanGitignore = "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json\n"
+const PlanGitignore = "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json\n!sprints.json\n"
+
+// priorPlanGitignore is the content Plan Forge wrote before sprints.json
+// joined the plan. A file matching it byte for byte is one Plan Forge wrote
+// and nobody edited, so upgrading it is safe; anything else is the owner's.
+const priorPlanGitignore = "*\n!.gitignore\n!synthesized_spec.md\n!plan_manifest.json\n"
 
 // HistoryKeep is how many prior approved pairs are retained.
 const HistoryKeep = 5
@@ -211,8 +216,10 @@ func (p *planDir) ensureDir(rel string) (string, error) {
 	return p.path(rel)
 }
 
-// ensureGitignore creates .plan/.gitignore with the four exact lines when it is
-// absent. An existing file is never rewritten: it may carry the user's edits.
+// ensureGitignore creates .plan/.gitignore with the exact lines when it is
+// absent. An existing file is left alone unless it is byte for byte the
+// version Plan Forge wrote before sprints.json existed, which is upgraded in
+// place: a file the owner edited is never rewritten.
 func (p *planDir) ensureGitignore() error {
 	full, err := p.path(PlanDirName + "/" + GitignoreName)
 	if err != nil {
@@ -220,7 +227,7 @@ func (p *planDir) ensureGitignore() error {
 	}
 	f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if errors.Is(err, fs.ErrExist) {
-		return nil
+		return p.upgradeGitignore(full)
 	}
 	if err != nil {
 		return artifactErr(PlanDirName+"/"+GitignoreName, err)
@@ -234,6 +241,19 @@ func (p *planDir) ensureGitignore() error {
 	}
 	if werr != nil {
 		return artifactErr(PlanDirName+"/"+GitignoreName, werr)
+	}
+	return syncDir(filepath.Dir(full))
+}
+
+// upgradeGitignore replaces a .gitignore Plan Forge wrote before sprints.json
+// existed. Any other content is the owner's and is left exactly as it is.
+func (p *planDir) upgradeGitignore(full string) error {
+	raw, err := os.ReadFile(full)
+	if err != nil || string(raw) != priorPlanGitignore {
+		return nil
+	}
+	if err := os.WriteFile(full, []byte(PlanGitignore), 0o644); err != nil {
+		return artifactErr(PlanDirName+"/"+GitignoreName, err)
 	}
 	return syncDir(filepath.Dir(full))
 }

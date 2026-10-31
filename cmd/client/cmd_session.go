@@ -218,16 +218,18 @@ func runWait(ctx context.Context, args []string) int {
 	var (
 		sessionID  string
 		timeoutRaw string
+		sprintNum  int
 	)
 	fs, err := parseFlags("wait", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&sessionID, "session", "", "session UUIDv4 from `plan-forge run --detach` (required)")
 		fs.StringVar(&timeoutRaw, "timeout", "50s", "poll timeout before exiting 75 (for example: 50s, 100s)")
+		fs.IntVar(&sprintNum, "sprint", 0, "narrow the handoff to one sprint of the board; 0 hands over the whole plan")
 	})
 	if err != nil {
 		return exitUsage
 	}
 	if fs.NArg() != 0 || sessionID == "" {
-		fmt.Fprintln(os.Stderr, "usage: plan-forge wait --session <id> [--timeout 50s]")
+		fmt.Fprintln(os.Stderr, "usage: plan-forge wait --session <id> [--timeout 50s] [--sprint N]")
 		return exitUsage
 	}
 	timeout, err := time.ParseDuration(timeoutRaw)
@@ -245,19 +247,47 @@ func runWait(ctx context.Context, args []string) int {
 		}
 		return code
 	}
-	out, _ := json.Marshal(struct {
+	payload := struct {
 		SessionID     string               `json:"session_id"`
 		State         string               `json:"state"`
 		ArtifactPaths []string             `json:"artifact_paths"`
 		Validation    planstate.Validation `json:"validation"`
+		Sprint        *SprintScope         `json:"sprint,omitempty"`
 	}{
 		SessionID:     st.SessionID,
 		State:         string(st.State),
 		ArtifactPaths: st.ArtifactPaths,
 		Validation:    waitValidation(ctx, st.ArtifactPaths),
-	})
+	}
+	if sprintNum > 0 {
+		scope, err := waitSprintScope(st.ArtifactPaths, sprintNum)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "wait: --sprint %d: %v\n", sprintNum, err)
+			return exitUsage
+		}
+		payload.Sprint = &scope
+	}
+	out, _ := json.Marshal(payload)
 	fmt.Println(string(out))
 	return exitOK
+}
+
+// waitSprintScope resolves the repository from the artifact paths the session
+// reported, the same way waitValidation does, and reads the board from it.
+func waitSprintScope(artifactPaths []string, number int) (SprintScope, error) {
+	if len(artifactPaths) == 0 {
+		return SprintScope{}, errors.New("the session reported no artifacts to read the board from")
+	}
+	suffix := filepath.FromSlash("/" + planstate.SpecRel)
+	repo := strings.TrimSuffix(artifactPaths[0], suffix)
+	if repo == artifactPaths[0] || repo == "" {
+		return SprintScope{}, errors.New("the session reported no repository path")
+	}
+	cfg, err := loadConfig()
+	if err != nil {
+		return SprintScope{}, err
+	}
+	return sprintScope(repo, number, cfg)
 }
 
 // waitValidationTimeout bounds the scan `wait` runs after approval.
