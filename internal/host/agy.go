@@ -35,16 +35,18 @@ type agyIsolation struct {
 	selectionVerified bool
 }
 
-// AGY is capability-gated. The current documented CLI exposes no isolated
-// settings selector, so NewAGY intentionally leaves isolation unavailable.
+// AGY is capability-gated: generation runs only against the isolated profile
+// Plan Forge provisions at $PLAN_FORGE_HOME/profiles/agy (see agy_profile.go),
+// whose Plan-Forge-owned settings deny every tool family.
 type AGY struct {
 	binary    string
 	extraEnv  []string
 	isolation *agyIsolation
 }
 
-// NewAGY constructs the production Antigravity adapter. Skill hosting remains
-// supported even while generation fails closed at Preflight.
+// NewAGY constructs the production Antigravity adapter. The isolated profile
+// is provisioned lazily at Preflight and at the auth/models probes, so mere
+// registration and detection create nothing.
 func NewAGY() Adapter { return &AGY{binary: "agy"} }
 
 func (a *AGY) Kind() Kind { return KindAGY }
@@ -74,16 +76,21 @@ func (a *AGY) Detect(ctx context.Context) (string, error) {
 	return version, nil
 }
 
+// Auth probes the isolated profile, never the host's agy sign-in: a host
+// sign-in says nothing about what a generation run can use.
 func (a *AGY) Auth(ctx context.Context) (AuthState, error) {
-	_, _, err := runProbe(ctx, a, a.binary, "models")
+	if err := a.ensureIsolation(); err != nil {
+		return AuthState{}, err
+	}
+	_, _, err := a.runIsolatedProbe(ctx, "models")
 	if err != nil {
-		return AuthState{Ready: false, Method: "agy models", Detail: "start agy once interactively to sign in"}, nil
+		return AuthState{Ready: false, Method: "agy models", Detail: agySignInHint(a.isolation.homeDir)}, nil
 	}
 	return AuthState{Ready: true, Method: "agy models", Detail: "ready"}, nil
 }
 
 func (a *AGY) Models(ctx context.Context) ([]ModelRef, error) {
-	stdout, _, err := runProbe(ctx, a, a.binary, "models")
+	stdout, _, err := a.runIsolatedProbe(ctx, "models")
 	if err != nil {
 		return nil, err
 	}
@@ -110,12 +117,8 @@ func (a *AGY) Models(ctx context.Context) ([]ModelRef, error) {
 }
 
 func (a *AGY) Preflight(ctx context.Context) error {
-	if a.isolation == nil || !a.isolation.selectionVerified {
-		return &contracts.ErrCapability{
-			Host:   string(KindAGY),
-			Reason: "AGY exposes no verified isolated settings mechanism",
-			Remedy: "install and sign in to Claude Code or OMP",
-		}
+	if err := a.ensureIsolation(); err != nil {
+		return err
 	}
 	if _, err := validateAGYIsolation(a.isolation); err != nil {
 		return err
@@ -170,9 +173,10 @@ func (a *AGY) Generate(ctx context.Context, req contracts.GenerateRequest, emit 
 		return result, &contracts.ErrCapability{Host: string(KindAGY), Reason: "isolated settings changed before spawn", Remedy: "retry after inspecting Plan-Forge settings"}
 	}
 
-	environment := childEnvironment(dir, a, a.extraEnv)
-	environment = replaceEnvironment(environment, "HOME", a.isolation.homeDir)
-	environment = replaceEnvironment(environment, "USERPROFILE", a.isolation.homeDir)
+	environment, err := a.childEnv(dir)
+	if err != nil {
+		return result, err
+	}
 	callCtx, cancel := context.WithTimeout(ctx, req.ClampTimeout())
 	defer cancel()
 

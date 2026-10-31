@@ -302,9 +302,11 @@ func (in *Installer) Plan(ctx context.Context, opts InstallOptions) ([]HostRepor
 			artifacts = append(artifacts, arts...)
 			report.Targets = ompTargets(opts.Scope)
 		case string(KindAGY):
-			// No verified auth probe exists for Antigravity generation.
-			report.Auth = "unknown"
-			report.Note = "skills installed; avatar generation needs Claude Code or OMP"
+			// Generation signs in to the isolated profile, not the host's agy
+			// (see the isolated agy profile section in docs/install.md), so the
+			// host's own auth state says nothing here.
+			report.Auth = "isolated profile"
+			report.Note = "skills installed; generation signs in to the Plan Forge agy profile (plan-forge doctor shows how)"
 			arts, err := in.planAGY(home, opts)
 			if err != nil {
 				return nil, nil, err
