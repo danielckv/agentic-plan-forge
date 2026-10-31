@@ -4,13 +4,11 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/danielckv/agentic-plan-forge?sort=semver)](https://github.com/danielckv/agentic-plan-forge/releases/latest)
 
-**A deliberate planning gate for coding agents.** A coding agent asked to "add invoice export" produces a plan in
-seconds. It is plausible and usually wrong: it trusts stale documentation, forgets what the team decided last month,
-and lets a technical constraint decide a product question. Plan Forge reads the repository first, argues with itself
-about the plan, then hands you something to approve — as one Go binary with an embedded web UI, plus an optional
-relay for team sessions.
+**A deliberate planning gate for coding agents.** Intercept hallucinated architectures and stale assumptions before a single file changes.
 
-One brief, from submission to the question drawer and the handoff, at 1× speed with no cuts:
+Coding agents don’t fail at writing code - they fail at understanding context. When asked to implement a feature, an agent will confidently return a plausible plan in seconds. It is also usually wrong: it relies on stale documentation, overlooks recent team decisions, and lets low-level technical constraints dictate product design.
+
+Plan Forge intercepts the loop before execution begins. It inspects your actual codebase, stress-tests candidate approaches through self-adversarial debate, and presents a hardened specification for human sign-off.
 
 ![A brief submitted, the agents working, a fusion, and the question drawer answering one decision](docs/images/demo.gif)
 
