@@ -26,8 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Oh-my-pi serves an explicit pin only. It is never a default, never a fallback: `main_host: omp`, `judge_host: omp`
   or a `role_models` entry naming it is the whole opt-in, and then it is used even when Claude Code or a provider key
-  is ready. Without a pin an installation holding only oh-my-pi reports no usable generation host, and the skip reason
-  names the pin. `config` accepts the pin again instead of rejecting it. Supersedes ADR 0025 with ADR 0026.
+  is ready. The pin is scoped to what named it — a `main_host` pin covers its slot, a `role_models` entry covers the
+  roles it lists — so an unpinned role keeps spreading across the other ready hosts and the invoking host never
+  qualifies. Without a pin oh-my-pi reports no placement. Supersedes ADR 0025 with ADR 0026.
 - Installing over an existing copy starts from defaults on macOS and Linux: `uninstall --purge --yes` runs before
   registration, so a previous `main_host`, timeout or host choice does not survive. `credentials.json` is preserved.
 - `plan-forge install --host auto` selects Claude Code and Antigravity. Oh-my-pi is never selected automatically;

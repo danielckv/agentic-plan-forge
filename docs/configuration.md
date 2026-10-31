@@ -84,10 +84,12 @@ not have access to it.
 Fix it by setting a model the host that ran actually has.
 
 One host serves only on an explicit pin: `omp`. It is never a default, never a fallback. `main_host` or a
-`role_models` entry naming it is the owner asking for it, and then it is used. Without a pin it is skipped with a
-reason, in `plan-forge doctor` and in `/api/status`. The reason is cost, measured: one tool-free `omp` call takes
-2.83s wall against 1.10s of model time and adds about 2,900 tokens of the CLI's own scaffolding, on a run that makes
-25 to 60 calls. Reasoning: [ADR 0026](adrs/0026-oh-my-pi-serves-an-explicit-pin-only.md).
+`role_models` entry naming it is the owner asking for it, and then it is used. The pin is scoped to what named it: a
+`main_host` pin covers every role on that slot, and a `role_models` entry covers exactly the roles it lists — an
+unpinned role still spreads across the other ready hosts. Without a pin it is skipped with a reason, in
+`plan-forge doctor` and in `/api/status`. The reason is cost, measured: one tool-free `omp` call takes 2.83s wall
+against 1.10s of model time and adds about 2,900 tokens of the CLI's own scaffolding, on a run that makes 25 to 60
+calls. Reasoning: [ADR 0026](adrs/0026-oh-my-pi-serves-an-explicit-pin-only.md).
 
 `agy` serves generation through an isolated profile that Plan Forge provisions at
 `$PLAN_FORGE_HOME/profiles/agy`, whose settings deny every tool family. A host-level agy sign-in does not carry over:
