@@ -38,8 +38,67 @@ export async function startFakeSession({ port, dist, brief = S.BRIEF, interprete
     interpretation: interpreted ? 1 : 0,
     seq: 0,
     page: "page1",
+    sprintPlacements: { ...S.SPRINT_PLACEMENTS },
+    sprintSettings: { ...S.SPRINT_SETTINGS },
   };
   const wireLog = { page1: [], page2: [], page3: [] };
+
+  // readBody collects a JSON request body and hands it to the caller. The
+  // harness never sees a body it did not send itself, so a parse failure is a
+  // bug in the run rather than untrusted input.
+  const readBody = (req, done) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+    });
+    req.on("end", () => done(raw === "" ? {} : JSON.parse(raw)));
+  };
+
+  // sprintBoard assembles the board from the fixture items and the current
+  // placements. The arithmetic is the page's input, not a second planner: the
+  // real one is synthesizer.BuildSprints.
+  const sprintBoard = () => {
+    const basis = state.sprintSettings.basis;
+    const effortOf = (item) => (basis === "agent" ? item.agent_minutes : item.human_hours);
+    const capacity =
+      basis === "agent"
+        ? state.sprintSettings.sprint_days * 9 * 60 * 4
+        : state.sprintSettings.sprint_days * 9 * state.sprintSettings.team_size;
+    const column = (number, name) => {
+      const items = S.SPRINT_ITEMS.filter((it) => (state.sprintPlacements[it.task_id] ?? 0) === number).map((it) => ({
+        ...it,
+        moved: state.sprintPlacements[it.task_id] !== S.SPRINT_PLACEMENTS[it.task_id] ? true : undefined,
+      }));
+      const committed = items.reduce((sum, it) => sum + effortOf(it), 0);
+      return {
+        number,
+        name,
+        items,
+        human_hours: items.reduce((sum, it) => sum + it.human_hours, 0),
+        agent_minutes: items.reduce((sum, it) => sum + it.agent_minutes, 0),
+        committed: Math.round(committed * 100) / 100,
+        ...(number === 0 ? {} : { capacity, over: committed > capacity }),
+      };
+    };
+    const sprints = Array.from({ length: state.sprintSettings.horizon }, (_, i) => column(i + 1, `Sprint ${i + 1}`));
+    return {
+      available: true,
+      board: {
+        basis,
+        unit: basis === "agent" ? "minutes" : "hours",
+        sprint_days: state.sprintSettings.sprint_days,
+        workday_hours: 9,
+        team_size: state.sprintSettings.team_size,
+        max_parallel: 4,
+        horizon: state.sprintSettings.horizon,
+        capacity,
+        sprints,
+        backlog: column(0, "Backlog"),
+        warnings: [],
+        disclaimer: "model estimate, not measured",
+      },
+    };
+  };
 
   const json = (res, body) => {
     res.setHeader("Content-Type", "application/json");
@@ -70,6 +129,27 @@ export async function startFakeSession({ port, dist, brief = S.BRIEF, interprete
     if (p === "/api/plan-files") {
       return json(res, { revision: state.interpretation, files: state.interpretation > 0 ? S.PLAN_FILES : [] });
     }
+    if (p === "/api/sprints") return json(res, sprintBoard());
+    if (p === "/api/sprints/move") {
+      return readBody(req, (body) => {
+        if (typeof body.task_id === "string" && Number.isInteger(body.sprint)) {
+          state.sprintPlacements[body.task_id] = body.sprint;
+        }
+        json(res, sprintBoard());
+      });
+    }
+    if (p === "/api/sprints/settings") {
+      return readBody(req, (body) => {
+        for (const key of ["basis", "sprint_days", "team_size", "horizon"]) {
+          if (body[key] !== undefined) state.sprintSettings[key] = body[key];
+        }
+        json(res, sprintBoard());
+      });
+    }
+    if (p === "/api/sprints/reset") {
+      state.sprintPlacements = { ...S.SPRINT_PLACEMENTS };
+      return json(res, sprintBoard());
+    }
     if (p === "/api/components") {
       const module = url.searchParams.get("module");
       const q = (url.searchParams.get("q") ?? "").toLowerCase();
@@ -81,7 +161,7 @@ export async function startFakeSession({ port, dist, brief = S.BRIEF, interprete
       return json(res, { ready: true, stack: ["go", "typescript"], modules: S.MODULES, symbols, truncated: false });
     }
     let path = p;
-    if (path === "/" || path === "/ingest" || path === "/deliberate" || path === "/synthesis") path = "/index.html";
+    if (path === "/" || path === "/ingest" || path === "/deliberate" || path === "/synthesis" || path === "/sprints") path = "/index.html";
     const file = join(dist, path);
     const target = existsSync(file) && !file.endsWith("/") ? file : join(dist, "index.html");
     res.setHeader("Content-Type", mime[extname(target)] || "application/octet-stream");

@@ -51,6 +51,9 @@ export const ROUTE_BY_PHASE: Record<Phase, string> = {
   SYNTHESIS: "/synthesis",
   APPROVING: "/synthesis",
   APPROVING_UNKNOWN: "/synthesis",
+  // The handoff panel lives on /build and is time-critical: with no deploy
+  // target the window closes five seconds after an approval. Landing on the
+  // board instead would hide it. The board is one click away in the sidebar.
   APPROVED: "/build",
   CANCELLED: "/ingest",
 };
@@ -60,8 +63,20 @@ export const ROUTE_ORDER: Record<string, number> = {
   "/ingest": 0,
   "/deliberate": 1,
   "/synthesis": 2,
-  "/build": 3,
+  "/sprints": 3,
+  "/build": 4,
 };
+
+/**
+ * How far the router unlocks for a phase. It is the phase's own route, except
+ * at APPROVED: an approved plan unlocks both the board and the build page, and
+ * the owner chooses between them. Without this, landing on /sprints would
+ * leave /build permanently out of reach.
+ */
+export function reachedOrder(phase: Phase): number {
+  if (phase === "APPROVED") return ROUTE_ORDER["/build"] ?? 0;
+  return ROUTE_ORDER[ROUTE_BY_PHASE[phase]] ?? 0;
+}
 
 export interface RecoveryItem {
   at: number;

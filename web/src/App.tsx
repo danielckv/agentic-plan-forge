@@ -8,6 +8,7 @@ import { Page1Ingestion } from "./pages/Page1Ingestion";
 import { Page2AvatarCanvas } from "./pages/Page2AvatarCanvas";
 import { Page3SynthesisConfluence } from "./pages/Page3SynthesisConfluence";
 import { Page4Build } from "./pages/Page4Build";
+import { PageSprints } from "./pages/PageSprints";
 import { CapabilitiesDialog } from "./pages/CapabilitiesDialog";
 import { ComponentGraphDialog } from "./components/ComponentGraphDialog";
 import { shouldOfferSetup } from "./ui/capabilities";
@@ -101,6 +102,8 @@ export function App(): React.ReactElement {
       <Page1Ingestion />
     ) : sync.route === "/deliberate" ? (
       <Page2AvatarCanvas />
+    ) : sync.route === "/sprints" ? (
+      <PageSprints />
     ) : sync.route === "/build" ? (
       <Page4Build />
     ) : (

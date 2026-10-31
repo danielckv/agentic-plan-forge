@@ -3,6 +3,29 @@
 Why each boundary in Plan Forge sits where it does. One entry per decision, newest first, numbered as it was
 when it was taken. The long versions were separate files until 0.11.0; `git log docs/adrs/` still has them.
 
+## 0029. Sprints are computed from the task graph, and only the moves are stored
+
+2026-10-31. The plan arranged as work to commit to. Phases (0006's resumable run derives them) answer "what may run
+at the same time"; sprints answer "what fits in the next two weeks". Both come from the same task graph, so neither
+can disagree with it.
+
+Tasks are walked in topological order and each takes the earliest sprint that is not before any of its dependencies
+and still has room. Work past the horizon stays in the backlog, and so does anything depending on backlog work:
+committing it would be a promise the board cannot keep. The planner reuses `topoOrder`, `PERT` and
+`ValidateEstimates` rather than adding a second scheduler.
+
+The board is recomputed on every request and only the owner's moves are stored, in `docs/plans/.plan/sprints.json`.
+Storing the board itself would mean two sources of truth for the same work, and the stored one would rot the moment
+the plan changed. A move is honoured whatever the capacity says, because the owner outranks the arithmetic; a move
+that breaks dependency order is honoured too, named on the item and reported at the top of the board.
+
+`sprints.json` is un-ignored in `.plan/.gitignore`, so the arrangement travels with the plan. The managed
+`PreToolUse` guard already refuses agent edits anywhere under `.plan/`, which covers it: the agent implements the
+board, it does not rearrange it.
+
+The handoff is unchanged by default. `plan-forge wait --sprint N` narrows it to one sprint's task ids, read from the
+manifest and `sprints.json` in the repository, so `wait` needs nothing from the session that produced them.
+
 ## 0028. Plan Forge names the model, and no model serves more than two avatars
 
 2026-10-31. An unpinned avatar used to send no model id, so the host chose. On oh-my-pi that meant the owner's own

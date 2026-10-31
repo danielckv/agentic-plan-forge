@@ -1,8 +1,8 @@
-import { BrainCircuit, FileText, PanelLeftClose, PanelLeftOpen, ScrollText } from "lucide-react";
+import { BrainCircuit, FileText, Hammer, KanbanSquare, PanelLeftClose, PanelLeftOpen, ScrollText } from "lucide-react";
 
 import { BrandMark } from "../ui/BrandMark";
 
-import { navigate, ROUTE_BY_PHASE, ROUTE_ORDER } from "../store/syncStore";
+import { navigate, reachedOrder, ROUTE_ORDER } from "../store/syncStore";
 import type { SyncState } from "../store/syncStore";
 import { prefs } from "../ui/prefs";
 
@@ -10,6 +10,8 @@ const NAV_ITEMS: Array<{ route: string; label: string; hint: string; icon: React
   { route: "/ingest", label: "Ingestion", hint: "Write the requirements", icon: FileText },
   { route: "/deliberate", label: "Deliberation", hint: "The avatars plan", icon: BrainCircuit },
   { route: "/synthesis", label: "Synthesis", hint: "Review and approve", icon: ScrollText },
+  { route: "/sprints", label: "Sprints", hint: "Arrange the work", icon: KanbanSquare },
+  { route: "/build", label: "Build", hint: "Implement and preview", icon: Hammer },
 ];
 
 /**
@@ -20,7 +22,7 @@ const NAV_ITEMS: Array<{ route: string; label: string; hint: string; icon: React
  */
 export function Sidebar(props: { sync: SyncState; collapsed: boolean }): React.ReactElement {
   const { sync, collapsed } = props;
-  const reached = ROUTE_ORDER[ROUTE_BY_PHASE[sync.phase]] ?? 0;
+  const reached = reachedOrder(sync.phase);
   const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
   const toggleLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
 
