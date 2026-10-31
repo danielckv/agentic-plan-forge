@@ -304,15 +304,6 @@ func (in *Installer) Plan(ctx context.Context, opts InstallOptions) ([]HostRepor
 			artifacts = append(artifacts, arts...)
 			report.Targets = claudeTargets(opts.Scope)
 		case string(KindOMP):
-			if v, err := Version(ctx, KindOMP); err == nil {
-				report.Version = v
-			}
-			report.Auth, report.AuthCmd = in.authLabel(ctx, KindOMP)
-			arts, err := in.planOMP(home, opts)
-			if err != nil {
-				return nil, nil, err
-			}
-			artifacts = append(artifacts, arts...)
 			report.Targets = ompTargets(opts.Scope)
 		case string(KindAGY):
 			// Generation signs in to the isolated profile, not the host's agy
