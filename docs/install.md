@@ -94,13 +94,14 @@ did for Plan Forge is in that tree.
 
 The installer verifies the release checksum, places the binary, then runs `plan-forge install --host auto`, which detects
 installed agents and writes the skills, commands and hooks. `auto` selects Claude Code and Antigravity when they are
-present, and oh-my-pi only when neither is.
+present. Oh-my-pi is not selected automatically: it serves an explicit `main_host` or `role_models` pin only, so
+`plan-forge install --host omp` is how you ask for its command and hook.
 
 | Host | Installed files | Slash commands |
 | :--- | :--- | :--- |
 | Claude Code | `~/.claude/skills/plan-forge/SKILL.md` and `~/.claude/skills/plan-config/SKILL.md` | `/plan-forge`, `/plan-config` |
 | Antigravity | `~/.gemini/antigravity-cli/skills/{plan-forge,plan-config}/SKILL.md` and `~/.gemini/config/skills/{plan-forge,plan-config}/SKILL.md` | `/plan-forge`, `/plan-config` |
-| OMP (fallback only) | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge`. No skill files | `/plan-forge`, `/plan-config` |
+| OMP (explicit pin only) | `~/.omp/agent/commands/plan-config.md` and the hook `~/.omp/agent/hooks/pre/plan-forge.ts`, which registers `/plan-forge`. No skill files | `/plan-forge`, `/plan-config` |
 
 **OMP installs no skills.** oh-my-pi reaches Plan Forge through built-in commands only: the hook registers `/plan-forge`
 with `pi.registerCommand`, and `/plan-config` is `~/.omp/agent/commands/plan-config.md`. Because no `SKILL.md` is

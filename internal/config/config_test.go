@@ -81,33 +81,33 @@ func TestLoadMalformedFileIsReportedAndNotOverwritten(t *testing.T) {
 	}
 }
 
-// A saved config naming a removed host must say what to do about it. The first
-// release that dropped omp reported only "is not one of ...", which lists names
-// without a next step, and the owner's existing config failed at startup.
-//
-// claude and agy remain valid hosts, so they are not asserted here: they pass
-// validation, and a note about preferring the API belongs in `config`, where a
-// pin is chosen.
-func TestValidateExplainsRemovedAndPinnedHosts(t *testing.T) {
-	cases := []struct {
-		host string
-		want []string
-	}{
-		{"omp", []string{"no longer a generation host", "anthropic or gemini", "API key"}},
-		{"nonsense", []string{"not a supported host"}},
-	}
-	for _, c := range cases {
+// Omp is a valid pin (it just is not a default), so only unknown hosts fail.
+func TestValidationRejectsUnknownHosts(t *testing.T) {
+	cases := []string{"not-a-host", "gemini2"}
+	for _, host := range cases {
 		cfg := config.Default()
-		cfg.MainHost = c.host
+		cfg.MainHost = host
 		err := config.Validate(cfg)
 		if err == nil {
-			t.Fatalf("main_host %q was accepted", c.host)
+			t.Fatalf("main_host %q was accepted", host)
 		}
-		for _, want := range c.want {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("main_host %q message %q does not mention %q", c.host, err, want)
-			}
+		if !strings.Contains(err.Error(), "not a supported host") {
+			t.Fatalf("message = %q, want it to say the host is unsupported", err)
 		}
+	}
+}
+
+// A pin naming omp is the owner wanting it, so validation accepts it.
+func TestValidationAcceptsAnOMPPin(t *testing.T) {
+	cfg := config.Default()
+	cfg.MainHost = "omp"
+	if err := config.Validate(cfg); err != nil {
+		t.Fatalf("an omp main_host pin must validate: %v", err)
+	}
+	cfg = config.Default()
+	cfg.RoleModels = map[string]config.RoleBinding{"architect": {Host: "omp"}}
+	if err := config.Validate(cfg); err != nil {
+		t.Fatalf("an omp role_models pin must validate: %v", err)
 	}
 }
 
@@ -221,7 +221,7 @@ func TestValidateBounds(t *testing.T) {
 			c.RoleModels = map[string]config.RoleBinding{"designer": {Host: "claude"}}
 		},
 		func(c *config.Config) {
-			c.RoleModels = map[string]config.RoleBinding{"architect": {Host: "omp"}}
+			c.RoleModels = map[string]config.RoleBinding{"architect": {Host: "not-a-host"}}
 		},
 	}
 	for i, mutate := range bad {

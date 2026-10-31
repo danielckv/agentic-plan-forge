@@ -25,7 +25,7 @@ func runInstall(ctx context.Context, args []string) int {
 	var gitHook, dryRun, yes, force bool
 
 	fs, err := parseFlags("install", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&hostFlag, "host", "auto", "auto|claude|omp|agy|all (auto = every host whose binary is found)")
+		fs.StringVar(&hostFlag, "host", "auto", "auto|claude|agy|omp|all (auto = claude and agy when found; omp only when named)")
 		fs.StringVar(&scopeFlag, "scope", "user", "user|project")
 		fs.StringVar(&repoFlag, "repo", "", "repository path (project scope / git hook)")
 		fs.BoolVar(&gitHook, "git-hook", false, "also install the post-merge git hook")

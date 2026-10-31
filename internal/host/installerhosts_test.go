@@ -27,9 +27,9 @@ func stubPath(t *testing.T, dir string) {
 	t.Setenv("PATH", dir)
 }
 
-// The default install is Claude Code and Antigravity. Oh-my-pi is selected
-// only when neither of them is installed, because its calls carry the CLI's
-// own scaffolding and it is not the default host.
+// The default install is Claude Code and Antigravity. Oh-my-pi is never
+// selected automatically (ADR 0026): it serves an explicit pin only, so the
+// installer's `--host omp` is the way to ask for it.
 func TestAutoHostsPreferClaudeAndAntigravityOverOMP(t *testing.T) {
 	in, _ := newTestInstaller(t)
 	dir := t.TempDir()
@@ -49,8 +49,8 @@ func TestAutoHostsPreferClaudeAndAntigravityOverOMP(t *testing.T) {
 	}
 }
 
-// With only oh-my-pi installed the tool must still work, so it is selected.
-func TestAutoHostsFallBackToOMPAlone(t *testing.T) {
+// With only oh-my-pi installed, auto selects nothing: the owner must name it.
+func TestAutoHostsNeverSelectsOMPAlone(t *testing.T) {
 	in, _ := newTestInstaller(t)
 	dir := t.TempDir()
 	stubPath(t, dir)
@@ -60,7 +60,7 @@ func TestAutoHostsFallBackToOMPAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0] != string(KindOMP) {
-		t.Fatalf("auto hosts = %v, want [omp] as the last resort", got)
+	if len(got) != 0 {
+		t.Fatalf("auto hosts = %v, want none: OMP serves an explicit pin only", got)
 	}
 }

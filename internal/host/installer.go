@@ -146,24 +146,20 @@ func (in *Installer) Bin() string { return in.bin }
 // outrank each other.
 //
 // Claude Code and Antigravity are the supported skill hosts, and the hosts
-// generation runs on. Oh-my-pi is a fallback: it is selected only when neither
-// of the other two is present, because its calls carry the CLI's own
-// scaffolding and it is not the default.
+// generation runs on. Oh-my-pi is never selected automatically (ADR 0026):
+// it serves an explicit pin only, so `--host omp` is the way to want it.
 func (in *Installer) selectedHosts(ctx context.Context, flag string) ([]string, error) {
 	switch flag {
 	case "claude", "omp", "agy":
 		return []string{flag}, nil
 	case "all":
-		return []string{string(KindClaude), string(KindAGY), string(KindOMP)}, nil
+		return []string{string(KindClaude), string(KindAGY)}, nil
 	case "auto":
 		var found []string
 		for _, kind := range []string{string(KindClaude), string(KindAGY)} {
 			if in.hostPresent(ctx, kind) {
 				found = append(found, kind)
 			}
-		}
-		if len(found) == 0 && in.hostPresent(ctx, string(KindOMP)) {
-			found = append(found, string(KindOMP))
 		}
 		return found, nil
 	default:
