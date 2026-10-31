@@ -4,290 +4,97 @@
 plan-forge config --show
 ```
 
-Sets the relay URL, the main and critic host/model pair, and the human workday baseline used for estimates. Relay
-credentials can only be set from your own terminal (`plan-forge config --set-relay-token`), never through an agent skill.
+`/plan-config` changes the same settings from inside your agent, and an interactive `plan-forge install` offers a
+terminal editor over `config.json`. All three save through the same validation. Relay credentials can only be set from
+your own terminal (`plan-forge config --set-relay-token`), never through an agent.
 
-The `/plan-config` slash command reviews and changes the same settings from inside your agent.
+## Models
 
-An interactive `plan-forge install` (a terminal, no `--yes`) offers to open a terminal editor over the same
-`config.json`. It has two tabs, switched with Tab: **General** for hosts, the stage timeout, the workday and the
-narrator, and **Models** for `default_main_model`, `default_judge_model` and every pinned `role_models` entry. It saves
-through the same validation as `plan-forge config`, so it cannot write a file the other commands would reject. Keys and
-details: [install.md](install.md).
-
-## API providers, and why there is no "sign in with Claude"
-
-A plan can run two ways: through a coding-agent CLI installed on your machine, or over a
-provider's API with your own API key. Open **Setup** in the window to add a key; a first run
-with no key opens it for you once.
+A plan runs either through a coding-agent CLI you are signed in to, or over a provider API with your own key. Open
+**Setup** in the window to add a key; a first run without one opens it for you.
 
 | Provider | Key from | Environment variable |
 | --- | --- | --- |
 | Anthropic | <https://platform.claude.com/settings/keys> | `ANTHROPIC_API_KEY` |
+| Google | <https://aistudio.google.com/apikey> | `GEMINI_API_KEY` |
 | OpenAI | <https://platform.openai.com/api-keys> | `OPENAI_API_KEY` |
 | Fireworks | <https://app.fireworks.ai/settings/users/api-keys> | `FIREWORKS_API_KEY` |
 
-Keys are stored in `~/.plan-forge/credentials.json` with mode `0600`, deliberately **not** in
-`config.json`: the settings file gets quoted in `doctor` output and pasted into bug reports. An
-environment variable always wins over the stored key, so an export in your shell or a CI runner
-overrides Setup without deleting anything — the window says which source is in effect. Plan
-Forge shows a key only in masked form and never writes one to a receipt or a log.
+An environment variable wins over the stored key. Keys are shown masked and never written to a log or a receipt.
 
-Set a key yourself, in the window or your own terminal. Never paste one into an agent prompt,
-for the same reason `plan-forge config --set-relay-token` is interactive only.
+**There is no subscription sign-in.** Anthropic reserves Claude.ai OAuth for its own applications, and Fireworks has no
+OAuth at all. A Claude or ChatGPT subscription is reached only by running that vendor's own CLI, which is exactly what
+the CLI hosts do and is explicitly permitted. So: no API key needed if you use Claude Code or Antigravity; a key for
+everything else.
 
-**There is no subscription sign-in, and there will not be one.** Anthropic's terms reserve
-Claude.ai OAuth for Anthropic's own applications and forbid a third-party tool from collecting,
-storing or routing those credentials; developers are directed to a Console API key. Fireworks
-has no OAuth at all. So a Claude, ChatGPT or similar subscription is reached only by running
-that vendor's own CLI, which stays available as a host — that use is explicitly permitted, and
-it is why the CLI hosts are not going away. Reasoning:
-[ADR 0022](adrs/0022-api-providers-join-the-cli-hosts.md).
+An API provider is preferred over a CLI host when it has a key, because it is faster — no process per call, the prompt
+prefix is cached between stages, and the reply is constrained to the schema rather than repaired afterwards.
 
-An API provider is preferred over a CLI host when it has a key, because it is faster: no process
-to start per call, the prompt prefix is cached between stages, and the reply is constrained to
-the schema instead of being unwrapped and repaired afterwards. With no keys configured, nothing
-changes — every role lands on your CLI hosts exactly as before.
+A model id is host-specific. `claude-opus-5-5-high` is an Antigravity name; Claude Code calls that family `opus` and
+404s on anything else. `plan-forge models` lists what each signed-in host offers.
 
-### The Gemini schema is prepared before it is sent
+`omp` serves on an explicit pin only — never a default, never a fallback. One tool-free call costs 2.83s wall against
+1.10s of model time and about 2,900 tokens of the CLI's own scaffolding, on a run of 25 to 60 calls. The pin is scoped
+to what named it.
 
-Gemini's `responseJsonSchema` accepts less than the draft it advertises, and it reports every rejection as one bare
-"Request contains an invalid argument" with no field named. Two things break on it, measured against the live API on
-2026-10-31:
-
-- **`maxItems` is unusable.** One array with `maxItems: 447` is accepted and 448 is refused, and the ceiling is shared
-  across the whole schema rather than per array. `normalized_prd.v1` declares twelve bounded arrays, so every
-  normalization section failed. The keyword is dropped before the request is sent; `maxOutputTokens` bounds the reply
-  on the wire and the reply is validated against the original schema afterwards.
-- **`const` is silently ignored**, not rejected: `schema_version: {const: 1}` produced a reply with a different value.
-  It is rewritten as the single-value `enum`, which Gemini does enforce.
-
-The adapter also retries a `400 … invalid argument` once without the optional `thinkingConfig`, since the message
-cannot say which field it refused. The model is chosen from the provider's live `/models` list; a preference entry the
-API has retired is skipped rather than sent.
-
-## Hosts and models belong together
-
-A model identifier is host-specific. `claude-opus-5-5-high` is an `agy` name; Claude Code calls the same family `opus`
-and answers 404 for anything else. Run `plan-forge models` to see what each signed-in host offers, and
-`plan-forge doctor` to see which hosts are ready.
-
-When the host you configured cannot serve a slot, Plan Forge falls back to another signed-in host and still uses the
-model you configured — your choice is not second-guessed, because a CLI often accepts identifiers its listing does not
-print. If that host does not have the model, the run fails naming it, for example:
-
-```text
-Claude generation failed: There's an issue with the selected model (claude-opus-5-5-high). It may not exist or you may
-not have access to it.
-```
-
-Fix it by setting a model the host that ran actually has.
-
-One host serves only on an explicit pin: `omp`. It is never a default, never a fallback. `main_host` or a
-`role_models` entry naming it is the owner asking for it, and then it is used. The pin is scoped to what named it: a
-`main_host` pin covers every role on that slot, and a `role_models` entry covers exactly the roles it lists — an
-unpinned role still spreads across the other ready hosts. Without a pin it is skipped with a reason, in
-`plan-forge doctor` and in `/api/status`. The reason is cost, measured: one tool-free `omp` call takes 2.83s wall
-against 1.10s of model time and adds about 2,900 tokens of the CLI's own scaffolding, on a run that makes 25 to 60
-calls. Reasoning: [ADR 0026](adrs/0026-oh-my-pi-serves-an-explicit-pin-only.md).
-
-`agy` serves generation through an isolated profile that Plan Forge provisions at
-`$PLAN_FORGE_HOME/profiles/agy`, whose settings deny every tool family. A host-level agy sign-in does not carry over:
-sign in once with the command `plan-forge doctor` prints (`HOME=<profile> agy`). A profile that cannot be isolated
-fails closed with a capability error rather than falling back silently. Reasoning:
-[ADR 0004](adrs/0004-section-size-and-host-failure-detail.md) and
-[ADR 0030](adrs/0030-agy-generation-runs-in-an-isolated-profile.md).
-
-`plan-forge doctor` prints `serves: NO — <reason>` for a host that cannot serve, and names any `main_host` or
-`judge_host` that is being ignored because of it. A host that passes preflight and then breaks the tool-free contract
-once a call is open — a stale OMP advertising a tools list is the live case — costs one retry on the next host rather
-than the stage it was serving. Reasoning: [ADR 0012](adrs/0012-a-broken-host-costs-one-retry-not-the-run.md).
-
-## One run, every host you are signed in to
-
-With no `main_host` set, each avatar is placed on its own host, so one host's rate limit slows one avatar instead
-of the whole run and the critic reviews on a different host than the architect drafted on. `plan-forge config --show`
-prints the placement, and `/api/status` carries it with the reason any host was skipped.
-
-The Domain Specialists are placed one by one, not as a group. Four workstreams draft at the same time, so putting all
-four on one host is four concurrent calls against one rate limit. Each workstream reaches for a different adapter
-first, falling back the usual way when it is not ready. The host a workstream gets is derived from its name, so a
-retry, a resumed run and a second window all place it the same way. Reasoning:
-[ADR 0015](adrs/0015-an-avatar-is-placed-not-a-role.md).
+## Keys
 
 | Key | Default | Effect |
 | :--- | :--- | :--- |
-| `role_models` | unset | Pins a role to a host, a model, or both. Keys: `pm`, `architect`, `specialist`, `critic`, `synthesizer`, `narrator`, `tech_lead`, `code_reviewer`, `gap_agent`. A role with no entry is spread across the ready hosts. Pinning `specialist` pins every workstream; pinning `gap_agent` pins every temporary agent. |
-| `main_host` / `judge_host` | unset | Naming one forces every role on that slot onto it. This is how you turn the spread off. A host that cannot serve is skipped; `plan-forge doctor` says so rather than leaving it silent. |
-| `max_parallel` | `4` | Maximum concurrent deliberation calls (1..4), matching the 4-workstream cap so all specialists run in one wave. |
-| `max_gap_agents` | `2` | How many temporary expertise-gap agents one run may admit, 0..3. `0` disables them and still records every proposal as rejected with its reason. See [ADR 0024](adrs/0024-temporary-gap-agents-and-embedded-stage-schemas.md). |
-| `stage_timeout_seconds` | `600` | What one deliberation call may take, 60..1800. The old 180-second cap killed every architect run; see below. |
-| `disable_narrator` | `true` | Turns off the avatar that narrates the run. Set to `false` to enable periodic narration on step transitions ([ADR 0016](adrs/0016-five-minute-deliberation-budget.md)). |
+| `role_models` | unset | Pins a role to a host, a model, or both. Roles: `pm`, `architect`, `specialist`, `critic`, `synthesizer`, `narrator`, `tech_lead`, `code_reviewer`, `gap_agent`. An unpinned role spreads across the ready hosts. |
+| `main_host` / `judge_host` | unset | Forces every role on that slot onto one host. This turns the spread off. |
+| `default_main_model` / `default_judge_model` | unset | Slot-wide model. Dropped for a host that does not list it. |
+| `max_parallel` | `4` | Concurrent deliberation calls, 1..4. |
+| `max_gap_agents` | `2` | Temporary expertise-gap agents one run may admit, 0..3. |
+| `stage_timeout_seconds` | `600` | What one deliberation call may take, 60..1800. |
+| `disable_narrator` | `true` | `false` enables the avatar that narrates the run. |
+| `browser_path` | unset | The executable that opens the tab. Unset uses your default browser. |
+| `deploy_target` | unset | `agent-box`, `docker` or `none`. |
 
 A binding takes a host, a model, or both:
 
 ```json
 {
   "role_models": {
-    "architect":   { "host": "claude", "model": "opus" },
-    "specialist":  { "host": "anthropic", "model": "claude-sonnet-5-5" },
-    "narrator":    { "model": "claude-haiku-5-5" }
+    "architect":  { "host": "claude", "model": "opus" },
+    "specialist": { "host": "anthropic", "model": "claude-sonnet-5-5" },
+    "narrator":   { "model": "claude-haiku-5-5" }
   }
 }
 ```
 
-The hosts are the provider APIs `anthropic`, `gemini`, `openai` and `fireworks`, the CLI hosts `claude` and `agy`,
-and `omp` as an explicit pin only. `"host": "omp"` is accepted and served; it is never chosen for you.
+With nothing pinned, each avatar is placed on its own host, so one host's rate limit slows one avatar instead of the
+whole run, and the critic reviews on a different host than the architect drafted on. Each workstream is placed
+separately, derived from its name, so a retry places it the same way.
 
-A model id reaches a host only if that host lists it. `default_main_model` and `default_judge_model` are slot-wide,
-so they are dropped for any host that does not advertise them and that host's own default is used instead — naming
-`claude-opus-5-5-high`, which is an Antigravity id, does not send it to Claude Code. A `role_models` model is taken as
-written: you named the role and the host together, so it is your choice to make.
+## Three settings that break runs
 
-Pick the architect's model for reasoning, not for price. Measured on one design call with a 206 KiB payload: `opus`
-finished in 110s using 5,960 thinking tokens; `sonnet` took 282s using 34,287 for the same answer. The cheaper model
-is the slower one here. Spread load by moving the *parallel* roles — the specialists, the documentation batches, the
-narrator — not the design.
+**`main_host` and `default_main_model` are slot-wide**, and the MAIN slot is almost every avatar: the Product Manager,
+the architect, every specialist and the Lead Synthesizer. Setting them to something fast and cheap sends the design and
+the compilation to a weak model, leaves `judge_host` as the only place a strong model runs, and bypasses any API key
+you configured. A weak model also fails the strict schema decode far more often, which reads as "the synthesizer is
+broken" when it is a model choice. Leaving both unset is the supported configuration.
 
-### The two settings that quietly undo everything above
+**`stage_timeout_seconds` below 600 kills runs on a real repository.** The architect's design call was measured at 110s
+on a minimal payload, 8m16s on an actual codebase, and a specialist at 6m14s. A timed-out design call retries by
+halving its payload, twice, each attempt spending the full budget first — at 360s that is about eighteen minutes before
+the run says anything. Symptoms: `architect stage failed: context deadline exceeded`, or a run that feels slow and then
+produces nothing.
 
-`main_host` and `default_main_model` are slot-wide, and the MAIN slot is almost every avatar: the Product Manager, the
-architect, **every specialist, and the Lead Synthesizer**. Setting them is not a preference, it is an override of the
-whole placement system.
+Pick the architect's model for reasoning, not price: `opus` finished one design call in 110s using 5,960 thinking
+tokens; `sonnet` took 282s and 34,287 for the same answer. Spread load by moving the parallel roles — specialists,
+documentation batches, narrator — never the design.
 
-```json
-{ "main_host": "claude", "default_main_model": "some-fast-model" }
-```
+## Logs
 
-That configuration sends the architect's design and the synthesizer's compilation to one host on a fast, cheap model,
-leaves `judge_host` as the only place a strong model is used — on reviewing, not on planning — and bypasses any API
-provider key you have configured, because the rotation that would have reached it never runs.
+Every `run` and `join` writes `~/.plan-forge/logs/plan-forge-YYYY-MM-DD.log`, mode 0600, deleted after two days. A
+detached session also writes a per-session log under the cache, which `plan-forge wait` reads.
 
-It also makes a specific failure likely. The five deliberation stages have no embedded JSON schema, so their replies
-are strict-decoded in Go with unknown fields rejected and exactly **one** repair retry. `SynthesisDoc` permits seven
-keys; a model that adds an eighth fails the stage with `synthesizer output invalid: json: unknown field "…"`. A
-weaker model fails that gate far more often, which reads as "the synthesizer is broken" when it is a model choice.
+## After the approval
 
-If a run is slow and ends without a plan, check these two keys and `stage_timeout_seconds` before anything else.
-Leaving all three unset is the supported configuration.
+An approved plan is implemented in a git worktree under the Plan Forge cache, on a `plan-forge/<approval-id>` branch —
+never in your repository, never to a remote. You merge it yourself. The **Code** tab shows the diff; **Preview** builds
+the worktree's root `Dockerfile` and runs it on loopback, framed and sandboxed; **Deploy** publishes that same image.
+`docker` needs the Docker CLI, `agent-box` needs the AgentBox CLI.
 
-## What a stage is allowed to take
-
-One deliberation call gets `stage_timeout_seconds`, default 600. The architect design part reads the whole repository
-graph and writes the workstream DAG and every interface contract in one call; it was measured at 110 seconds on
-`opus` with a payload carrying no project context, no decisions and no revision. The old 180-second budget left a real
-cycle no room, and every run died at `architect stage failed: context deadline exceeded`.
-
-Interpretation and impact mapping still use the 180-second budget their input sizing was measured against. Reasoning:
-[ADR 0009](adrs/0009-one-budget-per-stage-roles-across-hosts-and-a-live-room.md).
-
-**Do not lower it below about 600 on a real repository.** 110 seconds was a floor measured on a minimal payload. On an
-actual codebase the same call has been measured at **8m16s**, and a specialist at **6m14s**
-([ADR 0011](adrs/0011-the-documentation-batches-leave-the-critical-path.md)). A budget under those numbers kills the
-call that was going to succeed, and it is expensive to be wrong: when the architect's design part times out it retries
-by halving its payload, up to twice, and each attempt spends the **full** budget first. At 360 seconds that is roughly
-eighteen minutes before the run reports anything. Symptoms of a budget set too low are `architect stage failed:
-context deadline exceeded`, runs that feel slow and then produce nothing, and a synthesizer that fails — the
-synthesizer cannot shrink its payload at all, so one timeout there ends the stage.
-
-## What the room shows while it works
-
-Each avatar card names the host and model serving it, the part of the stage in flight (`design 1/3`,
-`docs 3/3 · batch 2/5`), how long the call has run and how much it has written, and the evidence that call can see
-(`graph 184 files · context 12 excerpts · drift 20 items · 201 KiB`). A running call refreshes that every 10 seconds,
-so a slow stage is visibly slow rather than indistinguishable from a hung one.
-
-Above the faces, one avatar narrates: it reads the other avatars' step reports and says what the run is doing. It
-holds no draft, gates nothing, and never fails a run — a narration that fails is a lost line and nothing else.
-
-## Where the UI opens
-
-| Key | Default | Effect |
-| :--- | :--- | :--- |
-| `browser_path` | unset | The executable that opens the forge tab. Unset uses the platform URL opener, so the tab lands in your default browser. Set it to a browser executable to send the tab there instead. A value that is not executable is an error, never a silent fall-back to a browser you did not choose. |
-
-The tab opens only when you run `/plan-forge`. Starting an agent session never opens it.
-
-## Logs, in the home directory
-
-Every `run` and `join` writes a log next to `config.json`: `~/.plan-forge/logs/plan-forge-YYYY-MM-DD.log`
-(`$PLAN_FORGE_HOME/logs` when the override is set). The file name carries the date, so a new day starts a new
-file without a restart. Files older than two days are deleted the next time any command opens a log; other files
-in that directory are never touched. A detached session writes every record to both files at once: the day log and
-its per-session log under the cache (`sessions/<id>.log`), which `plan-forge wait` reads. When one of the two
-cannot be opened the child still logs to the other — a log failure never stops a run.
-
-The log is mode 0600 and holds absolute paths and model names, so it stays readable by the owner only.
-
-## After the approval: build, preview, deploy
-
-An approved plan can be implemented, run and deployed without leaving the window. The agent writes into a git worktree
-under the Plan Forge cache, on a `plan-forge/<approval-id>` branch — never into the repository you are working in, and
-never to a remote. You merge the branch yourself. Reasoning:
-[ADR 0013](adrs/0013-the-approved-plan-is-built-in-a-worktree.md).
-
-| Key | Default | Effect |
-| :--- | :--- | :--- |
-| `deploy_target` | unset | `agent-box`, `docker` or `none`. Unset means the window asks once, then keeps the answer. `none` keeps the pre-0.7 behaviour: the window closes five seconds after an approval and nothing is built. |
-| `agent_box_url` | `https://agent-box.sh/` | The Agent Box endpoint. `https` anywhere, `http` on loopback only; no userinfo, query string or fragment. |
-
-The **Code** tab shows the changed files, the diff and what the agent did, step by step. The **Preview** tab builds the
-worktree's root `Dockerfile` and runs it on `127.0.0.1`, framed in the page and sandboxed, so the container cannot
-reach the window that framed it. **Deploy** publishes that same image — there is one build path, so what you preview is
-what you ship.
-
-`docker` needs the Docker CLI; `agent-box` needs the AgentBox CLI (`npm -g i @madarco/agentbox && agentbox install`),
-which owns its own provider choice — local Docker, your own hardware over SSH, Hetzner, DigitalOcean, Daytona or
-Vercel. The window greys out a target whose CLI is missing instead of failing after a build you waited for.
-
-## What runs the build, and where
-
-The window's **Work** tab reads the repository's own planning files — `.agents/STATE.md`, `docs/plans`, `docs/specs`,
-`docs/adrs`, `specs`, root `PLAN*`/`FOLLOW*`/`EPIC*`/`TASK*`/`STATE*` files — and shows the next items exactly as the
-state file orders them. Browsing is read-only: it starts no model call and changes no file.
-
-| Key | Default | Effect |
-| :--- | :--- | :--- |
-| `repository_work_roots` | unset | Extra repository-relative directories to index, for a project that keeps its plans outside the usual hierarchy. Absolute paths and `..` are refused. |
-
-Implementation does not guess how a repository builds itself. Plan Forge derives a versioned `execution_recipe.v1`
-from the project's real assets — manifests, lockfiles, CI, `Makefile`, package scripts, task runners and containers —
-and stores it beside the approved plan as `execution_recipe.json`. Existing commands are reused unchanged. A missing
-build or test command is reported as **not configured**, never as passed.
-
-A prepared sandbox runs that recorded recipe. Plan Forge packages the exact revision in CI, transfers the archive into
-the sandbox and executes the recorded commands there. No repository is cloned onto the provider, and the model writes
-no shell command at launch time. Running a preview also requires a recorded run command; a project without one can
-still be built and tested.
-
-| Key | Default | Effect |
-| :--- | :--- | :--- |
-| `sandbox.provider` | unset | `e2b` enables the prepared-VM path. Unset keeps every document, implementation and acceptance feature and disables only launching. |
-| `sandbox.api_key_env` | `E2B_API_KEY` | The environment variable holding the provider key. A name, never a value; the key stays server-side and outside the guest. |
-| `sandbox.template` | `base` | The toolchain image inside the provider. A project whose toolchain differs must name its own template before a launch is allowed. |
-| `sandbox.timeout_seconds` | `3600` | The provider's own lifetime. Bounded to 60–3600: an idle sandbox must not outlive the session that paid for it. |
-| `sandbox.vcpu`, `sandbox.memory_mb` | `2`, `4096` | Resources for one launch. A workload that needs more says so before money is spent. |
-| `sandbox.domain_suffix` | `.e2b.app` | Bounds which hosts the preview proxy can reach. Any other upstream is refused. |
-| `sandbox.hourly_cpu_cents`, `sandbox.hourly_memory_cents` | unset | Rates the window quotes before a launch. Without both, it says the estimate is unavailable instead of inventing a price. |
-
-A launch is confirmed before it happens: revision, commands, resources, expiry and the cost estimate. Deleting the
-sandbox is attempted on stop, failure and expiry; an unconfirmed deletion is shown as pending, and the provider's own
-timeout is the backstop. Reasoning: [ADR 0017](adrs/0017-prepared-vm-from-recorded-scripts.md).
-
-The preview is served by a local proxy on its own origin, not by the provider URL. Browser navigation cannot set the
-provider's traffic header, so the proxy injects it server-side behind a single-use link exchanged for an `HttpOnly`
-cookie. The control session's cookie and the provider key never reach the previewed application.
-
-**Documents only** needs no sandbox at all: the same plan, specification, ADRs and recipe are generated and exported
-without a provider account, and generated scripts stay marked unverified until something runs them.
-
-## Self-host the relay on Cloud Run
-
-Run your own relay as a Cloud Run service instead of the public one. The deploy script builds the image with Cloud
-Build, stores the token in Secret Manager, and deploys with the proxy and WebSocket settings the relay expects:
-
-```sh
-./scripts/deploy-relay-cloudrun.sh --project my-project
-```
-
-Then point your client at the printed URL. Full reference: [relay-cloud-run.md](deploy/relay-cloud-run.md).
+Why each boundary sits where it does: [decisions.md](decisions.md).
