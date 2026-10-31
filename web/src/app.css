@@ -4672,7 +4672,73 @@ figure > .pf-diagram-source { border-top: none; }
   border-top: 1px solid var(--pf-border);
 }
 
-/* ---------- Setup dialog: hosts, tools, skills, hooks ---------- */
+/* ---------- Setup dialog: hosts, tools, skills, hooks, models ---------- */
+
+/*
+ * The dialog splits into General and Models tabs. Same rail-tab pattern as
+ * the plan rail, except the tabs keep their natural width on the left: two
+ * labels splitting 1100px evenly would read as two giant buttons.
+ */
+.pf-setup {
+  display: flex;
+  flex-direction: column;
+  /* Fill the dialog body so the tab rail stays put while the panel scrolls. */
+  height: 100%;
+}
+
+.pf-setup-tabs {
+  flex: none;
+}
+
+.pf-setup-tabs .pf-rail-tab {
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+
+.pf-setup-body {
+  flex: 1;
+  min-height: 0;
+  padding-top: 14px;
+  overflow: auto;
+}
+
+/*
+ * The models one host serves, as wrapped chips; a chip the settings pin is
+ * marked rather than merely listed, so "what would serve" and "what is
+ * selected" are read in the same place.
+ */
+.pf-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-models-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  background: var(--pf-inset);
+  color: var(--pf-ink-2);
+  font-size: 11px;
+}
+
+.pf-models-item[data-selected] {
+  border-color: var(--pf-ok-border);
+  background: var(--pf-ok-soft);
+  color: var(--pf-ink);
+}
+
+.pf-models-item[data-selected] > svg {
+  flex: none;
+  color: var(--pf-ok);
+}
 
 /*
  * A four-column grid per row: mark, name, state, detail. One grid for every
