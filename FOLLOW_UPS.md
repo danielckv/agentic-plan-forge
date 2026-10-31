@@ -51,6 +51,12 @@ Related: there is no way to reach Google without an API key today. `gcloud auth 
 
 Next: measure rows alongside columns in `internal/tui/term.go`, pass them into `Render`, and bound each pane to the space it has.
 
+## The prepared-VM panel is never mounted
+
+`web/src/pages/preparedvm/PreparedVM.tsx` renders the recorded commands, the confirmed launch and the receipts (ADR 0017), and `internal/app/sandboxhandlers.go` serves the endpoints it calls. No page imports the component — it has been unreachable since it was added in #24. knip flags its export as unused.
+
+Next: mount it as a fourth tab on the build page (`web/src/pages/Page4Build.tsx`), or delete the panel and the routes if the prepared VM is not shipping. Decide one way.
+
 ## The window tabs and 2D/3D map need a design pass
 
 Owner report, 2026-10-31: the tabs and the plan map do not look good. No specific defect isolated yet.
